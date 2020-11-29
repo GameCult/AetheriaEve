@@ -73,7 +73,7 @@ Material:
     - _BumpScale: 1
     - _Cutoff: 0.5
     - _DensityAlbedoExponent: 2
-    - _DensityDepthExponent: 1.25
+    - _DensityDepthExponent: 1
     - _DepthBoost: 0.5
     - _DepthBoostPower: 0.68
     - _DetailNormalMapScale: 1
