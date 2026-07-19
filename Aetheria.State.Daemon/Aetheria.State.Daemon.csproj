@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aetheria.State\Aetheria.State.csproj" />
+    <ProjectReference Include="$(CultLibRoot)\src\GameCult.Mesh.Quic\GameCult.Mesh.Quic.csproj" />
     <ProjectReference Include="$(YmirRoot)\src\Ymir.Core\Ymir.Core.csproj" />
   </ItemGroup>
 
