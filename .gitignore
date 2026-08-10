@@ -137,6 +137,8 @@ Aetheria.Rts.Web/*.log
 Aetheria.Rts.Web/wwwroot/*.js
 Aetheria.State.AuthoritySmoke/bin/
 Aetheria.State.AuthoritySmoke/obj/
+Aetheria.State.AuthoritySmoke/*.log
+Aetheria.State.AuthoritySmoke/*.log.err
 Aetheria.State.Freeze/bin/
 Aetheria.State.Freeze/obj/
 Aetheria.State.Daemon/*.log
