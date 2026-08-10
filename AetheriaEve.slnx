@@ -1,0 +1,29 @@
+<Solution>
+  <Folder Name="/tools/">
+    <Project Path="tools/Aetheria.TransportProbe/Aetheria.TransportProbe.csproj" />
+  </Folder>
+  <Project Path="../CultLib/src/GameCult.Caching.MessagePack.Analyzers/GameCult.Caching.MessagePack.Analyzers.csproj" />
+  <Project Path="../CultLib/src/GameCult.Caching.MessagePack.Generator/GameCult.Caching.MessagePack.Generator.csproj" />
+  <Project Path="../CultLib/src/GameCult.Caching.MessagePack/GameCult.Caching.MessagePack.csproj" />
+  <Project Path="../CultLib/src/GameCult.Caching/GameCult.Caching.csproj" />
+  <Project Path="../CultLib/src/GameCult.Geometry/GameCult.Geometry.csproj" />
+  <Project Path="../CultLib/src/GameCult.Logging/GameCult.Logging.csproj" />
+  <Project Path="../CultLib/src/GameCult.Mesh.Quic/GameCult.Mesh.Quic.csproj" />
+  <Project Path="../CultLib/src/GameCult.Mesh/GameCult.Mesh.csproj" />
+  <Project Path="../CultLib/src/GameCult.Networking/GameCult.Networking.csproj" />
+  <Project Path="../CultMath/src/CultMath/CultMath.csproj" />
+  <Project Path="../EvePlugins/plugins/eve-plugin-fields/GameCult.Eve.PluginFields.csproj" />
+  <Project Path="../EveUnity/packages/org.gamecult.eve.surface/GameCult.Eve.Surface.csproj" />
+  <Project Path="../Ymir/src/Ymir.Box3D/Ymir.Box3D.csproj" />
+  <Project Path="../Ymir/src/Ymir.Core/Ymir.Core.csproj" />
+  <Project Path="Aetheria.State.AuthoritySmoke/Aetheria.State.AuthoritySmoke.csproj" />
+  <Project Path="Aetheria.State.Daemon.Smoke/Aetheria.State.Daemon.Smoke.csproj" />
+  <Project Path="Aetheria.State.Daemon/Aetheria.State.Daemon.csproj" />
+  <Project Path="Aetheria.State.Freeze/Aetheria.State.Freeze.csproj" />
+  <Project Path="Aetheria.State.Import/Aetheria.State.Import.csproj" />
+  <Project Path="Aetheria.State.Replica/Aetheria.State.Replica.csproj" />
+  <Project Path="Aetheria.State.Smoke/Aetheria.State.Smoke.csproj" />
+  <Project Path="Aetheria.State.Unity.Smoke/Aetheria.State.Unity.Smoke.csproj" />
+  <Project Path="Aetheria.State.Unity/Aetheria.State.Unity.csproj" />
+  <Project Path="Aetheria.State/Aetheria.State.csproj" />
+</Solution>
