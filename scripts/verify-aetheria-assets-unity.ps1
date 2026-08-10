@@ -16,7 +16,7 @@ $statePath = if ([string]::IsNullOrWhiteSpace($State)) {
 if (-not (Test-Path -LiteralPath $project -PathType Container)) {
   throw "Aetheria asset-authoring project is missing: $project"
 }
-if (-not (Test-Path -LiteralPath "$statePath.records" -PathType Container)) {
+if (-not $SkipBuild -and -not (Test-Path -LiteralPath "$statePath.records" -PathType Container)) {
   throw "Imported Aetheria state records are missing: $statePath.records"
 }
 
