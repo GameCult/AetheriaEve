@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "Aetheria.Unity"
+$assetProject = Join-Path $root "Aetheria.Assets.Unity"
 $artifacts = Join-Path $project "Build\Logs"
 $clientExe = Join-Path $project "Build\Windows\Aetheria.exe"
 $daemonProject = Join-Path $root "Aetheria.State.Daemon\Aetheria.State.Daemon.csproj"
@@ -31,7 +32,7 @@ if (-not $SkipBuild) {
   $env:AETHERIA_ASSET_CATALOG_STATE = $state
   $assetLog = Join-Path $artifacts "asset-bundles.log"
   $assets = Start-Process $UnityExe -ArgumentList @(
-    "-batchmode", "-quit", "-projectPath", $root,
+    "-batchmode", "-quit", "-projectPath", $assetProject,
     "-cacheServerEnableDownload", "false", "-cacheServerEnableUpload", "false",
     "-executeMethod", "Aetheria.Editor.EveAssetBundleBuilder.BuildWindows",
     "-logFile", $assetLog

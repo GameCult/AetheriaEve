@@ -4285,10 +4285,10 @@ internal sealed class AetheriaDaemonHostOptions
                 ? resolvedStatePath + $".client-quic-{certificateHostToken}.pfx"
                 : Path.GetFullPath(clientCultMeshCertificatePath),
             AetheriaResourcesRoot = string.IsNullOrWhiteSpace(aetheriaResourcesRoot)
-                ? Path.GetFullPath(Path.Combine(root, "Assets", "Resources"))
+                ? Path.GetFullPath(Path.Combine(root, "Aetheria.Assets.Unity", "Assets", "Resources"))
                 : Path.GetFullPath(aetheriaResourcesRoot),
             AssetBundleRoot = string.IsNullOrWhiteSpace(assetBundleRoot)
-                ? Path.GetFullPath(Path.Combine(root, "Build", "EveAssets"))
+                ? Path.GetFullPath(Path.Combine(root, "Aetheria.Assets.Unity", "Build", "EveAssets"))
                 : Path.GetFullPath(assetBundleRoot),
             PeerCultMeshEndpoints = peerCultMeshEndpoints,
             PeerSyncTimeout = TimeSpan.FromMilliseconds(peerSyncTimeoutMs),

@@ -13,6 +13,11 @@ namespace Aetheria.Editor
     public static class EveAssetBundleBuilder
     {
         private const string ProviderMaterialsRoot = "Assets/Generated/Eve/ProviderMaterials";
+        private static readonly string[] AuthoredShaderIncludes =
+        {
+            "Assets/Shaders/PackFloat.cginc",
+            "Assets/Shaders/Volumetric.cginc"
+        };
 
         public static void BuildWindows()
         {
@@ -27,26 +32,76 @@ namespace Aetheria.Editor
                 .Select(Path.GetFileName));
         }
 
+        public static void ExportDependencyClosure()
+        {
+            var catalog = AetheriaRuntimeCatalogStore.OpenReadOnly(ResolveCatalogPath());
+            var roots = AetheriaRuntimeAssets.ProjectManifest(catalog).Assets
+                .Select(ResolveBundleAssetPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+            if (roots.Length == 0)
+                throw new InvalidOperationException("Aetheria Eve bundles have no provider Unity assets.");
+
+            var dependencies = AssetDatabase.GetDependencies(roots, true)
+                .Concat(AuthoredShaderIncludes)
+                .Where(path => path.StartsWith("Assets/", StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+            var output = Path.GetFullPath(Path.Combine("Build", "provider-asset-dependencies.txt"));
+            Directory.CreateDirectory(Path.GetDirectoryName(output));
+            File.WriteAllLines(output, dependencies);
+            Console.WriteLine($"Aetheria Eve provider dependency closure: {dependencies.Length} assets -> {output}");
+        }
+
+        public static void SanitizeCommittedPresentationPrefabs()
+        {
+            var catalog = AetheriaRuntimeCatalogStore.OpenReadOnly(ResolveCatalogPath());
+            var prefabPaths = AetheriaRuntimeAssets.ProjectManifest(catalog).Assets
+                .Select(ResolveBundleAssetPath)
+                .Where(path => path.StartsWith("Assets/Generated/Eve/ProviderPrefabs/", StringComparison.Ordinal) &&
+                               path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+            var removed = 0;
+            foreach (var prefabPath in prefabPaths)
+            {
+                var root = PrefabUtility.LoadPrefabContents(prefabPath);
+                try
+                {
+                    foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+                    {
+                        removed += GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(transform.gameObject);
+                        GameObjectUtility.RemoveMonoBehavioursWithMissingScript(transform.gameObject);
+                    }
+                    StripNonPresentationScripts(root);
+                    StripPresentationPhysics(root);
+                    VerifyPrefab(root, prefabPath);
+                    PrefabUtility.SaveAsPrefabAsset(root, prefabPath, out var saved);
+                    if (!saved)
+                        throw new InvalidOperationException($"Could not save presentation prefab {prefabPath}.");
+                }
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(root);
+                }
+            }
+            AssetDatabase.SaveAssets();
+            Console.WriteLine($"Sanitized {prefabPaths.Length} committed presentation prefabs; removed {removed} missing script slots.");
+        }
+
         private static void Build(BuildTarget target)
         {
-            EveThermalProfileMigrator.EnsureGenerated();
-            EveEnvironmentProfileMigrator.EnsureGenerated();
             var output = ResolveOutput(target);
             Directory.CreateDirectory(output);
             foreach (var stale in Directory.GetFiles(output, "*", SearchOption.TopDirectoryOnly))
                 File.Delete(stale);
 
-            var configuredCatalog = Environment.GetEnvironmentVariable("AETHERIA_ASSET_CATALOG_STATE");
-            var catalogPath = string.IsNullOrWhiteSpace(configuredCatalog)
-                ? Path.GetFullPath(Path.Combine("GameData", "aetheria-world.cc"))
-                : Path.GetFullPath(configuredCatalog);
-            var catalog = AetheriaRuntimeCatalogStore.OpenReadOnly(catalogPath);
+            var catalog = AetheriaRuntimeCatalogStore.OpenReadOnly(ResolveCatalogPath());
             var assets = AetheriaRuntimeAssets.ProjectManifest(catalog).Assets;
-            foreach (var entry in assets.Where(entry =>
-                         string.Equals(entry.Ref.Kind, AetheriaRuntimeAssetKinds.Prefab, StringComparison.Ordinal)))
-                BuildPresentationPrefab(entry);
-            AssetDatabase.SaveAssets();
-
             var bundleBuilds = assets
                 .Select(entry => new
                 {
@@ -89,6 +144,16 @@ namespace Aetheria.Editor
 
             VerifyBundles(output, expectedBundleNames);
             Console.WriteLine($"Aetheria Eve AssetBundles: {string.Join(", ", expectedBundleNames)}");
+        }
+
+        private static string ResolveCatalogPath()
+        {
+            var configuredCatalog = Environment.GetEnvironmentVariable("AETHERIA_ASSET_CATALOG_STATE");
+            if (!string.IsNullOrWhiteSpace(configuredCatalog))
+                return Path.GetFullPath(configuredCatalog);
+
+            throw new InvalidOperationException(
+                "AETHERIA_ASSET_CATALOG_STATE must name an imported Aetheria typed state file.");
         }
 
         private static string ResolveOutput(BuildTarget target)

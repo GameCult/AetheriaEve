@@ -1,5 +1,10 @@
 # Aetheria.State
 
+> Extraction note: sections describing the legacy root `Assets/Scripts` Unity
+> client or `Aetheria.State.Verify` record migration evidence from before the
+> AetheriaEve repository split. Those paths remain in Git history and are not
+> live product gates. See `docs/developer-navigation.md` for the current body.
+
 `Aetheria.State` is the replacement owner for durable Aetheria game state.
 
 It uses modern `GameCult.Caching`, `GameCult.Caching.MessagePack`, and

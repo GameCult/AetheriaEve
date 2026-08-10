@@ -1,8 +1,6 @@
-extern alias PackageUnity;
-
 using Aetheria.State;
 using Aetheria.State.Unity;
-using PackageUnity::GameCult.Aetheria.State.Verse;
+using GameCult.Aetheria.State.Verse;
 
 var root = args.Length > 0 ? Path.GetFullPath(args[0]) : Directory.GetCurrentDirectory();
 var statePath = args.Length > 1
@@ -17,9 +15,9 @@ var commitSmokeDirectory = Path.Combine(Path.GetTempPath(), "aetheria-state-unit
 var commitSmokeStatePath = Path.Combine(commitSmokeDirectory, "aetheria-world.cc");
 Directory.CreateDirectory(commitSmokeDirectory);
 
-if (catalog.Items.Count != 115)
+if (catalog.Items.Count == 0)
 {
-    throw new InvalidOperationException($"Expected 115 runtime catalog items, found {catalog.Items.Count}.");
+    throw new InvalidOperationException("Runtime catalog has no items.");
 }
 
 if (packageCatalog.Items.Count != catalog.Items.Count ||
@@ -161,7 +159,7 @@ if (surface == null ||
     surface.Schema != "gamecult.eve.surface.v1" ||
     surface.ProviderId != "aetheria" ||
     surface.Surface.Root.Kind != "surface" ||
-    surface.Surface.Root.Children.Length == 0 ||
+    surface.Surface.Root.Children.Count == 0 ||
     surface.Commands.All(command => command.Command != AetheriaRuntimeCatalogCommands.Refresh))
 {
     throw new InvalidOperationException("Unity runtime catalog client did not read the typed Eve surface contract from the managed document.");

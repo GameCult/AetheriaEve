@@ -10,6 +10,5 @@
   <ItemGroup>
     <ProjectReference Include="..\Aetheria.State\Aetheria.State.csproj" />
     <ProjectReference Include="..\..\CultLib\src\GameCult.Geometry\GameCult.Geometry.csproj" />
-    <Compile Include="..\Assets\Scripts\ServerShared\YmirPhysicsContracts.cs" Link="YmirPhysicsContracts.cs" />
   </ItemGroup>
 </Project>

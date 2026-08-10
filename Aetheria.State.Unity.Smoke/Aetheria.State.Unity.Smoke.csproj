@@ -9,6 +9,5 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aetheria.State.Unity\Aetheria.State.Unity.csproj" />
-    <ProjectReference Include="..\GameCult.Aetheria.State.Unity.csproj" Aliases="PackageUnity" />
   </ItemGroup>
 </Project>

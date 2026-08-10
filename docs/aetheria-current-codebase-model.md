@@ -2,6 +2,12 @@
 
 Date: 2026-07-20
 
+> Historical snapshot: this model predates the AetheriaEve repository
+> extraction. References to root `Assets/Scripts`, the legacy Unity facade, and
+> `Aetheria.State.Verify` describe migration evidence preserved in Git history,
+> not the live repository body. See `repository-boundary.md` and
+> `developer-navigation.md` for current ownership.
+
 This is a modeling pass over the live codebase as it exists now. It is not the
 ideal architecture; it is the current control-flow map, with migration pressure
 points called out where Unity still acts like more than a thin renderer/input

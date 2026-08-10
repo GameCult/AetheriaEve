@@ -5,7 +5,7 @@ lowering its advertised 3D pilot surface through EveUnity. The client contains n
 Aetheria runtime code. Aetheria owns the daemon surface and native asset bundle;
 EveUnity owns discovery, transport, lowering, input, camera, and presentation.
 
-From the Aetheria repository root:
+From the AetheriaEve repository root:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run-aetheria-unity.ps1
@@ -18,5 +18,6 @@ stop the daemon. A new writable client run is materialized by
 current typed CultCache schema; source catalog data is not mutated by play.
 
 Configuration is supplied through `EVEUNITY_RENDEZVOUS_ENDPOINT` and
-`EVEUNITY_SURFACE_ID`. The defaults are `rudp://127.0.0.1:3076` and
-`aetheria.pilot`.
+`EVEUNITY_SURFACE_ID`. The launcher uses `cultnet+tcp://127.0.0.1:3076` and
+mounts `aetheria.hangar`; the Hangar then selects a Verse and launches or
+resumes a mode session.

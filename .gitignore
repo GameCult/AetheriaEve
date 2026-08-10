@@ -10,6 +10,13 @@
 /[Ll]ogs/
 /[Mm]emoryCaptures/
 /Recordings/
+/Aetheria.Assets.Unity/[Ll]ibrary/
+/Aetheria.Assets.Unity/[Tt]emp/
+/Aetheria.Assets.Unity/[Oo]bj/
+/Aetheria.Assets.Unity/[Bb]uild/
+/Aetheria.Assets.Unity/[Bb]uilds/
+/Aetheria.Assets.Unity/[Ll]ogs/
+/Aetheria.Assets.Unity/[Uu]serSettings/
 /Assets/StreamingAssets/Audio/GeneratedSoundBanks/
 
 # Wwise folders
@@ -133,6 +140,8 @@ Aetheria.State.AuthoritySmoke/obj/
 Aetheria.State.Freeze/bin/
 Aetheria.State.Freeze/obj/
 Aetheria.State.Daemon/*.log
+Aetheria.State.Daemon.Smoke/*.log
+Aetheria.State.Daemon.Smoke/*.log.err
 *.client-quic-*.pfx
 
 # JetBrains Rider .idea folder
@@ -142,6 +151,7 @@ Aetheria.State.Daemon/*.log
 *.blend1
 
 Packages/packages-lock.json
+!Aetheria.Assets.Unity/Packages/packages-lock.json
 GameData/PlayerSettings.msgpack
 GameData/*.cultmesh/
 GameData/*.cc.records/
