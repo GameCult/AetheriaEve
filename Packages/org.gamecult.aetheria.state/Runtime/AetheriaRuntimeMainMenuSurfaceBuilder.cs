@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -32,7 +33,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string ProviderId = "aetheria";
         public const string ProviderKind = "game.menu";
 
-        public static AetheriaRuntimeSurfaceDocument BuildRoot(
+        public static EveSurfaceDocument BuildRoot(
             AetheriaRuntimeStateBootReport stateBoot,
             AetheriaRuntimePlayerSettingsDocument playerSettings,
             bool canOpenRuntimeInputScreen,
@@ -46,7 +47,7 @@ namespace GameCult.Aetheria.State.Verse
                 version);
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildRoot(
+        public static EveSurfaceDocument BuildRoot(
             AetheriaRuntimeStateBootReport stateBoot,
             AetheriaRuntimeDaemonFrameDocument daemonFrame,
             AetheriaRuntimeVerseHostSettingsDocument verseHost,
@@ -62,7 +63,7 @@ namespace GameCult.Aetheria.State.Verse
                 version);
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildRoot(
+        public static EveSurfaceDocument BuildRoot(
             AetheriaRuntimeStateBootReport stateBoot,
             AetheriaRuntimeSectorMapDocument sectorMap,
             AetheriaRuntimeVerseHostSettingsDocument verseHost,
@@ -78,7 +79,7 @@ namespace GameCult.Aetheria.State.Verse
                 version);
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildInputSettings(
+        public static EveSurfaceDocument BuildInputSettings(
             AetheriaRuntimeStateBootReport stateBoot,
             AetheriaRuntimePlayerSettingsDocument playerSettings,
             bool canOpenRuntimeInputScreen,
@@ -95,7 +96,7 @@ namespace GameCult.Aetheria.State.Verse
                 version);
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildPlayerSettings(
+        public static EveSurfaceDocument BuildPlayerSettings(
             AetheriaRuntimePlayerSettingsDocument playerSettings,
             string updatedAtUtc,
             long version = 1)
@@ -107,12 +108,12 @@ namespace GameCult.Aetheria.State.Verse
                 "Back");
         }
 
-        private static AetheriaRuntimeSurfaceDocument BuildRoot(
+        private static EveSurfaceDocument BuildRoot(
             bool inGame,
             string updatedAtUtc,
             long version)
         {
-            var actions = new List<AetheriaRuntimeSurfaceComponent>();
+            var actions = new List<EveSurfaceComponent>();
             if (!inGame)
                 actions.Add(MenuButton($"{AetheriaRuntimeMainMenuCommands.RootSurfaceId}.continue", "Continue", AetheriaRuntimeMainMenuCommands.ContinueRun));
             actions.Add(MenuButton($"{AetheriaRuntimeMainMenuCommands.RootSurfaceId}.newGame", "New Game", AetheriaRuntimeMainMenuCommands.NewGame));
@@ -164,13 +165,13 @@ namespace GameCult.Aetheria.State.Verse
                         Style(("color", "#e8fbff")),
                         actions.ToArray())));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 ProviderId,
                 ProviderKind,
                 "Aetheria Starbridge",
                 version,
                 updatedAtUtc,
-                new AetheriaRuntimeSurfaceTree(
+                new EveSurfaceTree(
                     AetheriaRuntimeMainMenuCommands.RootSurfaceId,
                     root,
                     MainMenuStyleTokens()),
@@ -183,7 +184,7 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildSettings(
+        public static EveSurfaceDocument BuildSettings(
             string updatedAtUtc,
             long version = 1)
         {
@@ -203,10 +204,10 @@ namespace GameCult.Aetheria.State.Verse
                         actions.Button("Back", Operation(AetheriaRuntimeMainMenuCommands.BackToMain, "Back"));
                     });
 
-            return AetheriaRuntimeSurfaceDocuments.FromPortableSurface(builder.Build());
+            return (builder.Build());
         }
 
-        private static AetheriaRuntimeSurfaceDocument BuildInputSettings(
+        private static EveSurfaceDocument BuildInputSettings(
             int bindingOverrideCount,
             int actionBarInputCount,
             bool canOpenRuntimeInputScreen,
@@ -259,11 +260,11 @@ namespace GameCult.Aetheria.State.Verse
                     actions.Button("Back", Operation(AetheriaRuntimeMainMenuCommands.BackToSettings, "Back"));
                 });
 
-            return AetheriaRuntimeSurfaceDocuments.FromPortableSurface(builder.Build());
+            return (builder.Build());
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildVerseSettings(
-            AetheriaRuntimeSurfaceDocument document,
+        public static EveSurfaceDocument BuildVerseSettings(
+            EveSurfaceDocument document,
             long version = 1)
         {
             return WithBackAction(
@@ -273,21 +274,21 @@ namespace GameCult.Aetheria.State.Verse
                 "Back");
         }
 
-        public static AetheriaRuntimeSurfaceDocument WithBackAction(
-            AetheriaRuntimeSurfaceDocument document,
+        public static EveSurfaceDocument WithBackAction(
+            EveSurfaceDocument document,
             string surfaceId,
             string backCommand,
             string backLabel)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 document.ProviderId,
                 document.ProviderKind,
                 document.Title,
                 document.Version,
                 document.UpdatedAtUtc,
-                new AetheriaRuntimeSurfaceTree(
+                new EveSurfaceTree(
                     surfaceId,
                     Node(
                         $"{surfaceId}.root",
@@ -320,25 +321,25 @@ namespace GameCult.Aetheria.State.Verse
             return builder;
         }
 
-        private static IReadOnlyList<AetheriaRuntimeSurfaceStyleToken> MainMenuStyleTokens()
+        private static IReadOnlyList<EveStyleToken> MainMenuStyleTokens()
         {
             return new[]
             {
-                new AetheriaRuntimeSurfaceStyleToken("font.title.family", "Montserrat"),
-                new AetheriaRuntimeSurfaceStyleToken("font.title.style", "Thin"),
-                new AetheriaRuntimeSurfaceStyleToken("font.title.weight", "100"),
-                new AetheriaRuntimeSurfaceStyleToken("font.body.family", "Ubuntu"),
-                new AetheriaRuntimeSurfaceStyleToken("font.body.style", "Regular"),
-                new AetheriaRuntimeSurfaceStyleToken("font.body.weight", "400"),
-                new AetheriaRuntimeSurfaceStyleToken(
+                new EveStyleToken("font.title.family", "Montserrat"),
+                new EveStyleToken("font.title.style", "Thin"),
+                new EveStyleToken("font.title.weight", "100"),
+                new EveStyleToken("font.body.family", "Ubuntu"),
+                new EveStyleToken("font.body.style", "Regular"),
+                new EveStyleToken("font.body.weight", "400"),
+                new EveStyleToken(
                     "font.web.google",
                     "https://fonts.googleapis.com/css2?family=Montserrat:wght@100&family=Ubuntu:wght@400&display=swap")
             };
         }
 
-        private static AetheriaRuntimeSurfaceCommandTemplate Command(string command, string label)
+        private static EveCommandTemplate Command(string command, string label)
         {
-            return new AetheriaRuntimeSurfaceCommandTemplate(command, label, AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport);
+            return AetheriaRuntimeSurfaceDocuments.Command(command, label, "cultmesh");
         }
 
         private static CultMeshOperationBindingDescriptor Operation(string command, string label)
@@ -348,15 +349,15 @@ namespace GameCult.Aetheria.State.Verse
                 label,
                 "",
                 nameof(CultMeshLocalityKind.Automatic),
-                AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport).ToBinding();
+                "cultmesh").ToBinding();
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Text(id, value, "text");
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(
+        private static EveSurfaceComponent Text(
             string id,
             string value,
             string kind,
@@ -366,55 +367,55 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, kind, new[] { ("value", value ?? "") }, layout, style);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label), ("command", command) });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonColumn(
+        private static EveSurfaceComponent ButtonColumn(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "column", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, kind, props, null, null, children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
             IReadOnlyDictionary<string, string>? layout,
             IReadOnlyDictionary<string, string>? style,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             var normalizedProps = props.ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal);
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 normalizedProps,
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                children ?? Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(normalizedProps),
-                Array.Empty<AetheriaRuntimeEmbeddedDocumentSlot>(),
+                Array.Empty<EveEmbeddedDocumentSlot>(),
                 layout,
                 style);
         }
 
-        private static AetheriaRuntimeSurfaceComponent GravitySurface(string id)
+        private static EveSurfaceComponent GravitySurface(string id)
         {
             var viewport = MainMenuViewport();
             var renderSplatsDocumentId = ViewportDocumentId("aetheria.viewport.render_splats", viewport);
@@ -475,25 +476,25 @@ namespace GameCult.Aetheria.State.Verse
                 ("stateRefreshMs", "50")
             };
             var normalizedProps = props.ToDictionary(prop => prop.Item1, prop => prop.Item2 ?? "", StringComparer.Ordinal);
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "field.surface2d",
                 normalizedProps,
-                Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(normalizedProps),
                 new[]
                 {
-                    new AetheriaRuntimeEmbeddedDocumentSlot(
+                    new EveEmbeddedDocumentSlot(
                         "renderSplats",
                         renderSplatsDocumentId,
                         AetheriaRuntimeDaemonSchemas.RenderSplatsViewport,
                         "data"),
-                    new AetheriaRuntimeEmbeddedDocumentSlot(
+                    new EveEmbeddedDocumentSlot(
                         "gravity",
                         gravityDocumentId,
                         AetheriaRuntimeDaemonSchemas.GravityViewport,
                         "data"),
-                    new AetheriaRuntimeEmbeddedDocumentSlot(
+                    new EveEmbeddedDocumentSlot(
                         "objects",
                         objectsDocumentId,
                         AetheriaRuntimeDaemonSchemas.ObjectsViewport,
@@ -541,7 +542,7 @@ namespace GameCult.Aetheria.State.Verse
                 .Replace('.', 'p');
         }
 
-        private static AetheriaRuntimeSurfaceComponent MenuButton(string id, string label, string command)
+        private static EveSurfaceComponent MenuButton(string id, string label, string command)
         {
             return Node(
                 id,
@@ -556,7 +557,7 @@ namespace GameCult.Aetheria.State.Verse
                     ("font", "400 1.55rem/1.2 Ubuntu, sans-serif"),
                     ("color", "#e8fbff"),
                     ("textAlign", "left")),
-                Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                Array.Empty<EveSurfaceComponent>());
         }
 
         private static IReadOnlyDictionary<string, string> Layout(params (string Key, string Value)[] values)

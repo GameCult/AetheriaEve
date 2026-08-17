@@ -89,7 +89,8 @@ First implementation footholds now exist in CultLib:
 ### Nested CultUI Surface Discovery
 
 Nested CultUI surfaces are a shared Eve/CultMesh feature, not an Aetheria-only
-inventory workaround. Discovery starts in `E:/Projects/Eve/tools/parity/parity-manifest.json`,
+inventory workaround. Discovery starts in the sibling Eve repository's
+`tools/parity/parity-manifest.json`,
 which lists the canonical `embedded-surface` fixture and the active runtime
 claims for web, Flutter desktop/Linux/Android, iOS/UIKit, Android/Kotlin, Unity
 UI Toolkit, and Rust document sync. A renderer that claims CultUI GUI parity must
@@ -101,25 +102,26 @@ documentation gap.
 Run the shared evidence from the owning repos:
 
 ```powershell
-cd E:\Projects\Eve
+cd ..\Eve
 node --test web\eve-dsl.test.mjs
 powershell -ExecutionPolicy Bypass -File .\scripts\run-parity-harness.ps1
 
-cd E:\Projects\CultLib\packages\cultnet-rs
+cd ..\CultLib\packages\cultnet-rs
 cargo test rust_preserves_cultui_embedded_surface_slots_through_typed_document_sync
 ```
 
-When Flutter is installed, also run from `E:/Projects/Eve/flutter/eve_parity`:
+When Flutter is installed, also run from `../Eve/flutter/eve_parity`:
 
 ```powershell
 flutter test --plain-name embedded_surface_fixture_contract
 ```
 
-Aetheria's local proof stays thin: build the Unity package and run
-`Aetheria.State.Verify`. The verifier should prove Aetheria consumes the shared
-contract through `AetheriaRuntimeSurfaceDocuments`, `AetheriaRuntimeEmbeddedDocumentSlot`,
-and the Eve UI Toolkit lowerer, not through local projectors, facades, or
-adapter-shaped child state.
+Aetheria's local proof stays thin: build `Aetheria.State`, run the daemon smoke,
+and run `scripts/verify-aetheria-unity-client.ps1`. The proof must show that
+Aetheria builders emit canonical `EveSurfaceDocument` and
+`EveEmbeddedDocumentSlot` records directly and that Unity consumes them through
+the generic Eve UI Toolkit lowerer. Aetheria does not own a second surface
+schema, conversion bridge, or renderer-specific child-state adapter.
 
 ### Typed Document Handles
 

@@ -84,14 +84,14 @@ namespace GameCult.Aetheria.State.Verse
     public sealed class AetheriaRuntimeTradeFilterSurfaceModel
     {
         public AetheriaRuntimeTradeFilterSurfaceModel(
-            AetheriaRuntimeSurfaceDocument document,
+            EveSurfaceDocument document,
             IReadOnlyDictionary<string, AetheriaRuntimeTradeFilterSelection> selections)
         {
             Document = document ?? throw new ArgumentNullException(nameof(document));
             Selections = selections ?? new Dictionary<string, AetheriaRuntimeTradeFilterSelection>(StringComparer.Ordinal);
         }
 
-        public AetheriaRuntimeSurfaceDocument Document { get; }
+        public EveSurfaceDocument Document { get; }
         public IReadOnlyDictionary<string, AetheriaRuntimeTradeFilterSelection> Selections { get; }
 
         public bool TryResolve(string command, out AetheriaRuntimeTradeFilterSelection selection)
@@ -127,14 +127,14 @@ namespace GameCult.Aetheria.State.Verse
     public sealed class AetheriaRuntimeTradeRowActionSurfaceModel
     {
         public AetheriaRuntimeTradeRowActionSurfaceModel(
-            AetheriaRuntimeSurfaceDocument document,
+            EveSurfaceDocument document,
             IReadOnlyDictionary<string, AetheriaRuntimeTradeRowActionSelection> selections)
         {
             Document = document ?? throw new ArgumentNullException(nameof(document));
             Selections = selections ?? new Dictionary<string, AetheriaRuntimeTradeRowActionSelection>(StringComparer.Ordinal);
         }
 
-        public AetheriaRuntimeSurfaceDocument Document { get; }
+        public EveSurfaceDocument Document { get; }
         public IReadOnlyDictionary<string, AetheriaRuntimeTradeRowActionSelection> Selections { get; }
 
         public bool TryResolve(string command, out AetheriaRuntimeTradeRowActionSelection selection)
@@ -264,7 +264,7 @@ namespace GameCult.Aetheria.State.Verse
                 selections);
         }
 
-        private static AetheriaRuntimeSurfaceDocument BuildFilter(
+        private static EveSurfaceDocument BuildFilter(
             string filterSummary,
             IReadOnlyList<AetheriaRuntimeTradeSurfaceGroup> groups,
             string updatedAtUtc,
@@ -272,7 +272,7 @@ namespace GameCult.Aetheria.State.Verse
         {
             groups ??= Array.Empty<AetheriaRuntimeTradeSurfaceGroup>();
 
-            var children = new List<AetheriaRuntimeSurfaceComponent>
+            var children = new List<EveSurfaceComponent>
             {
                 Card(
                     $"{FilterSurfaceId}.summary",
@@ -302,29 +302,29 @@ namespace GameCult.Aetheria.State.Verse
                 $"{FilterSurfaceId}.actions",
                 Button($"{FilterSurfaceId}.close", "Close", CloseFilter)));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "trade.menu",
                 title: "Trade Filter Selector",
                 version: version,
                 updatedAtUtc: updatedAtUtc ?? "",
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     FilterSurfaceId,
                     Node(
                         $"{FilterSurfaceId}.root",
                         "surface",
                         Array.Empty<(string Key, string Value)>(),
                         children.ToArray()),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: groups
                     .Where(group => group?.Options != null)
                     .SelectMany(group => group.Options)
-                    .Select(option => new AetheriaRuntimeSurfaceCommandTemplate(option.Command, option.Label, AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport))
-                    .Append(new AetheriaRuntimeSurfaceCommandTemplate(CloseFilter, "Close", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport))
+                    .Select(option => AetheriaRuntimeSurfaceDocuments.Command(option.Command, option.Label, "cultmesh"))
+                    .Append(AetheriaRuntimeSurfaceDocuments.Command(CloseFilter, "Close", "cultmesh"))
                     .ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceDocument BuildRowActions(
+        private static EveSurfaceDocument BuildRowActions(
             string title,
             IReadOnlyList<AetheriaRuntimeTradeSurfaceOption> actions,
             string updatedAtUtc,
@@ -332,13 +332,13 @@ namespace GameCult.Aetheria.State.Verse
         {
             actions ??= Array.Empty<AetheriaRuntimeTradeSurfaceOption>();
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "trade.menu",
                 title: "Trade Row Actions",
                 version: version,
                 updatedAtUtc: updatedAtUtc ?? "",
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     RowActionSurfaceId,
                     Node(
                         $"{RowActionSurfaceId}.root",
@@ -359,57 +359,57 @@ namespace GameCult.Aetheria.State.Verse
                             ButtonRow(
                                 $"{RowActionSurfaceId}.actions",
                                 Button($"{RowActionSurfaceId}.close", "Close", CloseRowAction)))),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: actions
-                    .Select(action => new AetheriaRuntimeSurfaceCommandTemplate(action.Command, action.Label, AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport))
-                    .Append(new AetheriaRuntimeSurfaceCommandTemplate(CloseRowAction, "Close", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport))
+                    .Select(action => AetheriaRuntimeSurfaceDocuments.Command(action.Command, action.Label, "cultmesh"))
+                    .Append(AetheriaRuntimeSurfaceDocuments.Command(CloseRowAction, "Close", "cultmesh"))
                     .ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent Card(
+        private static EveSurfaceComponent Card(
             string id,
             string title,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "card", new[] { ("title", title ?? "") }, children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonColumn(
+        private static EveSurfaceComponent ButtonColumn(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "column", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id ?? "",
                 kind ?? "",
                 (props ?? Array.Empty<(string Key, string Value)>())
                     .ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
 
         private static string FilterCommand(AetheriaRuntimeTradeFilterSelectionKind kind, string token)

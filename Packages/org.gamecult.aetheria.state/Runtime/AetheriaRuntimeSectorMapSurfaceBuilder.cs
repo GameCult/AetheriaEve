@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -19,7 +20,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string HomeIconAssetKey = "map.sector-map.icon.home";
         public const string ExecutiveIconAssetKey = "map.sector-map.icon.executive";
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaRuntimeSectorMapDocument sectorMap,
             string updatedAtUtc,
             long version = 1,
@@ -56,7 +57,7 @@ namespace GameCult.Aetheria.State.Verse
                 .Distinct()
                 .OrderBy(index => index)
                 .ToArray();
-            var children = new List<AetheriaRuntimeSurfaceComponent>();
+            var children = new List<EveSurfaceComponent>();
 
             foreach (var factionIndex in factionIndices)
                 children.Add(InfluenceRegion(factionIndex, zones, sectorMap, catalog));
@@ -103,7 +104,7 @@ namespace GameCult.Aetheria.State.Verse
                     ("landmarkAssetKeys", LandmarkAssets(zone, sectorMap, homes.Count > 0, bosses.Count > 0))));
             }
 
-            var graph = new AetheriaRuntimeSurfaceComponent(
+            var graph = new EveSurfaceComponent(
                 $"{SurfaceId}.graph",
                 "graph",
                 Props(
@@ -117,29 +118,29 @@ namespace GameCult.Aetheria.State.Verse
                     ("preserveAspect", "true")),
                 children);
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "sector.map",
                 title: "Sector Map",
                 version: Math.Max(version, sectorMap.FrameId),
                 updatedAtUtc: updatedAtUtc,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
-                    new AetheriaRuntimeSurfaceComponent(
+                    new EveSurfaceComponent(
                         $"{SurfaceId}.root",
                         "surface.map",
                         Props(("title", "Sector Map"), ("runId", sectorMap.RunId ?? "")),
                         new[] { graph, Legend(factionIndices, catalog) }),
                     StyleTokens(factionIndices, sectorMap.GenerationSeed, sectorMap.IsTutorial)),
-                commands: Array.Empty<AetheriaRuntimeSurfaceCommandTemplate>());
+                commands: Array.Empty<EveCommandTemplate>());
         }
 
-        public static IReadOnlyList<AetheriaRuntimeSurfaceStyleToken> StyleTokens(
+        public static IReadOnlyList<EveStyleToken> StyleTokens(
             IEnumerable<int>? factionIndices = null,
             uint generationSeed = 0,
             bool tutorial = false)
         {
-            var tokens = new List<AetheriaRuntimeSurfaceStyleToken>
+            var tokens = new List<EveStyleToken>
             {
                 Token("sectorMap.background.asset", BackgroundAssetKey),
                 Token("sectorMap.background.noiseAmplitude", "1"),
@@ -192,7 +193,7 @@ namespace GameCult.Aetheria.State.Verse
             return tokens;
         }
 
-        private static AetheriaRuntimeSurfaceComponent InfluenceRegion(
+        private static EveSurfaceComponent InfluenceRegion(
             int factionIndex,
             IReadOnlyList<AetheriaRuntimeSectorMapZone> zones,
             AetheriaRuntimeSectorMapDocument map,
@@ -208,7 +209,7 @@ namespace GameCult.Aetheria.State.Verse
                         ? zone.OwnerFactionIndex == factionIndex ? "10" : "5"
                         : "-10")))
                 .ToArray();
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 $"{SurfaceId}.influence.{factionIndex}",
                 "graph.region",
                 Props(
@@ -220,7 +221,7 @@ namespace GameCult.Aetheria.State.Verse
                 samples);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Legend(
+        private static EveSurfaceComponent Legend(
             IReadOnlyList<int> factionIndices,
             AetheriaRuntimeCatalogSnapshot? catalog)
         {
@@ -238,14 +239,14 @@ namespace GameCult.Aetheria.State.Verse
                     LegendItem("executive", "Executive", ExecutiveIconAssetKey)
                 })
                 .ToArray();
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 $"{SurfaceId}.legend",
                 "graph.legend",
                 Props(("label", "Legend")),
                 items);
         }
 
-        private static AetheriaRuntimeSurfaceComponent LegendItem(string id, string label, string assetKey) =>
+        private static EveSurfaceComponent LegendItem(string id, string label, string assetKey) =>
             Node($"{SurfaceId}.legend.{id}", "graph.legend.item",
                 ("label", label), ("role", id), ("assetKey", assetKey));
 
@@ -368,11 +369,11 @@ namespace GameCult.Aetheria.State.Verse
         private static int Byte(double value) =>
             (int)Math.Round(Math.Max(0, Math.Min(1, value)) * 255, MidpointRounding.AwayFromZero);
         private static double Fraction(double value) => value - Math.Floor(value);
-        private static AetheriaRuntimeSurfaceStyleToken Token(string name, string value) =>
-            new AetheriaRuntimeSurfaceStyleToken(name, value);
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveStyleToken Token(string name, string value) =>
+            new EveStyleToken(name, value);
+        private static EveSurfaceComponent Node(
             string id, string kind, params (string Key, string Value)[] props) =>
-            new AetheriaRuntimeSurfaceComponent(id, kind, Props(props), Array.Empty<AetheriaRuntimeSurfaceComponent>());
+            new EveSurfaceComponent(id, kind, Props(props), Array.Empty<EveSurfaceComponent>());
         private static IReadOnlyDictionary<string, string> Props(params (string Key, string Value)[] values) =>
             values.ToDictionary(value => value.Key, value => value.Value ?? "", StringComparer.Ordinal);
         private static string Format(double value) => value.ToString("R", CultureInfo.InvariantCulture);

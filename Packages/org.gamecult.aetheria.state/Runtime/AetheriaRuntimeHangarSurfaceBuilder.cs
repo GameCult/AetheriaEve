@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -23,7 +24,7 @@ namespace GameCult.Aetheria.State.Verse
 
     public static class AetheriaRuntimeHangarSurfaceBuilder
     {
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaHangarState hangar,
             string selectedShipId,
             string selectedMode,
@@ -57,7 +58,7 @@ namespace GameCult.Aetheria.State.Verse
                         ("zoneRenderSchema", AetheriaRuntimeDaemonSchemas.ZoneRender),
                         ("assetManifest", AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString()),
                         ("cameraRig", "hangar-static"),
-                        ("viewId", "aetheria.hangar")), Array.Empty<AetheriaRuntimeSurfaceComponent>()),
+                        ("viewId", "aetheria.hangar")), Array.Empty<EveSurfaceComponent>()),
                     Panel("aetheria.hangar.ship_summary", "SHIP", selected == null
                         ? new[] { Text("aetheria.hangar.ship.none", "No ship selected") }
                         : new[]
@@ -71,7 +72,7 @@ namespace GameCult.Aetheria.State.Verse
                     {
                         Component("aetheria.hangar.preview.slot", "asset.preview", Props(
                             ("assetRole", "ship.preview"),
-                            ("subjectKey", selected?.ShipId ?? "")), Array.Empty<AetheriaRuntimeSurfaceComponent>())
+                            ("subjectKey", selected?.ShipId ?? "")), Array.Empty<EveSurfaceComponent>())
                     }, "preview"),
                     Panel("aetheria.hangar.fit", "FIT SUMMARY", new[]
                     {
@@ -134,13 +135,13 @@ namespace GameCult.Aetheria.State.Verse
                     ("height", "100%")),
                 Style(("background", "#070b0d"), ("color", "#d8eef2")));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 "aetheria",
                 "game.hangar",
                 "Aetheria Hangar",
                 version,
                 updatedAtUtc ?? "",
-                new AetheriaRuntimeSurfaceTree(AetheriaRuntimeHangarCommands.SurfaceId, root, Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                new EveSurfaceTree(AetheriaRuntimeHangarCommands.SurfaceId, root, Array.Empty<EveStyleToken>()),
                 new[]
                 {
                     Command(AetheriaRuntimeHangarCommands.SelectShip, "Select Ship"),
@@ -158,29 +159,29 @@ namespace GameCult.Aetheria.State.Verse
         private static string ItemName(AetheriaRuntimeCatalogSnapshot? catalog, string? itemKey) =>
             catalog?.FindItem(itemKey ?? "")?.Name ?? (string.IsNullOrWhiteSpace(itemKey) ? "Unknown" : itemKey);
 
-        private static AetheriaRuntimeSurfaceComponent Panel(string id, string title, IReadOnlyList<AetheriaRuntimeSurfaceComponent> children, string area) =>
+        private static EveSurfaceComponent Panel(string id, string title, IReadOnlyList<EveSurfaceComponent> children, string area) =>
             Component(id, "panel", Props(("title", title)), children, Layout(("gridArea", area)), Style(("background", "#11181c"), ("border", "1px solid #60737a"), ("padding", "12")));
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value) =>
-            Component(id, "metric", Props(("label", label), ("value", value)), Array.Empty<AetheriaRuntimeSurfaceComponent>());
+        private static EveSurfaceComponent Metric(string id, string label, string value) =>
+            Component(id, "metric", Props(("label", label), ("value", value)), Array.Empty<EveSurfaceComponent>());
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value) =>
-            Component(id, "text", Props(("value", value)), Array.Empty<AetheriaRuntimeSurfaceComponent>());
+        private static EveSurfaceComponent Text(string id, string value) =>
+            Component(id, "text", Props(("value", value)), Array.Empty<EveSurfaceComponent>());
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command, params (string Key, string Value)[] extra) =>
-            Component(id, "control.button", Props(new[] { ("label", label), ("command", command) }.Concat(extra).ToArray()), Array.Empty<AetheriaRuntimeSurfaceComponent>());
+        private static EveSurfaceComponent Button(string id, string label, string command, params (string Key, string Value)[] extra) =>
+            Component(id, "control.button", Props(new[] { ("label", label), ("command", command) }.Concat(extra).ToArray()), Array.Empty<EveSurfaceComponent>());
 
-        private static AetheriaRuntimeSurfaceCommandTemplate Command(string command, string label) =>
-            new AetheriaRuntimeSurfaceCommandTemplate(command, label, AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport);
+        private static EveCommandTemplate Command(string command, string label) =>
+            AetheriaRuntimeSurfaceDocuments.Command(command, label, "cultmesh");
 
-        private static AetheriaRuntimeSurfaceComponent Component(
+        private static EveSurfaceComponent Component(
             string id,
             string kind,
             IReadOnlyDictionary<string, string> props,
-            IReadOnlyList<AetheriaRuntimeSurfaceComponent> children,
+            IReadOnlyList<EveSurfaceComponent> children,
             IReadOnlyDictionary<string, string>? layout = null,
             IReadOnlyDictionary<string, string>? style = null) =>
-            new AetheriaRuntimeSurfaceComponent(id, kind, props, children, Array.Empty<GameCult.Mesh.CultMeshStateBindingDescriptor>(), Array.Empty<AetheriaRuntimeEmbeddedDocumentSlot>(), layout, style);
+            new EveSurfaceComponent(id, kind, props, children, Array.Empty<GameCult.Mesh.CultMeshStateBindingDescriptor>(), Array.Empty<EveEmbeddedDocumentSlot>(), layout, style);
 
         private static IReadOnlyDictionary<string, string> Props(params (string Key, string Value)[] values) =>
             values.ToDictionary(value => value.Key, value => value.Value ?? "", StringComparer.Ordinal);

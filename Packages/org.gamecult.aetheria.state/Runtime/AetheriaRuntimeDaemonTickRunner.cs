@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -54,10 +55,10 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeDaemonCommandBoundaryDocument? commandBoundary = null,
             AetheriaRuntimeAssetManifestDocument? assetManifest = null,
             AetheriaRuntimeStarbridgeSessionSummaryDocument? starbridgeSessionSummary = null,
-            AetheriaRuntimeSurfaceDocument? gameSurface = null,
-            AetheriaRuntimeSurfaceDocument? gameTuiSurface = null,
-            AetheriaRuntimeSurfaceDocument? editorSurface = null,
-            AetheriaRuntimeSurfaceDocument? editorTuiSurface = null,
+            EveSurfaceDocument? gameSurface = null,
+            EveSurfaceDocument? gameTuiSurface = null,
+            EveSurfaceDocument? editorSurface = null,
+            EveSurfaceDocument? editorTuiSurface = null,
             int simulationStepsExecuted = 0,
             AetheriaRuntimeSimulationInterruption? attentionInterruption = null)
         {
@@ -91,10 +92,10 @@ namespace GameCult.Aetheria.State.Verse
         public AetheriaRuntimeDaemonCommandBoundaryDocument? CommandBoundary { get; }
         public AetheriaRuntimeAssetManifestDocument? AssetManifest { get; }
         public AetheriaRuntimeStarbridgeSessionSummaryDocument? StarbridgeSessionSummary { get; }
-        public AetheriaRuntimeSurfaceDocument? GameSurface { get; }
-        public AetheriaRuntimeSurfaceDocument? GameTuiSurface { get; }
-        public AetheriaRuntimeSurfaceDocument? EditorSurface { get; }
-        public AetheriaRuntimeSurfaceDocument? EditorTuiSurface { get; }
+        public EveSurfaceDocument? GameSurface { get; }
+        public EveSurfaceDocument? GameTuiSurface { get; }
+        public EveSurfaceDocument? EditorSurface { get; }
+        public EveSurfaceDocument? EditorTuiSurface { get; }
         public int SimulationStepsExecuted { get; }
         public AetheriaRuntimeSimulationInterruption? AttentionInterruption { get; }
         public AetheriaRuntimeDaemonIntentState Intents => OperationResult.Intents;

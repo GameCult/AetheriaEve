@@ -11,7 +11,6 @@ using GameCult.Mesh;
 using GameCult.Networking;
 using R3;
 using EveUiCommandRequest = GameCult.Eve.Surface.EveSurfaceCommandRequest;
-using EveSurfaceDocument = GameCult.Eve.Surface.EveSurfaceDocument;
 
 #nullable enable
 
@@ -184,7 +183,7 @@ namespace GameCult.Aetheria.State.Verse
             typeof(AetheriaRuntimeStarbridgePlayerSeatDocument),
             typeof(AetheriaRuntimePlayerSettingsDocument),
             typeof(AetheriaRuntimeVerseHostSettingsDocument),
-            typeof(AetheriaRuntimeSurfaceDocument),
+            typeof(EveSurfaceDocument),
             typeof(EveProviderAdvertisementDocument),
             typeof(EveSurfaceDocument),
             typeof(EveSurfaceCommandRequest),
@@ -782,7 +781,7 @@ namespace GameCult.Aetheria.State.Verse
                     routeHint: new CultMeshRouteHint(CultMeshLocalityKind.SharedMemory, "Aetheria managed catalog state"));
             }
 
-            CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument> ManagedMainMenuSurfaceDocument(
+            CultMeshDocumentHandle<EveSurfaceDocument> ManagedMainMenuSurfaceDocument(
                 string surfaceId,
                 bool canOpenRuntimeInputScreen,
                 bool inGame)
@@ -796,7 +795,7 @@ namespace GameCult.Aetheria.State.Verse
                     AetheriaRuntimeVerseRecordKeys.StableToken(surfaceId),
                     canOpenRuntimeInputScreen ? "input-open" : "input-closed",
                     inGame ? "in-game" : "title");
-                var descriptor = CultDocumentRegistry.Shared.GetRequired<AetheriaRuntimeSurfaceDocument>();
+                var descriptor = CultDocumentRegistry.Shared.GetRequired<EveSurfaceDocument>();
                 var sources = new[]
                 {
                     CultMesh.ProjectionSource(documentId, descriptor.SchemaId, "managed Aetheria main menu surface"),
@@ -870,7 +869,7 @@ namespace GameCult.Aetheria.State.Verse
                 }
             }
 
-            Task<AetheriaRuntimeSurfaceDocument> ZoneDetailsSurfaceAsync(
+            Task<EveSurfaceDocument> ZoneDetailsSurfaceAsync(
                 AetheriaRuntimeDaemonFrameDocument frame,
                 int zoneIndex)
             {
@@ -882,7 +881,7 @@ namespace GameCult.Aetheria.State.Verse
                     DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)));
             }
 
-            Task<AetheriaRuntimeSurfaceDocument> InventoryPanelSurfaceAsync(
+            Task<EveSurfaceDocument> InventoryPanelSurfaceAsync(
                 AetheriaRuntimeDaemonFrameDocument frame,
                 AetheriaRuntimeInventoryPanelSurfaceRequest request)
             {
@@ -908,7 +907,7 @@ namespace GameCult.Aetheria.State.Verse
                     DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)));
             }
 
-            Task<AetheriaRuntimeSurfaceDocument> InventoryDropdownSurfaceAsync(
+            Task<EveSurfaceDocument> InventoryDropdownSurfaceAsync(
                 AetheriaRuntimeDaemonFrameDocument frame,
                 AetheriaRuntimeInventoryDropdownSurfaceRequest request)
             {
@@ -921,7 +920,7 @@ namespace GameCult.Aetheria.State.Verse
                     DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)));
             }
 
-            AetheriaRuntimeSurfaceDocument BuildMainMenuSurface(
+            EveSurfaceDocument BuildMainMenuSurface(
                 string surfaceId,
                 bool canOpenRuntimeInputScreen,
                 bool inGame)

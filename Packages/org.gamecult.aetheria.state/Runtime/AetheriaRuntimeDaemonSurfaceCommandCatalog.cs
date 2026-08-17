@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,12 +33,12 @@ namespace GameCult.Aetheria.State.Verse
 
         public static IReadOnlyList<AetheriaRuntimeDaemonCommandKinds> ArgumentlessCommands => ArgumentlessCommandKinds;
 
-        public static IReadOnlyList<AetheriaRuntimeSurfaceCommandTemplate> ArgumentlessSurfaceCommands =>
+        public static IReadOnlyList<EveCommandTemplate> ArgumentlessSurfaceCommands =>
             ArgumentlessCommandKinds
-                .Select(kind => new AetheriaRuntimeSurfaceCommandTemplate(
+                .Select(kind => AetheriaRuntimeSurfaceDocuments.Command(
                     CommandName(kind),
                     Label(kind),
-                    AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport))
+                    "cultmesh"))
                 .ToArray();
 
         public static string CommandName(AetheriaRuntimeDaemonCommandKinds kind)

@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -12,18 +13,18 @@ namespace GameCult.Aetheria.State.Verse
         public const string SurfaceId = "aetheria.daemon.editor";
         public const string TuiSurfaceId = "aetheria.daemon.editor.tui";
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaRuntimeDaemonProviderAdvertisementDocument provider,
             AetheriaRuntimeDaemonHealthDocument health,
             AetheriaRuntimeDaemonCommandBoundaryDocument commandBoundary,
-            IReadOnlyList<AetheriaRuntimeSurfaceDocument>? designerSurfaces = null)
+            IReadOnlyList<EveSurfaceDocument>? designerSurfaces = null)
         {
             provider ??= new AetheriaRuntimeDaemonProviderAdvertisementDocument();
             health ??= new AetheriaRuntimeDaemonHealthDocument();
             commandBoundary ??= AetheriaRuntimeDaemonCommandBoundaryDocument.Create(provider.DaemonId);
-            designerSurfaces ??= Array.Empty<AetheriaRuntimeSurfaceDocument>();
+            designerSurfaces ??= Array.Empty<EveSurfaceDocument>();
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: AetheriaRuntimeProviderIdentity.ProviderId,
                 providerKind: "editor.daemon",
                 title: "Aetheria Daemon Editor",
@@ -31,7 +32,7 @@ namespace GameCult.Aetheria.State.Verse
                 updatedAtUtc: string.IsNullOrWhiteSpace(health.PublishedAtUtc)
                     ? provider.PublishedAtUtc
                     : health.PublishedAtUtc,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     Node(
                         "aetheria.daemon.editor.root",
@@ -117,19 +118,19 @@ namespace GameCult.Aetheria.State.Verse
                                     .Where(surface => surface != null)
                                     .Select((surface, index) => AdvertisedSurfaceRow(index, surface))
                                     .ToArray()))),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: commandBoundary.Commands
                     .Where(entry => AetheriaRuntimeDaemonSurfaceCommandCatalog.IsArgumentlessCommand(entry.Kind))
-                    .Select(entry => new AetheriaRuntimeSurfaceCommandTemplate(
+                    .Select(entry => AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(entry.Kind),
                         AetheriaRuntimeDaemonSurfaceCommandCatalog.Label(entry.Kind),
                         "cultmesh"))
                     .ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent DesignerSurfaceRow(
+        private static EveSurfaceComponent DesignerSurfaceRow(
             int index,
-            AetheriaRuntimeSurfaceDocument surface)
+            EveSurfaceDocument surface)
         {
             return Node(
                 $"aetheria.daemon.editor.designer_surfaces.{index}",
@@ -144,7 +145,7 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent AdvertisedSurfaceRow(
+        private static EveSurfaceComponent AdvertisedSurfaceRow(
             int index,
             AetheriaRuntimeEveSurfaceAdvertisement surface)
         {
@@ -165,7 +166,7 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent CommandRow(
+        private static EveSurfaceComponent CommandRow(
             int index,
             AetheriaRuntimeDaemonCommandBoundaryEntry entry)
         {
@@ -186,29 +187,29 @@ namespace GameCult.Aetheria.State.Verse
             return AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(kind);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label), ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Row(
+        private static EveSurfaceComponent Row(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 props.ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
     }
 }

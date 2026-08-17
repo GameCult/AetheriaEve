@@ -1,20 +1,16 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Aetheria.State.Documents;
 using GameCult.Aetheria.State.Verse;
 using GameCult.Mesh;
-using EveCommandTemplate = GameCult.Eve.Surface.EveCommandTemplate;
 using EveCommandReceiptDocument = GameCult.Eve.Surface.EveCommandReceiptDocument;
 using EveAdvertisedCommand = GameCult.Eve.Surface.EveAdvertisedCommand;
 using EveAdvertisedSurface = GameCult.Eve.Surface.EveAdvertisedSurface;
 using EveProviderAdvertisementDocument = GameCult.Eve.Surface.EveProviderAdvertisementDocument;
 using EveProviderFreshness = GameCult.Eve.Surface.EveProviderFreshness;
 using EveProviderWitness = GameCult.Eve.Surface.EveProviderWitness;
-using EveStyleToken = GameCult.Eve.Surface.EveStyleToken;
-using EveSurfaceComponent = GameCult.Eve.Surface.EveSurfaceComponent;
-using EveSurfaceDocument = GameCult.Eve.Surface.EveSurfaceDocument;
-using EveSurfaceTree = GameCult.Eve.Surface.EveSurfaceTree;
 using EveWorldInteractionAdvertisement = GameCult.Eve.Surface.EveWorldInteractionAdvertisement;
 
 namespace Aetheria.State;
@@ -214,7 +210,7 @@ public static class AetheriaEveSurfaceDocuments
             publishedAtUtc,
             version);
 
-        return AetheriaRuntimeSurfaceDocuments.ToPortableSurface(surface);
+        return (surface);
     }
 
     public static EveProviderAdvertisementDocument BuildProviderAdvertisement(

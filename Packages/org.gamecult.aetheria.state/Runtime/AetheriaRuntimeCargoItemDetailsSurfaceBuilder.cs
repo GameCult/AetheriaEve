@@ -73,7 +73,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string SurfaceId = "aetheria.inventory.cargo_item_details";
         public const string Close = "aetheria.inventory.cargo_item_details.close";
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaRuntimeCatalogItem typedItem,
             AetheriaRuntimeCargoItemObservation item,
             string manufacturer,
@@ -108,7 +108,7 @@ namespace GameCult.Aetheria.State.Verse
                                      !string.IsNullOrWhiteSpace(thermalRange);
             var updated = updatedAtUtc.ToString("O", CultureInfo.InvariantCulture);
 
-            var children = new List<AetheriaRuntimeSurfaceComponent>
+            var children = new List<EveSurfaceComponent>
             {
                 Card(
                     $"{SurfaceId}.summary",
@@ -170,23 +170,23 @@ namespace GameCult.Aetheria.State.Verse
                 $"{SurfaceId}.actions",
                 Button($"{SurfaceId}.close", "Close", Close)));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "inventory.menu",
                 title: "Inventory Cargo Item Details",
                 version: version,
                 updatedAtUtc: updated,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     Node(
                         $"{SurfaceId}.root",
                         "surface",
                         Array.Empty<(string Key, string Value)>(),
                         children.ToArray()),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: new[]
                 {
-                    new AetheriaRuntimeSurfaceCommandTemplate(Close, "Close", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport)
+                    AetheriaRuntimeSurfaceDocuments.Command(Close, "Close", "cultmesh")
                 });
         }
 
@@ -624,15 +624,15 @@ namespace GameCult.Aetheria.State.Verse
                 .ToArray()).Trim('-');
         }
 
-        private static AetheriaRuntimeSurfaceComponent Card(
+        private static EveSurfaceComponent Card(
             string id,
             string title,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "card", new[] { ("title", title ?? "") }, children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value, string valueRef = "")
+        private static EveSurfaceComponent Metric(string id, string label, string value, string valueRef = "")
         {
             var props = new List<(string Key, string Value)>
             {
@@ -646,34 +646,34 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "metric", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 props.ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
     }
 

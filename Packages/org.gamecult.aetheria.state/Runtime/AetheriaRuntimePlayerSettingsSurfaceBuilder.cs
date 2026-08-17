@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,7 +8,7 @@ namespace GameCult.Aetheria.State.Verse
 {
     public static class AetheriaRuntimePlayerSettingsSurfaceBuilder
     {
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaRuntimePlayerSettingsDocument settings,
             string updatedAtUtc,
             long version = 1)
@@ -24,7 +25,7 @@ namespace GameCult.Aetheria.State.Verse
                 version);
         }
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             string playerName,
             bool tutorialPassed,
             string activeRunKey,
@@ -41,13 +42,13 @@ namespace GameCult.Aetheria.State.Verse
             nebulaQuality ??= "";
             updatedAtUtc ??= "";
             significantDigits = Math.Max(0, significantDigits);
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "game.runtime",
                 title: "Aetheria Player Settings",
                 version: version,
                 updatedAtUtc: updatedAtUtc,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     AetheriaRuntimePlayerSettingsCommands.SurfaceId,
                     Node(
                         "aetheria.playerSettings.root",
@@ -115,85 +116,85 @@ namespace GameCult.Aetheria.State.Verse
                                     "playerSettings.graphics.showAsteroids.toggle",
                                     showAsteroidsInMinimap ? "Disable Minimap Asteroids" : "Enable Minimap Asteroids",
                                     AetheriaRuntimePlayerSettingsCommands.ToggleShowAsteroidsInMinimap)))),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: new[]
                 {
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimePlayerSettingsCommands.Refresh,
                         "Refresh",
                         "cultmesh"),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimePlayerSettingsCommands.SetPlayerName,
                         "Set Player Name",
                         "cultmesh"),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimePlayerSettingsCommands.CycleTemperatureUnit,
                         "Cycle Temperature Unit",
                         "cultmesh"),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimePlayerSettingsCommands.DecrementSignificantDigits,
                         "Digits -",
                         "cultmesh"),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimePlayerSettingsCommands.IncrementSignificantDigits,
                         "Digits +",
                         "cultmesh"),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimePlayerSettingsCommands.CycleNebulaQuality,
                         "Cycle Nebula Quality",
                         "cultmesh"),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimePlayerSettingsCommands.ToggleShowAsteroidsInMinimap,
                         "Toggle Minimap Asteroids",
                         "cultmesh")
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label), ("value", value) });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value) });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label), ("command", command) });
         }
 
-        private static AetheriaRuntimeSurfaceComponent TextInput(string id, string label, string value, string command)
+        private static EveSurfaceComponent TextInput(string id, string label, string value, string command)
         {
             return Node(id, "control.text", new[] { ("label", label), ("value", value), ("command", command) });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Row(
+        private static EveSurfaceComponent Row(
             string id,
             params (string Key, string Value)[] props)
         {
             return Node(id, "row", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 props.ToDictionary(prop => prop.Key, prop => prop.Value, StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
     }
 }

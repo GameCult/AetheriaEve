@@ -1594,11 +1594,7 @@ static Task<EveSurfaceDocument?> ReadEveSurfacePublicationAsync(AetheriaStateNod
 
 static async Task<EveSurfaceDocument?> ReadPortableSurfaceAsync(AetheriaStateNode node, CultRecordKey key)
 {
-    var portableSurface = await node.MutableDocument<EveSurfaceDocument>(key).ReadAsync().ConfigureAwait(false);
-    if (portableSurface != null)
-        return portableSurface;
-    var providerSurface = await node.MutableDocument<AetheriaRuntimeSurfaceDocument>(key).ReadAsync().ConfigureAwait(false);
-    return providerSurface == null ? null : AetheriaRuntimeSurfaceDocuments.ToEveSurfaceDocument(providerSurface);
+    return await node.MutableDocument<EveSurfaceDocument>(key).ReadAsync().ConfigureAwait(false);
 }
 
 static IPAddress ParseBindAddress(string host)
@@ -2023,10 +2019,9 @@ static async Task PublishClientGameplayDocumentsAsync(
     var activeMainMenuSurfaceId = string.IsNullOrWhiteSpace(mainMenuState?.ActiveSurfaceId)
         ? (hasActivePilot ? "" : AetheriaRuntimeMainMenuCommands.RootSurfaceId)
         : mainMenuState.ActiveSurfaceId;
-    var reactiveGameSurface = AetheriaRuntimeSurfaceDocuments.ToPortableSurface(
-        AetheriaRuntimeDaemonGameSurfaceBuilder.BuildReactiveGameplay(
-            result.Frame,
-            reactiveSurfaceState?.LastPublishedFrame ?? -1));
+    var reactiveGameSurface = AetheriaRuntimeDaemonGameSurfaceBuilder.BuildReactiveGameplay(
+        result.Frame,
+        reactiveSurfaceState?.LastPublishedFrame ?? -1);
     if (reactiveSurfaceState?.Matches(reactiveGameSurface.Version) != true)
     {
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonGameReactiveSurface)
@@ -2043,14 +2038,11 @@ static async Task PublishClientGameplayDocumentsAsync(
             result.CommandBoundary ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId),
             activeMainMenuSurfaceId,
             inputCatalog);
-        var portableGameSurface = AetheriaRuntimeSurfaceDocuments.ToPortableSurface(gameSurface);
+        var portableGameSurface = gameSurface;
         if (string.Equals(Environment.GetEnvironmentVariable("AETHERIA_TRACE_CLIENT_TRANSPORT"), "1", StringComparison.Ordinal))
             Console.WriteLine($"Eve game topology bytes={MessagePackSerializer.Serialize(portableGameSurface).Length}");
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonGameSurface)
             .ReplaceAsync(portableGameSurface)
-            .ConfigureAwait(false);
-        await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.HangarSurface)
-            .ReplaceAsync(ReidentifySurface(portableGameSurface, AetheriaRuntimeHangarCommands.SurfaceId, "Terminus"))
             .ConfigureAwait(false);
         await PublishDaemonSectorMapSurfaceAsync(node, result.Frame, inputCatalog).ConfigureAwait(false);
     }
@@ -2068,19 +2060,19 @@ static async Task PublishSecondaryTopologyDocumentsAsync(
         result.CommandBoundary ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId),
         result.StarbridgeSessionSummary);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeCommanderSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(commanderSurface))
+        .ReplaceAsync(commanderSurface)
         .ConfigureAwait(false);
     if (result.GameTuiSurface != null)
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonGameTuiSurface)
-            .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(result.GameTuiSurface))
+            .ReplaceAsync(result.GameTuiSurface)
             .ConfigureAwait(false);
     if (result.EditorSurface != null)
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonEditorSurface)
-            .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(result.EditorSurface))
+            .ReplaceAsync(result.EditorSurface)
             .ConfigureAwait(false);
     if (result.EditorTuiSurface != null)
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonEditorTuiSurface)
-            .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(result.EditorTuiSurface))
+            .ReplaceAsync(result.EditorTuiSurface)
             .ConfigureAwait(false);
 
     await PublishDaemonMenuSurfacesAsync(node, options, result.Frame).ConfigureAwait(false);
@@ -2103,7 +2095,7 @@ static async Task PublishDaemonSectorMapSurfaceAsync(
         frame.FrameId,
         catalog);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.MapMenuSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(surface))
+        .ReplaceAsync(surface)
         .ConfigureAwait(false);
 }
 
@@ -2294,28 +2286,28 @@ static async Task PublishDaemonMenuSurfacesAsync(
     var tradeMenu = BuildTradeMenuSurface(stationRefit, catalog, updatedAtUtc, frame.FrameId);
 
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.MainMenuSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(mainMenu))
+        .ReplaceAsync(mainMenu)
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.MainMenuSettingsSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(mainMenuSettings))
+        .ReplaceAsync(mainMenuSettings)
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.MainMenuInputSettingsSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(mainMenuInputSettings))
+        .ReplaceAsync(mainMenuInputSettings)
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.MainMenuPlayerSettingsSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(mainMenuPlayerSettings))
+        .ReplaceAsync(mainMenuPlayerSettings)
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.MainMenuVerseSettingsSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(mainMenuVerseSettings))
+        .ReplaceAsync(mainMenuVerseSettings)
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.InventoryPanelSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(inventoryPanel))
+        .ReplaceAsync(inventoryPanel)
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.InventoryDropdownSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(inventoryDropdown))
+        .ReplaceAsync(inventoryDropdown)
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.TradeMenuSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(tradeMenu))
+        .ReplaceAsync(tradeMenu)
         .ConfigureAwait(false);
     await node.MutableDocument<AetheriaRuntimeAssetManifestDocument>(AetheriaRuntimeVerseRecordKeys.DaemonAssetManifest)
         .ReplaceAsync(assetManifest)
@@ -2342,7 +2334,7 @@ static async Task<AetheriaRuntimePlayerSettingsDocument> ReadRuntimePlayerSettin
     };
 }
 
-static AetheriaRuntimeSurfaceDocument BuildTradeMenuSurface(
+static EveSurfaceDocument BuildTradeMenuSurface(
     AetheriaRuntimeStationRefitDocument stationRefit,
     AetheriaRuntimeCatalogSnapshot catalog,
     string updatedAtUtc,
@@ -2370,13 +2362,13 @@ static AetheriaRuntimeSurfaceDocument BuildTradeMenuSurface(
             ("value", "No station stock is available in the current daemon frame.")))
         .ToArray();
 
-    return new AetheriaRuntimeSurfaceDocument(
+    return new EveSurfaceDocument(
         providerId: AetheriaRuntimeProviderIdentity.ProviderId,
         providerKind: "trade.menu",
         title: "Trade Menu",
         version: version,
         updatedAtUtc: updatedAtUtc ?? "",
-        surface: new AetheriaRuntimeSurfaceTree(
+        surface: new EveSurfaceTree(
             "aetheria.trade.menu",
             SurfaceNode(
                 "aetheria.trade.menu.root",
@@ -2394,25 +2386,25 @@ static AetheriaRuntimeSurfaceDocument BuildTradeMenuSurface(
                     "card",
                     new[] { ("title", "Station Stock") },
                     rows)),
-            Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
-        commands: Array.Empty<AetheriaRuntimeSurfaceCommandTemplate>());
+            Array.Empty<EveStyleToken>()),
+        commands: Array.Empty<EveCommandTemplate>());
 }
 
-static AetheriaRuntimeSurfaceComponent SurfaceLeaf(
+static EveSurfaceComponent SurfaceLeaf(
     string id,
     string kind,
     params (string Key, string Value)[] props)
 {
-    return SurfaceNode(id, kind, props, Array.Empty<AetheriaRuntimeSurfaceComponent>());
+    return SurfaceNode(id, kind, props, Array.Empty<EveSurfaceComponent>());
 }
 
-static AetheriaRuntimeSurfaceComponent SurfaceNode(
+static EveSurfaceComponent SurfaceNode(
     string id,
     string kind,
     (string Key, string Value)[] props,
-    params AetheriaRuntimeSurfaceComponent[] children)
+    params EveSurfaceComponent[] children)
 {
-    return new AetheriaRuntimeSurfaceComponent(
+    return new EveSurfaceComponent(
         id,
         kind,
         props.ToDictionary(prop => prop.Key, prop => prop.Value),
@@ -2483,18 +2475,6 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
     }
     return activatedSession;
 }
-
-static EveSurfaceDocument ReidentifySurface(EveSurfaceDocument source, string surfaceId, string title) =>
-    new(
-        source.Type,
-        source.Schema,
-        source.ProviderId,
-        source.ProviderKind,
-        title,
-        source.Version,
-        source.UpdatedAtUtc,
-        new EveSurfaceTree(surfaceId, source.Surface.Root, source.Surface.Styles),
-        source.Commands);
 
 static async Task<bool> AcceptHangarInvocationAsync(
     AetheriaStateNode node,
@@ -2735,15 +2715,14 @@ static async Task PublishStateSurfacesAsync(
         .ConfigureAwait(false);
     if (publishHangar && hangar != null)
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.HangarSurface)
-            .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(
-                AetheriaRuntimeHangarSurfaceBuilder.Build(
-                    hangar,
-                    selectedHangarShip?.ShipId ?? "",
-                    AetheriaGameModes.Terminus,
-                    updatedAtUtc,
-                    Math.Max(1, hangar.Revision),
-                    hangarLoadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(hangarLoadout),
-                    node.RuntimeCatalog().Latest())))
+            .ReplaceAsync(AetheriaRuntimeHangarSurfaceBuilder.Build(
+                hangar,
+                selectedHangarShip?.ShipId ?? "",
+                AetheriaGameModes.Terminus,
+                updatedAtUtc,
+                Math.Max(1, hangar.Revision),
+                hangarLoadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(hangarLoadout),
+                node.RuntimeCatalog().Latest()))
             .ConfigureAwait(false);
     await node.FlushAsync().ConfigureAwait(false);
 }

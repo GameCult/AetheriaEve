@@ -8,7 +8,6 @@ using GameCult.Mesh;
 using GameCult.Networking;
 using GameCult.Eve.Surface;
 using EveProviderAdvertisementState = GameCult.Eve.Surface.EveProviderAdvertisementDocument;
-using EveSurfaceDocument = GameCult.Eve.Surface.EveSurfaceDocument;
 
 var root = args.Length > 0 ? args[0] : Directory.GetCurrentDirectory();
 var stateDirectory = Path.Combine(Path.GetTempPath(), "aetheria-state-smoke", Guid.NewGuid().ToString("N"));
@@ -263,7 +262,7 @@ await using (var node = await AetheriaStateNode.OpenAsync(statePath, "aetheria-s
         }
     }
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonGameSurface)
-        .ReplaceAsync(AetheriaRuntimeSurfaceDocuments.ToPortableSurface(daemonGameSurface));
+        .ReplaceAsync((daemonGameSurface));
     await node.MutableDocument<AetheriaRuntimeSession>(AetheriaStateNode.RuntimeSessionKey("smoke-runtime")).ReplaceAsync(new AetheriaRuntimeSession
     {
         RuntimeId = "smoke-runtime",
@@ -1409,10 +1408,10 @@ static async Task ProveDirectSoaPublicationPipeline()
         throw new InvalidOperationException("Inactive physical payload remained in SoA or disturbed a surviving synthetic identity.");
 }
 
-static IEnumerable<AetheriaRuntimeSurfaceComponent> Flatten(AetheriaRuntimeSurfaceComponent component)
+static IEnumerable<EveSurfaceComponent> Flatten(EveSurfaceComponent component)
 {
     yield return component;
-    foreach (var child in component.Children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>())
+    foreach (var child in component.Children ?? Array.Empty<EveSurfaceComponent>())
     foreach (var descendant in Flatten(child))
         yield return descendant;
 }

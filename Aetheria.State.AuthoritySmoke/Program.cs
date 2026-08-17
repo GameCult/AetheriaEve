@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using Aetheria.State;
 using Aetheria.State.Daemon;
 using Aetheria.State.Documents;
@@ -1998,7 +1999,7 @@ internal sealed class AuthoritySmokeChecks
     }
 
     private static void RequireSurfaceMetric(
-        AetheriaRuntimeSurfaceDocument surface,
+        EveSurfaceDocument surface,
         string componentId,
         string expectedValue,
         string message)
@@ -2014,10 +2015,10 @@ internal sealed class AuthoritySmokeChecks
         }
     }
 
-    private static IEnumerable<AetheriaRuntimeSurfaceComponent> Flatten(AetheriaRuntimeSurfaceComponent component)
+    private static IEnumerable<EveSurfaceComponent> Flatten(EveSurfaceComponent component)
     {
         yield return component;
-        foreach (var child in component.Children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>())
+        foreach (var child in component.Children ?? Array.Empty<EveSurfaceComponent>())
         {
             foreach (var nested in Flatten(child))
                 yield return nested;

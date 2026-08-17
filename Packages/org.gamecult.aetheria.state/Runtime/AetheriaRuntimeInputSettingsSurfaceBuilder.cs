@@ -85,7 +85,7 @@ namespace GameCult.Aetheria.State.Verse
                     path.StartsWith("<Mouse>/", StringComparison.Ordinal));
         }
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             IEnumerable<AetheriaRuntimeObservedInputBinding> observedBindings,
             IEnumerable<string> enabledActionBarInputPaths,
             bool capturePending,
@@ -219,7 +219,7 @@ namespace GameCult.Aetheria.State.Verse
             return inputPath;
         }
 
-        private static AetheriaRuntimeSurfaceDocument Build(
+        private static EveSurfaceDocument Build(
             IReadOnlyList<InputBindingRow> bindings,
             IReadOnlyList<ActionBarInputRow> actionBarInputs,
             bool capturePending,
@@ -229,13 +229,13 @@ namespace GameCult.Aetheria.State.Verse
         {
             bindings ??= Array.Empty<InputBindingRow>();
             actionBarInputs ??= Array.Empty<ActionBarInputRow>();
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "game.runtime",
                 title: "Aetheria Input Settings",
                 version: version,
                 updatedAtUtc: updatedAtUtc ?? "",
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     AetheriaRuntimeInputSettingsCommands.SurfaceId,
                     Node(
                         "aetheria.inputSettings.root",
@@ -294,29 +294,29 @@ namespace GameCult.Aetheria.State.Verse
                                 "grid",
                                 Array.Empty<(string Key, string Value)>(),
                                 actionBarInputs.Select(BuildActionBarCard).ToArray()))),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: new[]
                 {
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeInputSettingsCommands.Refresh,
                         "Refresh",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeInputSettingsCommands.BeginCapture,
                         "Capture Binding",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeInputSettingsCommands.CancelCapture,
                         "Cancel Capture",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeInputSettingsCommands.ToggleActionBar,
                         "Toggle Action-Bar Input",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport)
+                        "cultmesh")
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildBindingCard(
+        private static EveSurfaceComponent BuildBindingCard(
             InputBindingRow binding)
         {
             return Node(
@@ -336,7 +336,7 @@ namespace GameCult.Aetheria.State.Verse
                     ("bindingLabel", binding.BindingLabel)));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildActionBarCard(
+        private static EveSurfaceComponent BuildActionBarCard(
             ActionBarInputRow input)
         {
             return Node(
@@ -356,17 +356,17 @@ namespace GameCult.Aetheria.State.Verse
                     ("label", input.Label)));
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label), ("value", value) });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value) });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(
+        private static EveSurfaceComponent Button(
             string id,
             string label,
             string command,
@@ -385,24 +385,24 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "control.button", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 props.ToDictionary(prop => prop.Key, prop => prop.Value, StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
 
         private sealed class InputBindingRow

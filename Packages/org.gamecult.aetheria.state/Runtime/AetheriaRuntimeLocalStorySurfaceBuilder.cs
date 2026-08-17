@@ -28,7 +28,7 @@ namespace GameCult.Aetheria.State.Verse
             return $"{ChoicePrefix}{Math.Max(0, choiceIndex)}";
         }
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             string locationLabel,
             string currentPath,
             string body,
@@ -43,28 +43,28 @@ namespace GameCult.Aetheria.State.Verse
                 .OrderBy(choice => choice.Index)
                 .ToArray();
 
-            var commands = new List<AetheriaRuntimeSurfaceCommandTemplate>();
-            var controls = new List<AetheriaRuntimeSurfaceComponent>();
+            var commands = new List<EveCommandTemplate>();
+            var controls = new List<EveSurfaceComponent>();
             if (canContinue)
             {
-                commands.Add(new AetheriaRuntimeSurfaceCommandTemplate(
+                commands.Add(AetheriaRuntimeSurfaceDocuments.Command(
                     Continue,
                     "Continue",
-                    AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport));
+                    "cultmesh"));
                 controls.Add(Button($"{SurfaceId}.continue", "Continue", Continue));
             }
 
             foreach (var choice in orderedChoices)
             {
                 var command = ChoiceCommandFor(choice.Index);
-                commands.Add(new AetheriaRuntimeSurfaceCommandTemplate(
+                commands.Add(AetheriaRuntimeSurfaceDocuments.Command(
                     command,
                     choice.Label,
-                    AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport));
+                    "cultmesh"));
                 controls.Add(Button($"{SurfaceId}.choice.{choice.Index}", choice.Label, command));
             }
 
-            var children = new List<AetheriaRuntimeSurfaceComponent>
+            var children = new List<EveSurfaceComponent>
             {
                 Card(
                     $"{SurfaceId}.card",
@@ -75,65 +75,65 @@ namespace GameCult.Aetheria.State.Verse
             if (controls.Count > 0)
                 children.Add(ButtonColumn($"{SurfaceId}.controls", controls.ToArray()));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "runtime.menu",
                 title: "Local Story",
                 version: version,
                 updatedAtUtc: updatedAtUtc ?? "",
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     Node(
                         $"{SurfaceId}.root",
                         "surface",
                         Array.Empty<(string Key, string Value)>(),
                         children.ToArray()),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: commands.ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent Card(
+        private static EveSurfaceComponent Card(
             string id,
             string title,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "card", new[] { ("title", title ?? "") }, children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label ?? ""), ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonColumn(
+        private static EveSurfaceComponent ButtonColumn(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "control.column", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id ?? "",
                 kind ?? "",
                 (props ?? Array.Empty<(string Key, string Value)>())
                     .ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
     }
 

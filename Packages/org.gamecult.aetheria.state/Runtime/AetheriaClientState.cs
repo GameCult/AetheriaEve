@@ -1,9 +1,9 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using GameCult.Mesh;
 using GameCult.Eve.PluginFields;
 using MessagePack;
-using EveSurfaceDocument = GameCult.Eve.Surface.EveSurfaceDocument;
 
 #nullable enable
 
@@ -24,10 +24,10 @@ namespace GameCult.Aetheria.State.Verse
         private readonly Func<AetheriaRuntimeViewportBounds, CultMeshDocumentHandle<AetheriaRuntimeGravityViewportDocument>> _gravityViewport;
         private readonly Func<AetheriaRuntimeViewportBounds, CultMeshDocumentHandle<EveFieldsSplatsDocument>> _renderSplatsViewport;
         private readonly Func<int, CultMeshDocumentHandle<AetheriaRuntimeZoneDetailsDocument>> _zoneDetails;
-        private readonly Func<int, CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument>> _zoneDetailsSurface;
-        private readonly Func<AetheriaRuntimeInventoryPanelSurfaceRequest, CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument>> _inventoryPanelSurface;
-        private readonly Func<AetheriaRuntimeInventoryDropdownSurfaceRequest, CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument>> _inventoryDropdownSurface;
-        private readonly Func<string, bool, bool, CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument>> _mainMenuSurfaceDocument;
+        private readonly Func<int, CultMeshDocumentHandle<EveSurfaceDocument>> _zoneDetailsSurface;
+        private readonly Func<AetheriaRuntimeInventoryPanelSurfaceRequest, CultMeshDocumentHandle<EveSurfaceDocument>> _inventoryPanelSurface;
+        private readonly Func<AetheriaRuntimeInventoryDropdownSurfaceRequest, CultMeshDocumentHandle<EveSurfaceDocument>> _inventoryDropdownSurface;
+        private readonly Func<string, bool, bool, CultMeshDocumentHandle<EveSurfaceDocument>> _mainMenuSurfaceDocument;
         private readonly Func<int, CultMeshDocumentHandle<AetheriaRuntimeSelectedObjectDocument>> _selectedObject;
         private readonly Func<int, CultMeshDocumentHandle<AetheriaRuntimeInventoryDocument>> _inventory;
         private readonly Func<string, CultMeshDocumentHandle<AetheriaRuntimeStarbridgePlayerSeatDocument>> _starbridgePlayerSeat;
@@ -64,10 +64,10 @@ namespace GameCult.Aetheria.State.Verse
             Func<AetheriaRuntimeViewportBounds, CultMeshDocumentHandle<AetheriaRuntimeGravityViewportDocument>> gravityViewport,
             Func<AetheriaRuntimeViewportBounds, CultMeshDocumentHandle<EveFieldsSplatsDocument>> renderSplatsViewport,
             Func<int, CultMeshDocumentHandle<AetheriaRuntimeZoneDetailsDocument>> zoneDetails,
-            Func<int, CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument>> zoneDetailsSurface,
-            Func<AetheriaRuntimeInventoryPanelSurfaceRequest, CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument>> inventoryPanelSurface,
-            Func<AetheriaRuntimeInventoryDropdownSurfaceRequest, CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument>> inventoryDropdownSurface,
-            Func<string, bool, bool, CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument>> mainMenuSurfaceDocument,
+            Func<int, CultMeshDocumentHandle<EveSurfaceDocument>> zoneDetailsSurface,
+            Func<AetheriaRuntimeInventoryPanelSurfaceRequest, CultMeshDocumentHandle<EveSurfaceDocument>> inventoryPanelSurface,
+            Func<AetheriaRuntimeInventoryDropdownSurfaceRequest, CultMeshDocumentHandle<EveSurfaceDocument>> inventoryDropdownSurface,
+            Func<string, bool, bool, CultMeshDocumentHandle<EveSurfaceDocument>> mainMenuSurfaceDocument,
             Func<int, CultMeshDocumentHandle<AetheriaRuntimeSelectedObjectDocument>> selectedObject,
             Func<int, CultMeshDocumentHandle<AetheriaRuntimeInventoryDocument>> inventory,
             CultMeshDocumentHandle<AetheriaRuntimeStarbridgeScenarioDocument> starbridgeScenario,
@@ -244,7 +244,7 @@ namespace GameCult.Aetheria.State.Verse
             return _zoneDetails(zoneIndex);
         }
 
-        public CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument> ZoneDetailsSurface(int zoneIndex)
+        public CultMeshDocumentHandle<EveSurfaceDocument> ZoneDetailsSurface(int zoneIndex)
         {
             if (zoneIndex < 0)
                 throw new ArgumentOutOfRangeException(nameof(zoneIndex), zoneIndex, "Aetheria zone index must be non-negative.");
@@ -252,19 +252,19 @@ namespace GameCult.Aetheria.State.Verse
             return _zoneDetailsSurface(zoneIndex);
         }
 
-        public CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument> InventoryPanelSurface(
+        public CultMeshDocumentHandle<EveSurfaceDocument> InventoryPanelSurface(
             AetheriaRuntimeInventoryPanelSurfaceRequest request)
         {
             return _inventoryPanelSurface(request ?? new AetheriaRuntimeInventoryPanelSurfaceRequest());
         }
 
-        public CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument> InventoryDropdownSurface(
+        public CultMeshDocumentHandle<EveSurfaceDocument> InventoryDropdownSurface(
             AetheriaRuntimeInventoryDropdownSurfaceRequest request)
         {
             return _inventoryDropdownSurface(request ?? new AetheriaRuntimeInventoryDropdownSurfaceRequest());
         }
 
-        public CultMeshDocumentHandle<AetheriaRuntimeSurfaceDocument> MainMenuSurface(
+        public CultMeshDocumentHandle<EveSurfaceDocument> MainMenuSurface(
             string surfaceId,
             bool canOpenRuntimeInputScreen,
             bool inGame)

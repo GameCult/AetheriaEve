@@ -2152,7 +2152,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         Require(Find(undocked.Surface.Root, "aetheria.daemon.game.refit") == null,
             "undocked pilot surfaces must not expose station refit controls");
 
-        static AetheriaRuntimeSurfaceComponent? Find(AetheriaRuntimeSurfaceComponent component, string id) =>
+        static EveSurfaceComponent? Find(EveSurfaceComponent component, string id) =>
             component.Id == id
                 ? component
                 : component.Children.Select(child => Find(child, id)).FirstOrDefault(value => value != null);
@@ -9207,7 +9207,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
     private static double GridValue(AetheriaRuntimeEntitySnapshotCommit entity, string name, int index) =>
         entity.StatGrids.Single(grid => string.Equals(grid.Name, name, StringComparison.OrdinalIgnoreCase)).Values[index];
 
-    private static IEnumerable<AetheriaRuntimeSurfaceComponent> Flatten(AetheriaRuntimeSurfaceComponent root)
+    private static IEnumerable<EveSurfaceComponent> Flatten(EveSurfaceComponent root)
     {
         yield return root;
         foreach (var child in root.Children)

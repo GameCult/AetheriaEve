@@ -111,7 +111,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string SetTargetTemperature = "aetheria.inventory.equipped_item_details.target_temperature.set";
         public const string ToggleWeaponGroup = "aetheria.inventory.equipped_item_details.weapon_group.toggle";
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaRuntimeCatalogItem typedItem,
             AetheriaRuntimeEquippedItemObservation item,
             string title,
@@ -148,7 +148,7 @@ namespace GameCult.Aetheria.State.Verse
                 : ProjectBehaviorSections(typedItem, itemSnapshot, formatValue, formatTemperature).ToArray();
             var updated = updatedAtUtc.ToString("O", CultureInfo.InvariantCulture);
 
-            var children = new List<AetheriaRuntimeSurfaceComponent>
+            var children = new List<EveSurfaceComponent>
             {
                 Card(
                     $"{SurfaceId}.summary",
@@ -205,26 +205,26 @@ namespace GameCult.Aetheria.State.Verse
                 $"{SurfaceId}.actions",
                 Button($"{SurfaceId}.close", "Close", Close)));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "inventory.menu",
                 title: "Inventory Equipped Item Details",
                 version: version,
                 updatedAtUtc: updated,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     Node(
                         $"{SurfaceId}.root",
                         "surface",
                         Array.Empty<(string Key, string Value)>(),
                         children.ToArray()),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: new[]
                 {
-                    new AetheriaRuntimeSurfaceCommandTemplate(Close, "Close", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(ToggleOverrideShutdown, "Toggle Override Shutdown", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(SetTargetTemperature, "Set Target Temperature", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(ToggleWeaponGroup, "Toggle Weapon Group", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport)
+                    AetheriaRuntimeSurfaceDocuments.Command(Close, "Close", "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(ToggleOverrideShutdown, "Toggle Override Shutdown", "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(SetTargetTemperature, "Set Target Temperature", "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(ToggleWeaponGroup, "Toggle Weapon Group", "cultmesh")
                 });
         }
 
@@ -233,14 +233,14 @@ namespace GameCult.Aetheria.State.Verse
             return CultMesh.OperationPayload(values ?? Array.Empty<(string Key, string Value)>());
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildControlsCard(
+        private static EveSurfaceComponent BuildControlsCard(
             string overrideShutdown,
             string overrideShutdownLabel,
             IReadOnlyList<AetheriaRuntimeEquippedItemTemperatureControl> temperatureControls)
         {
             temperatureControls ??= Array.Empty<AetheriaRuntimeEquippedItemTemperatureControl>();
 
-            var children = new List<AetheriaRuntimeSurfaceComponent>
+            var children = new List<EveSurfaceComponent>
             {
                 Metric(
                     $"{SurfaceId}.controls.override_shutdown.metric",
@@ -694,15 +694,15 @@ namespace GameCult.Aetheria.State.Verse
                 index > 0 && char.IsUpper(character) ? " " + character : character.ToString()));
         }
 
-        private static AetheriaRuntimeSurfaceComponent Card(
+        private static EveSurfaceComponent Card(
             string id,
             string title,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "card", new[] { ("title", title ?? "") }, children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value, string valueRef = "")
+        private static EveSurfaceComponent Metric(string id, string label, string value, string valueRef = "")
         {
             var props = new List<(string Key, string Value)>
             {
@@ -716,22 +716,22 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "metric", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(AetheriaRuntimeEquippedItemControl control)
+        private static EveSurfaceComponent Button(AetheriaRuntimeEquippedItemControl control)
         {
             return CommandButton(control.Id, control.Label, control.Command, control.Payload);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent CommandButton(
+        private static EveSurfaceComponent CommandButton(
             string id,
             string label,
             string command,
@@ -751,7 +751,7 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "control.button", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent TextField(
+        private static EveSurfaceComponent TextField(
             string id,
             string label,
             string command,
@@ -773,25 +773,25 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "control.text", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id ?? "",
                 kind ?? "",
                 (props ?? Array.Empty<(string Key, string Value)>())
                     .ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
     }
 

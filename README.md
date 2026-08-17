@@ -56,6 +56,7 @@ Start with:
 - [game modes and progression](docs/game-modes-and-progression.md);
 - [renderless architecture](docs/renderless-aetheria-architecture.md);
 - [developer navigation](docs/developer-navigation.md).
+- [portable game framework adversarial review](docs/portable-game-framework-review.md).
 
 Persistent state is typed CultCache `.cc` data. Services speak CultNet through
 CultMesh. User interfaces are daemon-published Eve/CultUI compositions. JSON is

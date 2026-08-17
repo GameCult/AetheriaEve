@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.IO;
 using System.Collections.Generic;
@@ -11,7 +12,6 @@ using GameCult.Caching.MessagePack;
 using GameCult.Mesh;
 using GameCult.Networking;
 using R3;
-using EveSurfaceDocument = GameCult.Eve.Surface.EveSurfaceDocument;
 using EveSurfaceCommandRequest = GameCult.Eve.Surface.EveSurfaceCommandRequest;
 using EveCommandReceiptDocument = GameCult.Eve.Surface.EveCommandReceiptDocument;
 

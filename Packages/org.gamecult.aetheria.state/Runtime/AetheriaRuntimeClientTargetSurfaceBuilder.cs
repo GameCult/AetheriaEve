@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,7 +7,7 @@ namespace GameCult.Aetheria.State.Verse
 {
     public static class AetheriaRuntimeClientTargetSurfaceBuilder
     {
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaRuntimeStateBootReport stateBoot,
             AetheriaRuntimeVerseHostSettingsDocument verseHost,
             string updatedAtUtc,
@@ -44,7 +45,7 @@ namespace GameCult.Aetheria.State.Verse
                     ? "AETHERIA_STATE_PATH is overriding the persisted client target. Update the environment if you want boot to follow the saved target again."
                     : "Client target edits persist in aetheria-client.cc. Verse discovery and selection mutate the same typed owner. Verse visibility changes append provider-owned Eve requests for the daemon bridge. Remote Verse targets hydrate a cache-only local replica before observers read them.";
 
-            var discoveryChildren = new List<AetheriaRuntimeSurfaceComponent>
+            var discoveryChildren = new List<EveSurfaceComponent>
             {
                 TextInput(
                     "aetheria.clientTarget.discovery.endpoints",
@@ -93,13 +94,13 @@ namespace GameCult.Aetheria.State.Verse
                     "Refresh",
                     AetheriaRuntimeClientTargetCommands.Refresh)));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "game.menu",
                 title: "Aetheria Verse Settings",
                 version: version,
                 updatedAtUtc: updatedAtUtc,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     AetheriaRuntimeClientTargetCommands.SurfaceId,
                     Node(
                         "aetheria.clientTarget.root",
@@ -198,80 +199,80 @@ namespace GameCult.Aetheria.State.Verse
                             Text(
                                 "aetheria.clientTarget.host.note",
                                 "Client target edits persist through the managed target document. Visibility changes append provider-owned Eve requests against the selected Verse target."))),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: new[]
                 {
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.Refresh,
                         "Refresh",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.CycleTargetKind,
                         "Cycle Transport",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.SetTitle,
                         "Set Title",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.SetVerseId,
                         "Set Verse Id",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.SetRuntimeId,
                         "Set Runtime Id",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.SetCultMeshAddress,
                         "Set CultMesh Address",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.SetStateFilePath,
                         "Set State File Path",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.SetDiscoveryEndpoints,
                         "Set Discovery Endpoints",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.DiscoverVerses,
                         "Discover Verses",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.SelectDiscoveredVerse,
                         "Select Discovered Verse",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeClientTargetCommands.SyncReplica,
                         "Sync Replica",
-                        AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                        "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeVerseHostCommands.CycleVisibility,
                         "Toggle Visibility",
                         "cultmesh"),
-                    new AetheriaRuntimeSurfaceCommandTemplate(
+                    AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeVerseHostCommands.Refresh,
                         "Refresh Host",
                         "cultmesh")
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label), ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent TextInput(string id, string label, string value, string command)
+        private static EveSurfaceComponent TextInput(string id, string label, string value, string command)
         {
             return Node(
                 id,
@@ -279,34 +280,34 @@ namespace GameCult.Aetheria.State.Verse
                 new[] { ("label", label ?? ""), ("value", value ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Row(
+        private static EveSurfaceComponent Row(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "inspector.kv", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 props.ToDictionary(prop => prop.Key, prop => prop.Value, StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildDiscoveredVerseNode(
+        private static EveSurfaceComponent BuildDiscoveredVerseNode(
             string targetKind,
             string targetVerseId,
             AetheriaRuntimeDiscoveredVerse verse,

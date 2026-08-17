@@ -1,8 +1,8 @@
+using GameCult.Eve.Surface;
 using Aetheria.State.Documents;
 using GameCult.Aetheria.State.Verse;
 using GameCult.Mesh;
 using EveProviderAdvertisementDocument = GameCult.Eve.Surface.EveProviderAdvertisementDocument;
-using EveSurfaceDocument = GameCult.Eve.Surface.EveSurfaceDocument;
 
 namespace Aetheria.State;
 

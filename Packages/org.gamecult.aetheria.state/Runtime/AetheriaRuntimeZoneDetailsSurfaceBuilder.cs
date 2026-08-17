@@ -105,7 +105,7 @@ namespace GameCult.Aetheria.State.Verse
                 zone.HasContents);
         }
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             string zoneName,
             string ownerName,
             string mass,
@@ -140,7 +140,7 @@ namespace GameCult.Aetheria.State.Verse
             var turrets = entityList.Count(entity => HasHullType(entity, "Turret")).ToString();
             var ships = entityList.Count(entity => HasHullType(entity, "Ship")).ToString();
 
-            var children = new List<AetheriaRuntimeSurfaceComponent>
+            var children = new List<EveSurfaceComponent>
             {
                 Card(
                     $"{SurfaceId}.card",
@@ -181,27 +181,27 @@ namespace GameCult.Aetheria.State.Verse
                 $"{SurfaceId}.actions",
                 Button($"{SurfaceId}.close", "Close", Close)));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "sector.map",
                 title: zoneName,
                 version: version,
                 updatedAtUtc: updatedAtUtc,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     Node(
                         $"{SurfaceId}.root",
                         "surface",
                         Array.Empty<(string Key, string Value)>(),
                         children.ToArray()),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: new[]
                 {
-                    new AetheriaRuntimeSurfaceCommandTemplate(Close, "Close", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport)
+                    AetheriaRuntimeSurfaceDocuments.Command(Close, "Close", "cultmesh")
                 });
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildFromDocuments(
+        public static EveSurfaceDocument BuildFromDocuments(
             AetheriaRuntimeZoneDetailsDocument zoneDetails,
             AetheriaRuntimeSectorMapDocument sectorMap,
             AetheriaRuntimeCatalogSnapshot catalog,
@@ -251,48 +251,48 @@ namespace GameCult.Aetheria.State.Verse
                 .ToArray();
         }
 
-        private static AetheriaRuntimeSurfaceComponent Card(
+        private static EveSurfaceComponent Card(
             string id,
             string title,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "card", new[] { ("title", title ?? "") }, children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label ?? ""), ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id ?? "",
                 kind ?? "",
                 (props ?? Array.Empty<(string Key, string Value)>())
                     .ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
 
         private static bool IsBodyKind(AetheriaRuntimeZoneDetailsBodyFacts body, string kind)

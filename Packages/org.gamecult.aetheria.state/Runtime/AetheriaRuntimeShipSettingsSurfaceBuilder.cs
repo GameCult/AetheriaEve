@@ -14,7 +14,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string ResetShutdownThreshold = "aetheria.inventory.current_ship_settings.shutdown.reset";
         public const string Close = "aetheria.inventory.current_ship_settings.close";
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             string shipName,
             float shutdownPerformance,
             Func<float, string> formatShutdownPerformance,
@@ -28,13 +28,13 @@ namespace GameCult.Aetheria.State.Verse
                 ? shutdownPerformance.ToString("0.###", CultureInfo.InvariantCulture)
                 : formatShutdownPerformance(shutdownPerformance);
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "inventory.menu",
                 title: "Current Ship Settings",
                 version: version,
                 updatedAtUtc: updatedAtUtc.ToString("O", CultureInfo.InvariantCulture),
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     Node(
                         $"{SurfaceId}.root",
@@ -56,58 +56,58 @@ namespace GameCult.Aetheria.State.Verse
                                 Button($"{SurfaceId}.shutdown.increment", "Threshold +", IncrementShutdownThreshold),
                                 Button($"{SurfaceId}.shutdown.reset", "Default", ResetShutdownThreshold),
                                 Button($"{SurfaceId}.close", "Close", Close)))),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: new[]
                 {
-                    new AetheriaRuntimeSurfaceCommandTemplate(DecrementShutdownThreshold, "Threshold -", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(IncrementShutdownThreshold, "Threshold +", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(ResetShutdownThreshold, "Default", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                    new AetheriaRuntimeSurfaceCommandTemplate(Close, "Close", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport)
+                    AetheriaRuntimeSurfaceDocuments.Command(DecrementShutdownThreshold, "Threshold -", "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(IncrementShutdownThreshold, "Threshold +", "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(ResetShutdownThreshold, "Default", "cultmesh"),
+                    AetheriaRuntimeSurfaceDocuments.Command(Close, "Close", "cultmesh")
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Card(
+        private static EveSurfaceComponent Card(
             string id,
             string title,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "card", new[] { ("title", title ?? "") }, children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label ?? ""), ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "control.row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id ?? "",
                 kind ?? "",
                 (props ?? Array.Empty<(string Key, string Value)>())
                     .ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
     }
 

@@ -81,14 +81,14 @@ namespace GameCult.Aetheria.State.Verse
     public sealed class AetheriaRuntimeTradeCargoSelectorSurfaceModel
     {
         public AetheriaRuntimeTradeCargoSelectorSurfaceModel(
-            AetheriaRuntimeSurfaceDocument document,
+            EveSurfaceDocument document,
             IReadOnlyDictionary<string, AetheriaRuntimeTradeCargoSelection> selections)
         {
             Document = document ?? throw new ArgumentNullException(nameof(document));
             Selections = selections ?? new Dictionary<string, AetheriaRuntimeTradeCargoSelection>(StringComparer.Ordinal);
         }
 
-        public AetheriaRuntimeSurfaceDocument Document { get; }
+        public EveSurfaceDocument Document { get; }
         public IReadOnlyDictionary<string, AetheriaRuntimeTradeCargoSelection> Selections { get; }
 
         public bool TryResolve(string command, out AetheriaRuntimeTradeCargoSelection selection)
@@ -150,7 +150,7 @@ namespace GameCult.Aetheria.State.Verse
                 selections);
         }
 
-        private static AetheriaRuntimeSurfaceDocument Build(
+        private static EveSurfaceDocument Build(
             string currentTarget,
             IReadOnlyList<AetheriaRuntimeTradeCargoTargetOption> options,
             string updatedAtUtc,
@@ -162,13 +162,13 @@ namespace GameCult.Aetheria.State.Verse
                 .OrderBy(target => target.Label, StringComparer.Ordinal)
                 .ToArray();
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "trade.menu",
                 title: "Trade Target Cargo Selector",
                 version: version,
                 updatedAtUtc: updatedAtUtc ?? "",
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     Node(
                         $"{SurfaceId}.root",
@@ -189,62 +189,62 @@ namespace GameCult.Aetheria.State.Verse
                             ButtonRow(
                                 $"{SurfaceId}.actions",
                                 Button($"{SurfaceId}.close", "Close", Close)))),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: targets
-                    .Select(target => new AetheriaRuntimeSurfaceCommandTemplate(target.Command, target.Label, AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport))
-                    .Append(new AetheriaRuntimeSurfaceCommandTemplate(Close, "Close", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport))
+                    .Select(target => AetheriaRuntimeSurfaceDocuments.Command(target.Command, target.Label, "cultmesh"))
+                    .Append(AetheriaRuntimeSurfaceDocuments.Command(Close, "Close", "cultmesh"))
                     .ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent Card(
+        private static EveSurfaceComponent Card(
             string id,
             string title,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "card", new[] { ("title", title ?? "") }, children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label ?? ""), ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(string id, string label, string command)
+        private static EveSurfaceComponent Button(string id, string label, string command)
         {
             return Node(id, "control.button", new[] { ("label", label ?? ""), ("command", command ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonColumn(
+        private static EveSurfaceComponent ButtonColumn(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "column", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id ?? "",
                 kind ?? "",
                 (props ?? Array.Empty<(string Key, string Value)>())
                     .ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
 
         private static string CommandFor(AetheriaRuntimeTradeCargoModelOption target)

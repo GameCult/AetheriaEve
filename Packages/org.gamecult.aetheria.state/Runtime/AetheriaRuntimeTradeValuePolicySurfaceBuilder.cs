@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -11,19 +12,19 @@ namespace GameCult.Aetheria.State.Verse
     {
         public const string SurfaceId = "aetheria.tradeValuePolicy";
 
-        public static AetheriaRuntimeSurfaceDocument BuildFromCatalog(
+        public static EveSurfaceDocument BuildFromCatalog(
             AetheriaRuntimeCatalogSnapshot? catalog,
             long version = 1)
         {
             var settings = catalog?.TradeValueSettings ?? AetheriaRuntimeTradeValueSettings.Default;
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "game.design",
                 title: "Aetheria Trade Value Policy",
                 version: version,
                 updatedAtUtc: DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     Node(
                         "aetheria.tradeValuePolicy.root",
@@ -32,11 +33,11 @@ namespace GameCult.Aetheria.State.Verse
                         BuildSummaryCard(settings),
                         BuildQualityCurveCard(settings.QualityPriceModifier),
                         BuildTierList(settings.Tiers)),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: BuildCommandTemplates());
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildSummaryCard(
+        private static EveSurfaceComponent BuildSummaryCard(
             AetheriaRuntimeTradeValueSettings settings)
         {
             return Node(
@@ -56,7 +57,7 @@ namespace GameCult.Aetheria.State.Verse
                     "Trade value is authored as typed policy state so inventory, trade, loadout pricing, and Starbridge station stock read the same curve."));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildQualityCurveCard(
+        private static EveSurfaceComponent BuildQualityCurveCard(
             AetheriaRuntimeExponentialLerp curve)
         {
             return Node(
@@ -86,7 +87,7 @@ namespace GameCult.Aetheria.State.Verse
                     Metric("aetheria.tradeValuePolicy.quality.sample.perfect", "Q 1.00", Format(curve.Evaluate(1.00)))));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildTierList(
+        private static EveSurfaceComponent BuildTierList(
             IReadOnlyList<AetheriaRuntimeItemRarityTier> tiers)
         {
             var rows = (tiers ?? Array.Empty<AetheriaRuntimeItemRarityTier>())
@@ -102,7 +103,7 @@ namespace GameCult.Aetheria.State.Verse
                     : Row("aetheria.tradeValuePolicy.tiers.rows", rows));
         }
 
-        private static AetheriaRuntimeSurfaceComponent TierRow(
+        private static EveSurfaceComponent TierRow(
             int index,
             AetheriaRuntimeItemRarityTier tier)
         {
@@ -123,36 +124,36 @@ namespace GameCult.Aetheria.State.Verse
                     ("tierIndex", index.ToString(CultureInfo.InvariantCulture))));
         }
 
-        private static IReadOnlyList<AetheriaRuntimeSurfaceCommandTemplate> BuildCommandTemplates()
+        private static IReadOnlyList<EveCommandTemplate> BuildCommandTemplates()
         {
             return new[]
             {
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeTradeValuePolicyCommands.Refresh, "Refresh", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeTradeValuePolicyCommands.SetQualityMinimum, "Set Quality Minimum", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeTradeValuePolicyCommands.SetQualityMaximum, "Set Quality Maximum", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeTradeValuePolicyCommands.SetQualityExponent, "Set Quality Exponent", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeTradeValuePolicyCommands.SetTierQuality, "Set Tier Quality", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport)
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeTradeValuePolicyCommands.Refresh, "Refresh", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeTradeValuePolicyCommands.SetQualityMinimum, "Set Quality Minimum", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeTradeValuePolicyCommands.SetQualityMaximum, "Set Quality Maximum", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeTradeValuePolicyCommands.SetQualityExponent, "Set Quality Exponent", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeTradeValuePolicyCommands.SetTierQuality, "Set Tier Quality", "cultmesh")
             };
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label), ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Row(
+        private static EveSurfaceComponent Row(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent NumberInput(
+        private static EveSurfaceComponent NumberInput(
             string id,
             string label,
             double value,
@@ -174,17 +175,17 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "control.text", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 props.ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
 
         private static string Format(double value)

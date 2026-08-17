@@ -15,7 +15,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string SurfaceId = PilotSurfaceId;
         public const string TuiSurfaceId = "aetheria.pilot.tui";
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaRuntimeDaemonFrameDocument frame,
             AetheriaRuntimeDaemonHealthDocument health,
             AetheriaRuntimeDaemonCommandBoundaryDocument commandBoundary,
@@ -32,7 +32,7 @@ namespace GameCult.Aetheria.State.Verse
             var entityName = string.IsNullOrWhiteSpace(entity?.Name) ? "(no current entity)" : entity!.Name;
             if (!string.IsNullOrWhiteSpace(activeMainMenuSurfaceId))
                 activeMainMenuSurfaceId = NormalizeMainMenuSurfaceId(activeMainMenuSurfaceId);
-            var surfaceChildren = new List<AetheriaRuntimeSurfaceComponent>
+            var surfaceChildren = new List<EveSurfaceComponent>
             {
                 PlayableWorldSurface(
                     "aetheria.daemon.game.world",
@@ -108,21 +108,21 @@ namespace GameCult.Aetheria.State.Verse
             if (refitPanel != null)
                 surfaceChildren.Add(refitPanel);
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: AetheriaRuntimeProviderIdentity.ProviderId,
                 providerKind: "game.daemon",
                 title: "Aetheria Daemon",
                 version: frame.FrameId,
                 updatedAtUtc: frame.PublishedAtUtc,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     SurfaceId,
                     PilotSurfaceRoot(
                         "aetheria.daemon.game.root",
                         surfaceChildren.ToArray()),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: commandBoundary.Commands
                     .Where(entry => AetheriaRuntimeDaemonSurfaceCommandCatalog.IsArgumentlessCommand(entry.Kind))
-                    .Select(entry => new AetheriaRuntimeSurfaceCommandTemplate(
+                    .Select(entry => AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(entry.Kind),
                         AetheriaRuntimeDaemonSurfaceCommandCatalog.Label(entry.Kind),
                         "cultmesh"))
@@ -131,15 +131,15 @@ namespace GameCult.Aetheria.State.Verse
                         SurfaceCommand(AetheriaRuntimeDaemonCommandKinds.TransferCargoItem),
                         SurfaceCommand(AetheriaRuntimeDaemonCommandKinds.EquipItem),
                         SurfaceCommand(AetheriaRuntimeDaemonCommandKinds.StoreItem),
-                        new AetheriaRuntimeSurfaceCommandTemplate("aetheria.main_menu.root.continue", "Continue", "cultmesh"),
-                        new AetheriaRuntimeSurfaceCommandTemplate("aetheria.main_menu.root.new_game", "New Game", "cultmesh"),
-                        new AetheriaRuntimeSurfaceCommandTemplate("aetheria.main_menu.root.show_settings", "Settings", "cultmesh"),
-                        new AetheriaRuntimeSurfaceCommandTemplate("aetheria.main_menu.root.quit", "Quit", "cultmesh")
+                        AetheriaRuntimeSurfaceDocuments.Command("aetheria.main_menu.root.continue", "Continue", "cultmesh"),
+                        AetheriaRuntimeSurfaceDocuments.Command("aetheria.main_menu.root.new_game", "New Game", "cultmesh"),
+                        AetheriaRuntimeSurfaceDocuments.Command("aetheria.main_menu.root.show_settings", "Settings", "cultmesh"),
+                        AetheriaRuntimeSurfaceDocuments.Command("aetheria.main_menu.root.quit", "Quit", "cultmesh")
                     })
                     .ToArray());
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildCommander(
+        public static EveSurfaceDocument BuildCommander(
             AetheriaRuntimeDaemonFrameDocument frame,
             AetheriaRuntimeDaemonHealthDocument health,
             AetheriaRuntimeDaemonCommandBoundaryDocument commandBoundary,
@@ -163,31 +163,31 @@ namespace GameCult.Aetheria.State.Verse
                 BuildStarbridgeWaveForecastCard(starbridge),
                 BuildStarbridgeRuntimeRolesCard(starbridge));
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 AetheriaRuntimeProviderIdentity.ProviderId,
                 "game.daemon",
                 "Starbridge Commander",
                 frame.FrameId,
                 frame.PublishedAtUtc,
-                new AetheriaRuntimeSurfaceTree(
+                new EveSurfaceTree(
                     CommanderSurfaceId,
                     root,
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commandBoundary.Commands
                     .Where(entry => AetheriaRuntimeDaemonSurfaceCommandCatalog.IsArgumentlessCommand(entry.Kind))
-                    .Select(entry => new AetheriaRuntimeSurfaceCommandTemplate(
+                    .Select(entry => AetheriaRuntimeSurfaceDocuments.Command(
                         AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(entry.Kind),
                         AetheriaRuntimeDaemonSurfaceCommandCatalog.Label(entry.Kind),
                         "cultmesh"))
                     .Concat(new[]
                     {
-                        new AetheriaRuntimeSurfaceCommandTemplate("aetheria.daemon.issue_agent_task", "Issue Task", "cultmesh"),
-                        new AetheriaRuntimeSurfaceCommandTemplate("aetheria.daemon.cancel_agent_task", "Cancel Task", "cultmesh")
+                        AetheriaRuntimeSurfaceDocuments.Command("aetheria.daemon.issue_agent_task", "Issue Task", "cultmesh"),
+                        AetheriaRuntimeSurfaceDocuments.Command("aetheria.daemon.cancel_agent_task", "Cancel Task", "cultmesh")
                     })
                     .ToArray());
         }
 
-        public static AetheriaRuntimeSurfaceDocument BuildReactiveGameplay(
+        public static EveSurfaceDocument BuildReactiveGameplay(
             AetheriaRuntimeDaemonFrameDocument frame,
             long eventsAfterFrame = -1)
         {
@@ -206,7 +206,7 @@ namespace GameCult.Aetheria.State.Verse
                     value.FrameId > eventsAfterFrame &&
                     (entityIndex < 0 || value.SourceEntityIndex == entityIndex || value.TargetEntityIndex == entityIndex))
                 .ToArray();
-            var reactiveChildren = new List<AetheriaRuntimeSurfaceComponent>();
+            var reactiveChildren = new List<EveSurfaceComponent>();
             if (entity != null)
             {
                 var combat = CombatPresentation(
@@ -219,33 +219,33 @@ namespace GameCult.Aetheria.State.Verse
             }
             reactiveChildren.Add(FeedbackStream(events, frame.FrameId));
             reactiveChildren.Add(ShotReceiptStream(receipts));
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 AetheriaRuntimeProviderIdentity.ProviderId,
                 "game.daemon",
                 "Aetheria Pilot Reactive State",
                 frame.FrameId,
                 frame.PublishedAtUtc,
-                new AetheriaRuntimeSurfaceTree(
+                new EveSurfaceTree(
                     "aetheria.daemon.game.reactive",
                     Node(
                         "aetheria.daemon.game.reactive.root",
                         "layer.reactive",
                         Array.Empty<(string, string)>(),
                         reactiveChildren.ToArray()),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
-                Array.Empty<AetheriaRuntimeSurfaceCommandTemplate>());
+                    Array.Empty<EveStyleToken>()),
+                Array.Empty<EveCommandTemplate>());
         }
 
-        private static AetheriaRuntimeSurfaceComponent ReactiveGameplaySlot() =>
-            new AetheriaRuntimeSurfaceComponent(
+        private static EveSurfaceComponent ReactiveGameplaySlot() =>
+            new EveSurfaceComponent(
                 "aetheria.daemon.game.reactive",
                 "layer.reactive",
                 new Dictionary<string, string>(StringComparer.Ordinal),
-                Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                Array.Empty<EveSurfaceComponent>(),
                 Array.Empty<GameCult.Mesh.CultMeshStateBindingDescriptor>(),
                 new[]
                 {
-                    new AetheriaRuntimeEmbeddedDocumentSlot(
+                    new EveEmbeddedDocumentSlot(
                         "pilot-reactive-state",
                         AetheriaRuntimeVerseRecordKeys.DaemonGameReactiveSurface.ToString(),
                         EveSurfaceDocument.SchemaId,
@@ -255,14 +255,14 @@ namespace GameCult.Aetheria.State.Verse
                             "exact retained pilot presentation state"))
                 });
 
-        private static AetheriaRuntimeSurfaceCommandTemplate SurfaceCommand(
+        private static EveCommandTemplate SurfaceCommand(
             AetheriaRuntimeDaemonCommandKinds kind) =>
-            new AetheriaRuntimeSurfaceCommandTemplate(
+            AetheriaRuntimeSurfaceDocuments.Command(
                 CommandName(kind),
                 AetheriaRuntimeDaemonSurfaceCommandCatalog.Label(kind),
                 "cultmesh");
 
-        private static AetheriaRuntimeSurfaceComponent? DockedRefitPanel(
+        private static EveSurfaceComponent? DockedRefitPanel(
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone,
             AetheriaRuntimeEntitySnapshotCommit? entity,
@@ -277,7 +277,7 @@ namespace GameCult.Aetheria.State.Verse
 
             var entityKey = run.EntityRecordKey(zone.ZoneIndex, entity.EntityIndex);
             var parentKey = run.EntityRecordKey(zone.ZoneIndex, parent.EntityIndex);
-            var inventories = new List<AetheriaRuntimeSurfaceComponent>
+            var inventories = new List<EveSurfaceComponent>
             {
                 EquipmentGrid("aetheria.daemon.game.refit.ship.equipment", entity, entityKey, catalog)
             };
@@ -300,14 +300,14 @@ namespace GameCult.Aetheria.State.Verse
                 inventories.ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent EquipmentGrid(
+        private static EveSurfaceComponent EquipmentGrid(
             string id,
             AetheriaRuntimeEntitySnapshotCommit entity,
             string entityKey,
             AetheriaRuntimeCatalogSnapshot catalog)
         {
             var hull = catalog.FindItem(entity.HullItemKey ?? "");
-            var children = new List<AetheriaRuntimeSurfaceComponent>();
+            var children = new List<EveSurfaceComponent>();
             AddInventoryItems(children, id, entity.Equipment, AetheriaRuntimeRefitSourceKinds.Equipment, entityKey, catalog);
             AddInventoryItems(children, id, entity.CargoBays, AetheriaRuntimeRefitSourceKinds.CargoBay, entityKey, catalog);
             AddInventoryItems(children, id, entity.DockingBays, AetheriaRuntimeRefitSourceKinds.DockingBay, entityKey, catalog);
@@ -332,7 +332,7 @@ namespace GameCult.Aetheria.State.Verse
                 children.ToArray());
         }
 
-        private static IEnumerable<AetheriaRuntimeSurfaceComponent> CargoGrids(
+        private static IEnumerable<EveSurfaceComponent> CargoGrids(
             string idPrefix,
             AetheriaRuntimeEntitySnapshotCommit entity,
             string entityKey,
@@ -345,7 +345,7 @@ namespace GameCult.Aetheria.State.Verse
                 var bay = bays[bayIndex];
                 var bayCatalog = catalog.FindItem(bay?.Item?.ItemKey ?? "");
                 var id = idPrefix + "." + bayIndex.ToString(CultureInfo.InvariantCulture);
-                var children = new List<AetheriaRuntimeSurfaceComponent>();
+                var children = new List<EveSurfaceComponent>();
                 var items = bayIndex < contents.Count
                     ? contents[bayIndex]?.Items ?? Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>()
                     : Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>();
@@ -373,7 +373,7 @@ namespace GameCult.Aetheria.State.Verse
         }
 
         private static void AddInventoryItems(
-            ICollection<AetheriaRuntimeSurfaceComponent> destination,
+            ICollection<EveSurfaceComponent> destination,
             string idPrefix,
             IReadOnlyList<AetheriaRuntimeLoadoutItemSlotCommit> slots,
             string sourceKind,
@@ -412,7 +412,7 @@ namespace GameCult.Aetheria.State.Verse
             }
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildStarbridgeSessionCard(
+        private static EveSurfaceComponent BuildStarbridgeSessionCard(
             AetheriaRuntimeStarbridgeSessionSummaryDocument starbridge)
         {
             starbridge ??= new AetheriaRuntimeStarbridgeSessionSummaryDocument();
@@ -435,7 +435,7 @@ namespace GameCult.Aetheria.State.Verse
                     FormatNumber(starbridge.BaseStatus?.Heat ?? 0)));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildAgentTaskBoard(AetheriaRuntimeRunCheckpointCommit run)
+        private static EveSurfaceComponent BuildAgentTaskBoard(AetheriaRuntimeRunCheckpointCommit run)
         {
             var tasks = (run.AgentTasks ?? Array.Empty<AetheriaRuntimeAgentTaskCommit>())
                 .Where(task => task != null)
@@ -485,7 +485,7 @@ namespace GameCult.Aetheria.State.Verse
                 tasks);
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildAgentRoster(AetheriaRuntimeRunCheckpointCommit run)
+        private static EveSurfaceComponent BuildAgentRoster(AetheriaRuntimeRunCheckpointCommit run)
         {
             var agents = (run.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
                 .Where(zone => zone != null)
@@ -545,7 +545,7 @@ namespace GameCult.Aetheria.State.Verse
             return (null, null);
         }
 
-        private static AetheriaRuntimeSurfaceComponent FeedbackStream(
+        private static EveSurfaceComponent FeedbackStream(
             IReadOnlyList<AetheriaRuntimeGameEventCommit> sourceEvents,
             long frameId)
         {
@@ -588,7 +588,7 @@ namespace GameCult.Aetheria.State.Verse
             return FormatNumber(after ? current : before);
         }
 
-        private static AetheriaRuntimeSurfaceComponent ShotReceiptStream(
+        private static EveSurfaceComponent ShotReceiptStream(
             IReadOnlyList<AetheriaRuntimeShotReceiptCommit> sourceReceipts)
         {
             var receipts = (sourceReceipts ?? Array.Empty<AetheriaRuntimeShotReceiptCommit>())
@@ -661,7 +661,7 @@ namespace GameCult.Aetheria.State.Verse
                 new[] { ("retainedCount", receipts.Length.ToString(CultureInfo.InvariantCulture)) }, receipts);
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildSurveyKnowledge(AetheriaRuntimeRunCheckpointCommit run)
+        private static EveSurfaceComponent BuildSurveyKnowledge(AetheriaRuntimeRunCheckpointCommit run)
         {
             var entries = (run.CorporationSurveys ?? Array.Empty<AetheriaRuntimeCorporationSurveyCommit>())
                 .Where(value => value != null)
@@ -689,7 +689,7 @@ namespace GameCult.Aetheria.State.Verse
         private static string SurfaceToken(string value) => new string(
             (value ?? "").Select(character => char.IsLetterOrDigit(character) ? character : '_').ToArray());
 
-        private static AetheriaRuntimeSurfaceComponent StrategicWorldSurface(
+        private static EveSurfaceComponent StrategicWorldSurface(
             string id,
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone)
@@ -710,18 +710,18 @@ namespace GameCult.Aetheria.State.Verse
                 ["zoneIndex"] = zone.ZoneIndex.ToString(CultureInfo.InvariantCulture),
                 ["runId"] = run.RunId ?? ""
             };
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "world.scene2d",
                 props,
-                Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(props),
-                Array.Empty<AetheriaRuntimeEmbeddedDocumentSlot>(),
+                Array.Empty<EveEmbeddedDocumentSlot>(),
                 Layout(("position", "absolute"), ("inset", "0"), ("width", "100%"), ("height", "100%")),
                 new Dictionary<string, string> { ["background"] = "transparent" });
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildStarbridgeStationStockCard(
+        private static EveSurfaceComponent BuildStarbridgeStationStockCard(
             AetheriaRuntimeStarbridgeSessionSummaryDocument summary)
         {
             var stockRows = (summary.StationStock ?? Array.Empty<AetheriaRuntimeStarbridgeStationStockItem>())
@@ -741,7 +741,7 @@ namespace GameCult.Aetheria.State.Verse
                 stockRows);
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildStarbridgeWaveForecastCard(
+        private static EveSurfaceComponent BuildStarbridgeWaveForecastCard(
             AetheriaRuntimeStarbridgeSessionSummaryDocument summary)
         {
             var waveRows = (summary.WaveForecast ?? Array.Empty<AetheriaRuntimeStarbridgeWaveForecast>())
@@ -762,7 +762,7 @@ namespace GameCult.Aetheria.State.Verse
                 waveRows);
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildStarbridgeRuntimeRolesCard(
+        private static EveSurfaceComponent BuildStarbridgeRuntimeRolesCard(
             AetheriaRuntimeStarbridgeSessionSummaryDocument summary)
         {
             var roleRows = (summary.RuntimeRoles ?? Array.Empty<AetheriaRuntimeStarbridgeRuntimeRole>())
@@ -874,7 +874,7 @@ namespace GameCult.Aetheria.State.Verse
             return AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(kind);
         }
 
-        private static AetheriaRuntimeSurfaceComponent PlayableWorldSurface(
+        private static EveSurfaceComponent PlayableWorldSurface(
             string id,
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone,
@@ -987,13 +987,13 @@ namespace GameCult.Aetheria.State.Verse
                 "aetheria.daemon.game.world.stardust",
                 frame.RenderSettings.UseValue3DFlow));
 
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "world.scene3d",
                 props,
                 presentationChildren,
                 AetheriaRuntimeSurfaceStateBindings.FromProps(props),
-                Array.Empty<AetheriaRuntimeEmbeddedDocumentSlot>(),
+                Array.Empty<EveEmbeddedDocumentSlot>(),
                 Layout(
                     ("position", "absolute"),
                     ("top", "0"),
@@ -1008,7 +1008,7 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent GravityFogVolume(string id, bool useValue3DFlow)
+        private static EveSurfaceComponent GravityFogVolume(string id, bool useValue3DFlow)
         {
             var viewport = DefaultViewport();
             var props = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -1047,15 +1047,15 @@ namespace GameCult.Aetheria.State.Verse
                     "noiseExponent=-0.25;noiseSpeed=0.0025;noiseSlopeExponent=0.15;dynamicSkyBoost=2;" +
                     "dynamicLodHigh=7;dynamicLodLow=2;dynamicIntensity=0.5;compositeOpacity=1"
             };
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "field.volume3d",
                 props,
-                Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(props));
         }
 
-        private static AetheriaRuntimeSurfaceComponent StardustParticles(string id, bool useValue3DFlow)
+        private static EveSurfaceComponent StardustParticles(string id, bool useValue3DFlow)
         {
             var viewport = DefaultViewport();
             var props = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -1099,15 +1099,15 @@ namespace GameCult.Aetheria.State.Verse
                     "noiseSlopeExponent=0.15;dynamicSkyBoost=2;dynamicLodHigh=7;" +
                     "dynamicLodLow=2;dynamicIntensity=0.5"
             };
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "field.particles3d",
                 props,
-                Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(props));
         }
 
-        private static AetheriaRuntimeSurfaceComponent? AimPresentation(
+        private static EveSurfaceComponent? AimPresentation(
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone,
             string playerEntityId)
@@ -1131,7 +1131,7 @@ namespace GameCult.Aetheria.State.Verse
             return Node("aetheria.daemon.game.world.aim", "aim.presentation", props.Select(value => (value.Key, value.Value)).ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent? TractorPresentation(
+        private static EveSurfaceComponent? TractorPresentation(
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone,
             string playerEntityId)
@@ -1158,7 +1158,7 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent? CombatPresentation(
+        private static EveSurfaceComponent? CombatPresentation(
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone,
             string playerEntityId,
@@ -1210,7 +1210,7 @@ namespace GameCult.Aetheria.State.Verse
             return Node("aetheria.daemon.game.world.combat", "combat.presentation", props.Select(value => (value.Key, value.Value)).ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent PlayableEntityPresentation(
+        private static EveSurfaceComponent PlayableEntityPresentation(
             AetheriaRuntimeEntitySnapshotCommit entity,
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone,
@@ -1324,21 +1324,21 @@ namespace GameCult.Aetheria.State.Verse
                 ["targetCommand"] = CommandName(AetheriaRuntimeDaemonCommandKinds.SetTarget),
                 ["actionCommand"] = CommandName(AetheriaRuntimeDaemonCommandKinds.FireWeaponGroup)
             };
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 $"aetheria.daemon.game.world.entity.{entity.EntityIndex}",
                 "entity.presentation",
                 props,
                 (string.Equals(entityId, playerEntityId, StringComparison.Ordinal)
                         ? WeaponStateItems(entity, run, zone)
-                        : Array.Empty<AetheriaRuntimeSurfaceComponent>())
+                        : Array.Empty<EveSurfaceComponent>())
                     .Concat(player != null &&
                             (player.EntityIndex == entity.EntityIndex || player.TargetEntityIndex == entity.EntityIndex)
                         ? new[] { ShipSchematic(entity, player, catalog) }
-                        : Array.Empty<AetheriaRuntimeSurfaceComponent>())
+                        : Array.Empty<EveSurfaceComponent>())
                     .ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent ShipSchematic(
+        private static EveSurfaceComponent ShipSchematic(
             AetheriaRuntimeEntitySnapshotCommit entity,
             AetheriaRuntimeEntitySnapshotCommit? player,
             AetheriaRuntimeCatalogSnapshot? catalog)
@@ -1378,7 +1378,7 @@ namespace GameCult.Aetheria.State.Verse
             var equipmentNodes = (entity.Equipment ?? Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>())
                 .Select((slot, index) => SchematicItem(entity, catalog, slot, index))
                 .Where(node => node != null)
-                .Cast<AetheriaRuntimeSurfaceComponent>();
+                .Cast<EveSurfaceComponent>();
             var role = player?.EntityIndex == entity.EntityIndex ? "self" : "target";
             return Node(
                 $"aetheria.daemon.game.world.entity.{entity.EntityIndex}.schematic",
@@ -1397,7 +1397,7 @@ namespace GameCult.Aetheria.State.Verse
                 cellNodes.Concat(equipmentNodes).ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent? SchematicItem(
+        private static EveSurfaceComponent? SchematicItem(
             AetheriaRuntimeEntitySnapshotCommit entity,
             AetheriaRuntimeCatalogSnapshot? catalog,
             AetheriaRuntimeLoadoutItemSlotCommit? slot,
@@ -1491,7 +1491,7 @@ namespace GameCult.Aetheria.State.Verse
             return FormatNumber(Math.Max(0, Math.Min(1, (value - minimum) / (maximum - minimum))));
         }
 
-        private static AetheriaRuntimeSurfaceComponent[] WeaponStateItems(
+        private static EveSurfaceComponent[] WeaponStateItems(
             AetheriaRuntimeEntitySnapshotCommit entity,
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone)
@@ -1541,7 +1541,7 @@ namespace GameCult.Aetheria.State.Verse
                 .ToArray();
         }
 
-        private static AetheriaRuntimeSurfaceComponent CockpitOverlay(
+        private static EveSurfaceComponent CockpitOverlay(
             AetheriaRuntimeEntitySnapshotCommit? entity,
             AetheriaRuntimeEntitySnapshotCommit? target,
             AetheriaRuntimeDaemonSimulationSettings simulationSettings)
@@ -1662,7 +1662,7 @@ namespace GameCult.Aetheria.State.Verse
             (maximum <= 0 ? 0 : Math.Max(0, Math.Min(1, value / maximum)))
             .ToString("0.###", CultureInfo.InvariantCulture);
 
-        private static AetheriaRuntimeSurfaceComponent GravityFieldSurface(string id)
+        private static EveSurfaceComponent GravityFieldSurface(string id)
         {
             var viewport = DefaultViewport();
             var renderSplatsDocumentId = ViewportDocumentId("aetheria.viewport.render_splats", viewport);
@@ -1723,25 +1723,25 @@ namespace GameCult.Aetheria.State.Verse
                 ("stateRefreshMs", "50")
             };
             var normalizedProps = props.ToDictionary(prop => prop.Item1, prop => prop.Item2 ?? "", StringComparer.Ordinal);
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "field.surface2d",
                 normalizedProps,
-                Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(normalizedProps),
                 new[]
                 {
-                    new AetheriaRuntimeEmbeddedDocumentSlot(
+                    new EveEmbeddedDocumentSlot(
                         "renderSplats",
                         renderSplatsDocumentId,
                         AetheriaRuntimeDaemonSchemas.RenderSplatsViewport,
                         "data"),
-                    new AetheriaRuntimeEmbeddedDocumentSlot(
+                    new EveEmbeddedDocumentSlot(
                         "gravity",
                         gravityDocumentId,
                         AetheriaRuntimeDaemonSchemas.GravityViewport,
                         "data"),
-                    new AetheriaRuntimeEmbeddedDocumentSlot(
+                    new EveEmbeddedDocumentSlot(
                         "objects",
                         objectsDocumentId,
                         AetheriaRuntimeDaemonSchemas.ObjectsViewport,
@@ -1758,7 +1758,7 @@ namespace GameCult.Aetheria.State.Verse
                 null);
         }
 
-        private static AetheriaRuntimeSurfaceComponent MainMenuOverlay(
+        private static EveSurfaceComponent MainMenuOverlay(
             string id,
             string activeSurfaceId)
         {
@@ -1766,7 +1766,7 @@ namespace GameCult.Aetheria.State.Verse
                 return Hidden(Node(id, "surface.slot", Array.Empty<(string Key, string Value)>()));
             activeSurfaceId = NormalizeMainMenuSurfaceId(activeSurfaceId);
             var activeSurfaceRecordRef = $"eve:surface:{activeSurfaceId}";
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "surface.slot",
                 new Dictionary<string, string>(StringComparer.Ordinal)
@@ -1776,11 +1776,11 @@ namespace GameCult.Aetheria.State.Verse
                     ["schemaId"] = "gamecult.eve.surface.v1",
                     ["presentationKind"] = "menu.overlay"
                 },
-                Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(new Dictionary<string, string>(StringComparer.Ordinal)),
                 new[]
                 {
-                    new AetheriaRuntimeEmbeddedDocumentSlot(
+                    new EveEmbeddedDocumentSlot(
                         "mainMenuPanel",
                         activeSurfaceRecordRef,
                         "gamecult.eve.surface.v1",
@@ -1942,7 +1942,7 @@ namespace GameCult.Aetheria.State.Verse
             return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Progress(string id, string label, string ratio)
+        private static EveSurfaceComponent Progress(string id, string label, string ratio)
         {
             return Node(
                 id,
@@ -1955,29 +1955,29 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent StyledNode(
+        private static EveSurfaceComponent StyledNode(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
             IReadOnlyDictionary<string, string> layout,
             IReadOnlyDictionary<string, string> style,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             var values = props.ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal);
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 values,
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                children ?? Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(values),
-                Array.Empty<AetheriaRuntimeEmbeddedDocumentSlot>(),
+                Array.Empty<EveEmbeddedDocumentSlot>(),
                 layout,
                 style);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Hidden(AetheriaRuntimeSurfaceComponent component)
+        private static EveSurfaceComponent Hidden(EveSurfaceComponent component)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 component.Id,
                 component.Kind,
                 component.Props,
@@ -1988,7 +1988,7 @@ namespace GameCult.Aetheria.State.Verse
                 component.Style);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value, string stateRef = "")
+        private static EveSurfaceComponent Metric(string id, string label, string value, string stateRef = "")
         {
             var props = string.IsNullOrWhiteSpace(stateRef)
                 ? new[] { ("label", label), ("value", value ?? "") }
@@ -2001,12 +2001,12 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "metric", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent TextNode(
+        private static EveSurfaceComponent TextNode(
             string id,
             string value,
             string role,
@@ -2018,18 +2018,18 @@ namespace GameCult.Aetheria.State.Verse
                 ["value"] = value ?? "",
                 ["role"] = role ?? "text"
             };
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "text",
                 props,
-                Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(props),
-                Array.Empty<AetheriaRuntimeEmbeddedDocumentSlot>(),
+                Array.Empty<EveEmbeddedDocumentSlot>(),
                 layout,
                 style);
         }
 
-        private static AetheriaRuntimeSurfaceComponent MenuButton(string id, string label, string command)
+        private static EveSurfaceComponent MenuButton(string id, string label, string command)
         {
             return Node(
                 id,
@@ -2041,7 +2041,7 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent CommandButton(
+        private static EveSurfaceComponent CommandButton(
             string id,
             string label,
             AetheriaRuntimeDaemonCommandKinds kind)
@@ -2057,25 +2057,25 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Row(
+        private static EveSurfaceComponent Row(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent SurfaceRoot(
+        private static EveSurfaceComponent SurfaceRoot(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             var props = new Dictionary<string, string>(StringComparer.Ordinal);
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "surface",
                 props,
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                children ?? Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(props),
-                Array.Empty<AetheriaRuntimeEmbeddedDocumentSlot>(),
+                Array.Empty<EveEmbeddedDocumentSlot>(),
                 Layout(
                     ("position", "relative"),
                     ("overflow", "hidden"),
@@ -2088,18 +2088,18 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent PilotSurfaceRoot(
+        private static EveSurfaceComponent PilotSurfaceRoot(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             var props = new Dictionary<string, string>(StringComparer.Ordinal);
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 "surface",
                 props,
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>(),
+                children ?? Array.Empty<EveSurfaceComponent>(),
                 AetheriaRuntimeSurfaceStateBindings.FromProps(props),
-                Array.Empty<AetheriaRuntimeEmbeddedDocumentSlot>(),
+                Array.Empty<EveEmbeddedDocumentSlot>(),
                 Layout(
                     ("position", "relative"),
                     ("overflow", "hidden"),
@@ -2112,17 +2112,17 @@ namespace GameCult.Aetheria.State.Verse
                 });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 props.ToDictionary(prop => prop.Key, prop => prop.Value ?? "", StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
     }
 }

@@ -1,3 +1,4 @@
+using GameCult.Eve.Surface;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -203,7 +204,7 @@ namespace GameCult.Aetheria.State.Verse
 
     public static class AetheriaRuntimeStatRecipeSurfaceBuilder
     {
-        public static AetheriaRuntimeSurfaceDocument BuildFromCatalog(
+        public static EveSurfaceDocument BuildFromCatalog(
             AetheriaRuntimeCatalogSnapshot? catalog,
             long version = 1)
         {
@@ -221,7 +222,7 @@ namespace GameCult.Aetheria.State.Verse
                 version);
         }
 
-        public static AetheriaRuntimeSurfaceDocument Build(
+        public static EveSurfaceDocument Build(
             AetheriaRuntimeStatRecipeSurfaceState state,
             long version = 1)
         {
@@ -235,13 +236,13 @@ namespace GameCult.Aetheria.State.Verse
             var previewValue = selected == null ? 0 : EvaluatePreview(selected, state.Preview);
             var enabledInfluenceCount = selected?.Influences.Count(influence => influence.Enabled) ?? 0;
 
-            return new AetheriaRuntimeSurfaceDocument(
+            return new EveSurfaceDocument(
                 providerId: "aetheria",
                 providerKind: "game.design",
                 title: "Aetheria Stat Recipes",
                 version: version,
                 updatedAtUtc: state.UpdatedAtUtc,
-                surface: new AetheriaRuntimeSurfaceTree(
+                surface: new EveSurfaceTree(
                     AetheriaRuntimeStatRecipeCommands.SurfaceId,
                     Node(
                         "aetheria.statRecipes.root",
@@ -253,11 +254,11 @@ namespace GameCult.Aetheria.State.Verse
                         BuildConditionPalette(selected),
                         BuildInfluenceList(selected, state.Preview),
                         BuildPreviewCard(state.Preview)),
-                    Array.Empty<AetheriaRuntimeSurfaceStyleToken>()),
+                    Array.Empty<EveStyleToken>()),
                 commands: BuildCommandTemplates());
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildSummaryCard(
+        private static EveSurfaceComponent BuildSummaryCard(
             AetheriaRuntimeStatRecipeState selected,
             double previewValue,
             int enabledInfluenceCount)
@@ -277,7 +278,7 @@ namespace GameCult.Aetheria.State.Verse
                     "Each recipe owns only the conditions it actually cares about; runtime evaluation can sample those modifiers instead of walking every global performance axis."));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildRecipeList(
+        private static EveSurfaceComponent BuildRecipeList(
             AetheriaRuntimeStatRecipeSurfaceState state,
             AetheriaRuntimeStatRecipeState selected)
         {
@@ -304,7 +305,7 @@ namespace GameCult.Aetheria.State.Verse
                 Node("aetheria.statRecipes.recipes.list", "grid", Array.Empty<(string Key, string Value)>(), children));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildSelectedRecipeCard(AetheriaRuntimeStatRecipeState selected)
+        private static EveSurfaceComponent BuildSelectedRecipeCard(AetheriaRuntimeStatRecipeState selected)
         {
             if (selected == null)
             {
@@ -347,7 +348,7 @@ namespace GameCult.Aetheria.State.Verse
                         AetheriaRuntimeStatRecipeCommands.Refresh)));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildConditionPalette(AetheriaRuntimeStatRecipeState selected)
+        private static EveSurfaceComponent BuildConditionPalette(AetheriaRuntimeStatRecipeState selected)
         {
             var children = AetheriaRuntimeStatRecipeConditions.All
                 .Select(condition =>
@@ -374,7 +375,7 @@ namespace GameCult.Aetheria.State.Verse
                 Node("aetheria.statRecipes.conditions.grid", "grid", Array.Empty<(string Key, string Value)>(), children));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildInfluenceList(
+        private static EveSurfaceComponent BuildInfluenceList(
             AetheriaRuntimeStatRecipeState selected,
             AetheriaRuntimeStatRecipePreviewState preview)
         {
@@ -398,7 +399,7 @@ namespace GameCult.Aetheria.State.Verse
                     selected.Influences.Select(influence => BuildInfluenceCard(selected, influence, preview)).ToArray()));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildInfluenceCard(
+        private static EveSurfaceComponent BuildInfluenceCard(
             AetheriaRuntimeStatRecipeState recipe,
             AetheriaRuntimeStatInfluenceState influence,
             AetheriaRuntimeStatRecipePreviewState preview)
@@ -445,7 +446,7 @@ namespace GameCult.Aetheria.State.Verse
                         ("condition", influence.Condition))));
         }
 
-        private static AetheriaRuntimeSurfaceComponent BuildPreviewCard(AetheriaRuntimeStatRecipePreviewState preview)
+        private static EveSurfaceComponent BuildPreviewCard(AetheriaRuntimeStatRecipePreviewState preview)
         {
             return Node(
                 "aetheria.statRecipes.preview",
@@ -467,21 +468,21 @@ namespace GameCult.Aetheria.State.Verse
                         .ToArray()));
         }
 
-        private static IReadOnlyList<AetheriaRuntimeSurfaceCommandTemplate> BuildCommandTemplates()
+        private static IReadOnlyList<EveCommandTemplate> BuildCommandTemplates()
         {
             return new[]
             {
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.Refresh, "Refresh", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.SelectStat, "Select Stat", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.AddStat, "Add Stat", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.RemoveStat, "Remove Stat", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.SetStatName, "Set Stat Name", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.SetBaseValue, "Set Base Value", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.ToggleCondition, "Toggle Condition", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.CycleInfluenceOperation, "Cycle Operation", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.SetInfluenceAmount, "Set Influence Amount", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.SetInfluenceCurve, "Set Influence Curve", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport),
-                new AetheriaRuntimeSurfaceCommandTemplate(AetheriaRuntimeStatRecipeCommands.SetPreviewCondition, "Set Preview Condition", AetheriaRuntimeSurfaceCommandTemplate.CultMeshTransport)
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.Refresh, "Refresh", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.SelectStat, "Select Stat", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.AddStat, "Add Stat", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.RemoveStat, "Remove Stat", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.SetStatName, "Set Stat Name", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.SetBaseValue, "Set Base Value", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.ToggleCondition, "Toggle Condition", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.CycleInfluenceOperation, "Cycle Operation", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.SetInfluenceAmount, "Set Influence Amount", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.SetInfluenceCurve, "Set Influence Curve", "cultmesh"),
+                AetheriaRuntimeSurfaceDocuments.Command(AetheriaRuntimeStatRecipeCommands.SetPreviewCondition, "Set Preview Condition", "cultmesh")
             };
         }
 
@@ -590,17 +591,17 @@ namespace GameCult.Aetheria.State.Verse
                 .ToArray());
         }
 
-        private static AetheriaRuntimeSurfaceComponent Metric(string id, string label, string value)
+        private static EveSurfaceComponent Metric(string id, string label, string value)
         {
             return Node(id, "metric", new[] { ("label", label ?? ""), ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Text(string id, string value)
+        private static EveSurfaceComponent Text(string id, string value)
         {
             return Node(id, "text", new[] { ("value", value ?? "") });
         }
 
-        private static AetheriaRuntimeSurfaceComponent Button(
+        private static EveSurfaceComponent Button(
             string id,
             string label,
             string command,
@@ -619,7 +620,7 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "control.button", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Toggle(
+        private static EveSurfaceComponent Toggle(
             string id,
             string label,
             bool value,
@@ -640,7 +641,7 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "control.toggle", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Slider(
+        private static EveSurfaceComponent Slider(
             string id,
             string label,
             double value,
@@ -665,7 +666,7 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "control.slider", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent NumberInput(
+        private static EveSurfaceComponent NumberInput(
             string id,
             string label,
             double value,
@@ -687,7 +688,7 @@ namespace GameCult.Aetheria.State.Verse
             return Node(id, "control.text", props);
         }
 
-        private static AetheriaRuntimeSurfaceComponent TextInput(
+        private static EveSurfaceComponent TextInput(
             string id,
             string label,
             string value,
@@ -892,24 +893,24 @@ namespace GameCult.Aetheria.State.Verse
             return value?.Children != null && value.Children.Count > index ? value.Children[index] : null;
         }
 
-        private static AetheriaRuntimeSurfaceComponent ButtonRow(
+        private static EveSurfaceComponent ButtonRow(
             string id,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
             return Node(id, "row", Array.Empty<(string Key, string Value)>(), children);
         }
 
-        private static AetheriaRuntimeSurfaceComponent Node(
+        private static EveSurfaceComponent Node(
             string id,
             string kind,
             IEnumerable<(string Key, string Value)> props,
-            params AetheriaRuntimeSurfaceComponent[] children)
+            params EveSurfaceComponent[] children)
         {
-            return new AetheriaRuntimeSurfaceComponent(
+            return new EveSurfaceComponent(
                 id,
                 kind,
                 props.ToDictionary(prop => prop.Key, prop => prop.Value, StringComparer.Ordinal),
-                children ?? Array.Empty<AetheriaRuntimeSurfaceComponent>());
+                children ?? Array.Empty<EveSurfaceComponent>());
         }
     }
 }
