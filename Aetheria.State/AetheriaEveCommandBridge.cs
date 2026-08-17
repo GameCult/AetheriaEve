@@ -27,27 +27,38 @@ public static class AetheriaEveCommandBridge
 {
     public const string CommandSchema = "gamecult.eve.command.v1";
 
-    public static async Task<AetheriaEveCommandAcceptanceReport> AcceptObservedAsync(
-        AetheriaStateNode node,
-        IEnumerable<string>? accountedCommandIds = null)
+    public static async Task<AetheriaEveCommandAcceptanceReport> AcceptObservedAsync(AetheriaStateNode node)
     {
         if (node == null) throw new ArgumentNullException(nameof(node));
 
         var report = new AetheriaEveCommandAcceptanceReport();
         var accepted = new List<string>();
         var rejected = new List<string>();
-        var accounted = new HashSet<string>(accountedCommandIds ?? Array.Empty<string>(), StringComparer.Ordinal);
-        foreach (var command in node.Documents<AetheriaRuntimeEveCommandDocument>()
-                     .Select(AetheriaRuntimeEveCommandClient.NormalizeDocument)
-                     .OrderBy(command => command.IssuedAtUtc ?? "", StringComparer.Ordinal)
-                     .ThenBy(command => command.CommandId ?? "", StringComparer.Ordinal)
-                     .Where(command => !string.IsNullOrWhiteSpace(command.CommandId))
-                     .Where(command => !accounted.Contains(command.CommandId)))
+        var pending = node.Cache.GetStoredDocuments<AetheriaRuntimeEveCommandDocument>()
+            .Select(stored => (stored.Key, Command: AetheriaRuntimeEveCommandClient.NormalizeDocument(
+                (AetheriaRuntimeEveCommandDocument)stored.Document)))
+            .Where(stored => !string.IsNullOrWhiteSpace(stored.Command.CommandId))
+            .OrderBy(stored => stored.Command.IssuedAtUtc ?? "", StringComparer.Ordinal)
+            .ThenBy(stored => stored.Command.CommandId ?? "", StringComparer.Ordinal)
+            .ToArray();
+        foreach (var storedCommand in pending)
         {
+            var command = storedCommand.Command;
+            if (node.Cache.Get<EveCommandReceiptDocument>(
+                    AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(command.CommandId)) != null)
+            {
+                await node.Database.DeleteAsync<AetheriaRuntimeEveCommandDocument>(storedCommand.Key)
+                    .ConfigureAwait(false);
+                continue;
+            }
+
             var rejection = Validate(command);
             if (!string.IsNullOrWhiteSpace(rejection))
             {
                 RecordRejection(report, command, rejection, rejected);
+                await PublishReceiptAsync(node, command, accepted: false, rejection).ConfigureAwait(false);
+                await node.Database.DeleteAsync<AetheriaRuntimeEveCommandDocument>(storedCommand.Key)
+                    .ConfigureAwait(false);
                 continue;
             }
 
@@ -123,18 +134,44 @@ public static class AetheriaEveCommandBridge
             }
 
             accepted.Add(command.CommandId ?? "");
+            await PublishReceiptAsync(node, command, accepted: true, "").ConfigureAwait(false);
+            await node.Database.DeleteAsync<AetheriaRuntimeEveCommandDocument>(storedCommand.Key)
+                .ConfigureAwait(false);
         }
 
         await node.FlushAsync().ConfigureAwait(false);
         report.AcceptedCommandIds = accepted.ToArray();
         report.RejectedCommandIds = rejected.ToArray();
-        report.AccountedCommandIds = accounted
-            .Concat(report.AcceptedCommandIds)
+        report.AccountedCommandIds = report.AcceptedCommandIds
             .Concat(report.RejectedCommandIds)
             .Where(commandId => !string.IsNullOrWhiteSpace(commandId))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         return report;
+    }
+
+    private static Task PublishReceiptAsync(
+        AetheriaStateNode node,
+        AetheriaRuntimeEveCommandDocument command,
+        bool accepted,
+        string diagnostic)
+    {
+        var state = accepted ? "accepted" : "denied";
+        var receipt = new EveCommandReceiptDocument(
+            $"receipt:{command.CommandId}:{state}",
+            command.CommandId,
+            command.Command,
+            state,
+            "AetheriaEve",
+            node.RuntimeId,
+            command.ProviderId,
+            command.SurfaceId,
+            diagnostic,
+            command.IssuedAtUtc,
+            0);
+        return node.Database.PutAsync(
+            AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(command.CommandId),
+            receipt);
     }
 
     private static string Validate(AetheriaRuntimeEveCommandDocument command)

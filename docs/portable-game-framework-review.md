@@ -53,7 +53,7 @@ smoke build pass after the cut.
 Owner:
 
 - the game provider owns canonical gameplay documents, simulation, accepted
-  operations, receipts, and the composition of its Eve surfaces;
+  operations, indexed receipts/facts, and the composition of its Eve surfaces;
 - Eve owns the one portable surface/command/binding contract;
 - CultMesh owns provider discovery, sessions, typed document delivery,
   authority policy, and negotiated hot-body transport;
@@ -64,6 +64,7 @@ Inputs:
 
 - typed game documents and catalog rules;
 - typed operation intents carrying player/session identity;
+- transient Eve invocation and translated daemon-command inbox records;
 - provider identity plus a configured Odin/rendezvous identity;
 - runtime capability advertisements.
 
@@ -77,6 +78,10 @@ Outputs:
 Derived state:
 
 - Eve component trees are intentional UI projections of gameplay state;
+- handled invocation documents and translated command documents are transient
+  inbox entries; indexed receipts and committed facts own durable idempotency;
+- hot-frame and acceptance-status command-id lists summarize only the current
+  batch and are not history;
 - DOM, UI Toolkit, Electron, TUI, and headless views are renderer-local
   projections;
 - endpoint candidates, transport health, and reconnect state are CultMesh
@@ -89,6 +94,8 @@ Forbidden writers:
 - a game package may not define a second copy of the Eve surface schema;
 - application code may not own reconnect loops or physical endpoint ranking;
 - client prediction may not silently change the declared authority policy;
+- hot frames, status documents, and retained inbox entries may not become
+  lifetime command ledgers;
 - JSON fixtures and conformance packs may not impersonate a live multiplayer
   path.
 
@@ -101,6 +108,8 @@ Shared paths:
   by application code or state shape;
 - direct input, AI policy input, and automated tests enter through the same
   operation contract.
+- replayed or duplicated commands resolve through the same indexed receipt
+  identity before any simulation or progression mutation.
 
 Cut line:
 
@@ -137,14 +146,14 @@ test rather than achieved properties.
 
 | Priority | Fracture | Current evidence | Required repair/proof |
 | --- | --- | --- | --- |
-| P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. Aetheria consumes observed mirrors. Nested-edit and snapshot-mutation negatives are live, and writable mirrors create no idle detection work. | Add the scaling benchmark gate so allocation, timer/thread creation, and update latency remain visible across runtime changes. |
+| P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. The executable CultLib scaling gate proves 1, 100, and 1,000 idle documents schedule zero work and editing one percent schedules only that one percent. C# delay ownership is clock-injected; browser animation-frame disposal is now cancellation-correct. | Add measured allocations, clone/serialization counts, payload bytes, and update latency against representative 16 KiB documents; the deterministic scheduling gate does not impersonate those measurements. |
 | P0 | Browser lowerer instance isolation | Eve browser lowering now carries surface/options/styles/component indexes per host, patches only bound component subtrees, and coalesces synchronous binding bursts. A two-host DOM test proves command/asset/skin isolation plus focus, selection, scroll, and root preservation. | Add the browser host witness to CI and the released-artifact consumer smoke. |
 | P0 | Conformance witnesses | The static pack now resolves repository witnesses, checks Aetheria schema IDs against typed `CultDocument` source, rejects obsolete daemon IDs and absolute workspaces, and labels its evidence boundary. CultLib's executable browser sample separately proves canonical Verse-catalog discovery, provider route rotation, retained Chromium leases, commands, receipts, and persistence through a local Odin fixture. | Run that generic witness against the actual Aetheria provider advertisement/surfaces/operations; neither static fixture agreement nor the sample provider may satisfy the product proof. |
 | P0 | Stable identity path | Eve Unity discovers and reconnects through `CultMeshClient`; Aetheria's local `.cc` facade no longer accepts physical endpoints or constructs client-owned Eve surfaces. `CultMeshBrowserOdinRendezvous` now gives browsers the same identity-first Verse-catalog boundary and survives a physical provider move. | Generate Aetheria domain handles over the generic client and prove the actual daemon through local and configured Odin routes without restoring an application-owned replica. |
 | P1 | Contract ownership | Eve `0.3.0` owns the renderer-neutral C# surface contract. A clean Unity consumer passed 136/136 tests against the released CultLib `1.0.45`, Eve surface, and EveUnity packages; Aetheria's daemon project now references Eve rather than EveUnity. | Keep the clean-consumer witness in CI and reject any renderer repository reference from headless daemon projects. |
 | P1 | Executable onboarding | The artifact-only `samples/eve-two-runtime` verifier proves clean package consumption. The separate `samples/eve-browser-network` witness runs a C# provider, local Odin fixture, real Chromium Eve lowerer, and C# observer; it rotates the provider route and proves rediscovery, resubscription, receipts, and durable state. | Run the fixture on Windows/Linux from released artifacts, add retained C# lease reconnection, and keep the local Odin fixture distinct from deployed-Odin evidence. |
 | P1 | Client resource lifetime | `CultMeshClient` now exposes disposable document and collection leases, reference-counts dynamic resources, and reports active resource counts. Churn tests prove released handles leave the cache. | Add the 100k-key allocation/subscription benchmark so the fixed ownership remains visible under load. |
-| P1 | Long-session state growth | Peer-import chronology is deleted, but full frames still retain cumulative command-id arrays. | Move remaining chronology to indexed append-only records and benchmark checkpoint size over long sessions. |
+| P1 | Long-session state growth | Peer-import chronology is deleted. Indexed committed-command facts and receipts own history; handled Eve invocations and processed daemon commands leave their transient inboxes; hot-frame chronology fields are compatibility tombstones. A 10,000-command smoke holds final serialized frame size within 64 bytes of the first, while the live progression smoke requires each handled Eve request to disappear after its receipt. | Define retention/segmentation for the durable fact and receipt journal, then benchmark total `.cc` growth and restart cost. The hot checkpoint and ingress queues are bounded; the audit store is not yet. |
 | P1 | Starbridge finality | The daemon no longer accepts peer committed facts, and the removed CLI lane is rejected explicitly. The authority smoke now enters through canonical Terminus bootstrap instead of treating a rendered frame as durable run state. | Build the typed Pilot candidate, Commander selection/replay, and single-final-log protocol; prove mismatch, late candidate, restart, and non-jurisdiction negatives. |
 
 The generic live-network boundary now has an executable witness. The active

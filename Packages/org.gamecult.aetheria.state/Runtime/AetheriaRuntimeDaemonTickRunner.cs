@@ -23,10 +23,6 @@ namespace GameCult.Aetheria.State.Verse
             Array.Empty<string>();
         public IReadOnlyList<string> PreRejectedCommandIds { get; set; } =
             Array.Empty<string>();
-        public IReadOnlyList<string> CumulativeAppliedCommandIds { get; set; } =
-            Array.Empty<string>();
-        public IReadOnlyList<string> CumulativeRejectedCommandIds { get; set; } =
-            Array.Empty<string>();
         public AetheriaRuntimeDaemonOperationContext OperationContext { get; set; } =
             new AetheriaRuntimeDaemonOperationContext();
         public AetheriaRuntimeStarbridgeScenarioDocument? StarbridgeScenario { get; set; }
@@ -314,18 +310,7 @@ namespace GameCult.Aetheria.State.Verse
             frame.AppliedCommandIds = operationResult.AppliedCommandIds;
             frame.RejectedCommandIds = operationResult.RejectedCommandIds;
             frame.RejectedCommandReasons = operationResult.RejectedCommandReasons;
-            frame.AccountedCommandIds = accountedBeforeTick
-                .Concat(operationResult.AppliedCommandIds)
-                .Concat(operationResult.RejectedCommandIds)
-                .Where(commandId => !string.IsNullOrWhiteSpace(commandId))
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-            frame.CumulativeAppliedCommandIds = (options.CumulativeAppliedCommandIds ?? Array.Empty<string>())
-                .Concat(operationResult.AppliedCommandIds)
-                .Where(commandId => !string.IsNullOrWhiteSpace(commandId))
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-            frame.CumulativeRejectedCommandIds = (options.CumulativeRejectedCommandIds ?? Array.Empty<string>())
+            frame.AccountedCommandIds = operationResult.AppliedCommandIds
                 .Concat(operationResult.RejectedCommandIds)
                 .Where(commandId => !string.IsNullOrWhiteSpace(commandId))
                 .Distinct(StringComparer.Ordinal)

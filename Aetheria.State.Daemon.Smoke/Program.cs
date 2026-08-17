@@ -6,6 +6,7 @@ using GameCult.Caching;
 using GameCult.Eve.PluginFields;
 using GameCult.Eve.Surface;
 using GameCult.Mesh;
+using MessagePack;
 using System.Globalization;
 
 var checks = new AetheriaDaemonYmirSmokeChecks();
@@ -84,6 +85,11 @@ else if (args.Contains("--hangar", StringComparer.Ordinal))
     checks.RunHangar();
     Console.WriteLine("Daemon Hangar deployment and continuation smoke passed.");
 }
+else if (args.Contains("--command-scale", StringComparer.Ordinal))
+{
+    checks.RunCommandScale();
+    Console.WriteLine("Daemon long-session command chronology smoke passed.");
+}
 else
 {
     checks.Run();
@@ -99,6 +105,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
     public void RunCombatLock() => RunCheck(InstantWeaponRequestSurvivesLockAcquisition);
 
     public void RunHangar() => RunCheck(HangarLaunchUsesConfiguredLoadoutAndContinuesSavedRun);
+
+    public void RunCommandScale() => RunCheck(FrameSizeDoesNotGrowWithCommandChronology);
 
     public void RunLoadout()
     {
@@ -987,10 +995,59 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             AgentMinesAsteroidThroughEquippedBehavior,
             CargoCapacityComesFromHullAndCatalogVolumes,
             AgentSurveysBodyIntoCorporationKnowledge,
-            AgentTowsStationIntoPersistentOrbit
+            AgentTowsStationIntoPersistentOrbit,
+            FrameSizeDoesNotGrowWithCommandChronology
         ];
         foreach (var check in checks)
             RunCheck(check);
+    }
+
+    private static void FrameSizeDoesNotGrowWithCommandChronology()
+    {
+        var run = new AetheriaRuntimeRunCheckpointCommit
+        {
+            RunId = "command-chronology-scale",
+            LifecyclePhase = AetheriaRuntimeRunLifecycle.Active
+        };
+        var statePath = Path.Combine(Path.GetTempPath(), "aetheria-command-chronology-scale.cc");
+        var firstFrameSize = 0;
+        AetheriaRuntimeDaemonFrameDocument? finalFrame = null;
+
+        for (var index = 0; index < 10_000; index++)
+        {
+            var command = AetheriaRuntimeDaemonCommandDocument.Create(
+                AetheriaRuntimeDaemonCommandKinds.None,
+                "scale-client",
+                "scale-session",
+                index,
+                "scale-actor");
+            command.CommandId = $"scale-command-{index}";
+            var tick = AetheriaRuntimeDaemonTickRunner.Tick(
+                statePath,
+                run,
+                new AetheriaRuntimeDaemonTickOptions
+                {
+                    FrameId = index,
+                    SimulationTimeSeconds = index * 0.02,
+                    FixedDeltaSeconds = 0.02,
+                    ObservedCommands = [command],
+                    AdvanceSimulation = false,
+                    BuildPublications = false
+                });
+            run = tick.Frame.Run;
+            finalFrame = tick.Frame;
+            if (index == 0)
+                firstFrameSize = MessagePackSerializer.Serialize(tick.Frame).Length;
+        }
+
+        var finalFrameSize = MessagePackSerializer.Serialize(finalFrame!).Length;
+        Require(finalFrame!.AccountedCommandIds.Count == 1,
+            "a daemon frame may summarize only the current tick's command accounting");
+        Require(finalFrame.CumulativeAppliedCommandIds.Count == 0 &&
+                finalFrame.CumulativeRejectedCommandIds.Count == 0,
+            "compatibility chronology fields must remain empty; indexed command facts own history");
+        Require(finalFrameSize <= firstFrameSize + 64,
+            $"10,000 commands must not inflate the hot frame ({firstFrameSize} -> {finalFrameSize} bytes)");
     }
 
     private static void CompressedTerminusStopsAtAttentionBoundary()

@@ -68,6 +68,7 @@ public sealed class AetheriaEveCommandAcceptanceStatus
     public int AppliedLoadoutTemplateCommands { get; set; }
 
     [Key(19)]
+    // Current acceptance batch only. Eve receipts own durable idempotency history.
     public string[] AccountedCommandIds { get; set; } = [];
 
     [Key(20)]

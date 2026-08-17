@@ -49,9 +49,14 @@ try
         Require(initialSource.AvailableVerses.First().VerseId == AetheriaProgressionSources.Local,
             "Local must remain the first Hangar Verse option.");
 
-        var initialSurface = await client.ReadAsync<EveSurfaceDocument>(
+        var initialSurface = await ReadUntilAsync(
+            client,
             localVerse,
-            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
+            (EveSurfaceDocument surface) =>
+                Find(surface.Surface.Root, "aetheria.hangar.verse").Children
+                    .Any(option => option.Props["value"] == remoteVerse),
+            TimeSpan.FromSeconds(10));
         var verseSelect = Find(initialSurface.Surface.Root, "aetheria.hangar.verse");
         Require(verseSelect.Kind == "control.select" &&
                 verseSelect.Props["value"] == AetheriaProgressionSources.Local &&
@@ -199,18 +204,48 @@ static async Task<EveCommandReceiptDocument> SubmitAsync(
         CultMesh.OperationPayload(payload),
         DateTimeOffset.UtcNow,
         "progression-verse-smoke");
+    var requestRecordKey = AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + request.CommandId;
     await client.SubmitDocumentAsync(
         verseId,
-        AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + request.CommandId,
+        requestRecordKey,
         request,
         "progression-verse-smoke",
         "headless-smoke");
-    return await ReadUntilAsync(
+    var receipt = await ReadUntilAsync(
         client,
         verseId,
         AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId).ToString(),
         (EveCommandReceiptDocument receipt) => receipt.CommandId == request.CommandId,
         TimeSpan.FromSeconds(10));
+    await RequireDeletedAsync<EveSurfaceCommandRequest>(
+        client,
+        verseId,
+        requestRecordKey,
+        TimeSpan.FromSeconds(10));
+    return receipt;
+}
+
+static async Task RequireDeletedAsync<T>(
+    CultMeshClient client,
+    string verseId,
+    string recordKey,
+    TimeSpan timeout)
+    where T : class
+{
+    var deadline = DateTimeOffset.UtcNow + timeout;
+    while (DateTimeOffset.UtcNow < deadline)
+    {
+        try
+        {
+            await client.ReadAsync<T>(verseId, recordKey, TimeSpan.FromMilliseconds(500));
+        }
+        catch (Exception error) when (error is TimeoutException || error is InvalidOperationException || error is SocketException)
+        {
+            return;
+        }
+        await Task.Delay(50);
+    }
+    throw new InvalidOperationException($"Handled Eve command request '{recordKey}' remained in the transient inbox.");
 }
 
 static async Task<T> ReadUntilAsync<T>(

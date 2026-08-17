@@ -87,6 +87,36 @@ $daemonSource = Get-Content -LiteralPath $daemonProgram -Raw
 if ($daemonSource -match 'AetheriaRuntime(ClientTarget|VerseReplicaBridge|StateBoot)') {
     throw "The daemon must own progression Verse discovery and selection; client-target sidecars and replica bridges are forbidden in its path."
 }
+if ($daemonSource -match 'currentFrame\?\.AccountedCommandIds') {
+    throw "The hot daemon frame cannot remain the command idempotency ledger."
+}
+if ($daemonSource -notmatch 'DeleteDaemonCommandAsync\(commandId\)') {
+    throw "Committed daemon commands must leave the transient command inbox."
+}
+if ($daemonSource -notmatch 'DeleteAsync<EveSurfaceCommandRequest>\(storedRequest\.Key\)') {
+    throw "Handled Eve invocations must leave the transient inbox by their actual CultCache record identity."
+}
+if ($daemonSource -match 'Documents<EveCommandReceiptDocument>\(\).*ToHashSet' -or
+    $daemonSource -match 'Documents<AetheriaRuntimeDaemonCommandDocument>\(\).*ToHashSet') {
+    throw "Eve ingress must use indexed receipt and command identity instead of rebuilding lifetime command-id sets."
+}
+$compatibilityBridge = Get-Content -LiteralPath (Join-Path $Root "Aetheria.State\AetheriaEveCommandBridge.cs") -Raw
+if ($compatibilityBridge -notmatch 'GetStoredDocuments<AetheriaRuntimeEveCommandDocument>' -or
+    $compatibilityBridge -notmatch 'DeleteAsync<AetheriaRuntimeEveCommandDocument>\(storedCommand\.Key\)' -or
+    $compatibilityBridge -notmatch 'EveReceiptForCommand\(command\.CommandId\)') {
+    throw "The compatibility Eve bridge must be a receipt-indexed transient inbox, not a lifetime command ledger."
+}
+if ($compatibilityBridge -match 'IEnumerable<string>\?\s+accountedCommandIds') {
+    throw "The compatibility Eve bridge cannot accept a cumulative command-id ledger."
+}
+$tickRunner = Get-Content -LiteralPath (Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeDaemonTickRunner.cs") -Raw
+if ($tickRunner -match 'options\.Cumulative(Applied|Rejected)CommandIds') {
+    throw "Daemon ticks cannot carry lifetime command chronology through every hot frame."
+}
+$commandScaleSmoke = Get-Content -LiteralPath (Join-Path $Root "Aetheria.State.Daemon.Smoke\Program.cs") -Raw
+if ($commandScaleSmoke -notmatch '10_000' -or $commandScaleSmoke -notmatch 'FrameSizeDoesNotGrowWithCommandChronology') {
+    throw "The 10,000-command hot-frame size witness is missing."
+}
 $hangarWriters = @(Select-String -LiteralPath $daemonProgram -Pattern 'MutableDocument<EveSurfaceDocument>\(AetheriaRuntimeVerseRecordKeys\.HangarSurface\)').Count
 if ($hangarWriters -ne 1) {
     throw "The canonical Hangar surface must have exactly one daemon writer; found $hangarWriters."

@@ -516,12 +516,15 @@ namespace GameCult.Aetheria.State.Verse
         public IReadOnlyList<string> RejectedCommandIds { get; set; } = Array.Empty<string>();
 
         [Key(13)]
+        // Compatibility tombstone. This is the current tick's accounting summary, not an idempotency ledger.
         public IReadOnlyList<string> AccountedCommandIds { get; set; } = Array.Empty<string>();
 
         [Key(14)]
+        // Compatibility tombstone. Durable chronology lives in indexed committed-command facts.
         public IReadOnlyList<string> CumulativeAppliedCommandIds { get; set; } = Array.Empty<string>();
 
         [Key(15)]
+        // Compatibility tombstone. Durable chronology lives in indexed committed-command facts.
         public IReadOnlyList<string> CumulativeRejectedCommandIds { get; set; } = Array.Empty<string>();
 
         [Key(21)]

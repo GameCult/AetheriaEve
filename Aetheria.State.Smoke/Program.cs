@@ -776,6 +776,15 @@ await using (var node = await AetheriaStateNode.OpenAsync(statePath, "aetheria-s
         ClientId = "aetheria-state-smoke"
     });
     var eveCommandReport = await AetheriaEveCommandBridge.AcceptObservedAsync(node);
+    if (node.Cache.GetStoredDocuments<AetheriaRuntimeEveCommandDocument>().Any() ||
+        eveCommandReport.AccountedCommandIds.Length != 4 ||
+        eveCommandReport.AccountedCommandIds.Any(commandId =>
+            node.Cache.Get<EveCommandReceiptDocument>(
+                AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(commandId)) == null))
+    {
+        throw new InvalidOperationException(
+            "Handled compatibility Eve commands must leave the transient inbox and retain indexed receipts.");
+    }
     var eveCommandStatus = new AetheriaEveCommandAcceptanceStatus
     {
         RuntimeId = "smoke-runtime",

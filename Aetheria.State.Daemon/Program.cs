@@ -127,7 +127,7 @@ while (!stopped.Task.IsCompleted)
         {
             ThrowIfClientHostFaulted(cultMeshClientHost);
             hangarActivationRequested |= await AcceptCoreEveInvocationsAsync(node, options, latestFrame).ConfigureAwait(false);
-            await AcceptEveCommandsAsync(node, options, ingressState).ConfigureAwait(false);
+            await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
             if (options.OdinDiscoveryEndpoints.Count > 0 && DateTimeOffset.UtcNow >= nextProgressionRefreshUtc)
             {
                 await PublishStateSurfacesAsync(node, options, DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
@@ -349,7 +349,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
 
     await AcceptCoreEveInvocationsAsync(node, options, currentFrame).ConfigureAwait(false);
     TracePhase("core-ingress");
-    await AcceptEveCommandsAsync(node, options, ingressState).ConfigureAwait(false);
+    await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
     TracePhase("provider-ingress");
     if (!ingressState.ControlPlaneInitialized || buildPublications)
         await RefreshControlPlaneInputsAsync(node, ingressState).ConfigureAwait(false);
@@ -371,11 +371,11 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
         .OrderBy(command => command.IssuedAtUtc ?? "", StringComparer.Ordinal)
         .ThenBy(command => command.CommandId ?? "", StringComparer.Ordinal)
         .ToArray();
-    var accountedCommandIds = new HashSet<string>(
-        currentFrame?.AccountedCommandIds ?? Array.Empty<string>(),
-        StringComparer.Ordinal);
     var pendingObservedCommands = observedCommands
-        .Where(command => command != null && !accountedCommandIds.Contains(command.CommandId ?? ""))
+        .Where(command => command != null &&
+            !string.IsNullOrWhiteSpace(command.CommandId) &&
+            node.Cache.Get<EveCommandReceiptDocument>(
+                AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(command.CommandId)) == null)
         .ToArray();
     var policyRejectedCommandIds = new List<string>();
     var authorityPolicy = ingressState.AuthorityPolicy;
@@ -430,10 +430,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
             SimulationTimeSeconds = simulationTimeSeconds,
             FixedDeltaSeconds = fixedDeltaSeconds,
             ObservedCommands = authorizedCommands,
-            AccountedCommandIds = accountedCommandIds.ToArray(),
             PreRejectedCommandIds = policyRejectedCommandIds,
-            CumulativeAppliedCommandIds = currentFrame?.CumulativeAppliedCommandIds ?? currentFrame?.AppliedCommandIds ?? Array.Empty<string>(),
-            CumulativeRejectedCommandIds = currentFrame?.CumulativeRejectedCommandIds ?? currentFrame?.RejectedCommandIds ?? Array.Empty<string>(),
             Catalog = ingressState.Catalog,
             RenderSettings = options.RenderSettings,
             SimulationSettings = options.SimulationSettings,
@@ -703,6 +700,7 @@ static async Task PublishCommittedCommandFactsAsync(
                 frame,
                 command,
                 options.VerseId)).ConfigureAwait(false);
+        await node.DeleteDaemonCommandAsync(commandId).ConfigureAwait(false);
     }
 
     foreach (var commandId in frame.RejectedCommandIds ?? Array.Empty<string>())
@@ -717,6 +715,7 @@ static async Task PublishCommittedCommandFactsAsync(
                 frame,
                 command,
                 options.VerseId)).ConfigureAwait(false);
+        await node.DeleteDaemonCommandAsync(commandId).ConfigureAwait(false);
     }
 }
 
@@ -2271,28 +2270,31 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
     AetheriaRuntimeDaemonFrameDocument? currentFrame)
 {
     var activatedSession = false;
-    var accounted = new HashSet<string>(
-        currentFrame?.AccountedCommandIds ?? Array.Empty<string>(),
-        StringComparer.Ordinal);
-    var receipted = node.Documents<EveCommandReceiptDocument>()
-        .Where(receipt => !string.IsNullOrWhiteSpace(receipt.CommandId))
-        .Select(receipt => receipt.CommandId)
-        .ToHashSet(StringComparer.Ordinal);
-    var submitted = node.Documents<AetheriaRuntimeDaemonCommandDocument>()
-        .Where(command => command != null && !string.IsNullOrWhiteSpace(command.CommandId))
-        .Select(command => command.CommandId)
-        .ToHashSet(StringComparer.Ordinal);
-    foreach (var request in node.Documents<EveSurfaceCommandRequest>()
-                 .Where(request => request != null && !string.IsNullOrWhiteSpace(request.CommandId))
-                 .OrderBy(request => request.IssuedAt))
+    var deletedAny = false;
+    var pendingRequests = node.Cache.GetStoredDocuments<EveSurfaceCommandRequest>()
+        .Where(stored => !string.IsNullOrWhiteSpace(((EveSurfaceCommandRequest)stored.Document).CommandId))
+        .Select(stored => (stored.Key, Request: (EveSurfaceCommandRequest)stored.Document))
+        .OrderBy(stored => stored.Request.IssuedAt)
+        .ToArray();
+    foreach (var storedRequest in pendingRequests)
     {
-        if (accounted.Contains(request.CommandId) || receipted.Contains(request.CommandId) || submitted.Contains(request.CommandId))
+        var request = storedRequest.Request;
+        var alreadyReceipted = node.Cache.Get<EveCommandReceiptDocument>(
+            AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId)) != null;
+        var alreadySubmitted = node.Cache.Get<AetheriaRuntimeDaemonCommandDocument>(
+            AetheriaRuntimeVerseRecordKeys.DaemonCommand(request.CommandId)) != null;
+        if (alreadyReceipted || alreadySubmitted)
+        {
+            await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
+            deletedAny = true;
             continue;
+        }
 
         if (string.Equals(request.SurfaceId, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal))
         {
             activatedSession |= await AcceptHangarInvocationAsync(node, options, request).ConfigureAwait(false);
-            receipted.Add(request.CommandId);
+            await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
+            deletedAny = true;
             continue;
         }
 
@@ -2308,7 +2310,8 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
             command.ClientId = request.ClientId;
             command.AuthorRuntimeId = request.ClientId;
             await node.SubmitDaemonCommandAsync(command).ConfigureAwait(false);
-            submitted.Add(command.CommandId);
+            await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
+            deletedAny = true;
             continue;
         }
 
@@ -2326,7 +2329,11 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
             Math.Max(currentFrame?.FrameId ?? 0, 0));
         await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(denied.CommandId), denied)
             .ConfigureAwait(false);
+        await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
+        deletedAny = true;
     }
+    if (deletedAny)
+        await node.FlushAsync().ConfigureAwait(false);
     return activatedSession;
 }
 
@@ -2508,21 +2515,15 @@ static long PayloadLong(EveSurfaceCommandRequest request, string key, long fallb
 
 static async Task AcceptEveCommandsAsync(
     AetheriaStateNode node,
-    AetheriaDaemonHostOptions options,
-    AetheriaDaemonIngressState ingressState)
+    AetheriaDaemonHostOptions options)
 {
     var commandCountBefore = node.Documents<AetheriaRuntimeEveCommandDocument>().Count;
-    if (commandCountBefore == ingressState.ObservedEveCommandCount)
+    if (commandCountBefore == 0)
         return;
-    ingressState.ObservedEveCommandCount = commandCountBefore;
     var now = DateTimeOffset.UtcNow.ToString("O");
     try
     {
-        var existingStatus = await node.MutableDocument<AetheriaEveCommandAcceptanceStatus>(AetheriaStateNode.EveCommandAcceptanceStatusKey).ReadAsync().ConfigureAwait(false);
-        var report = await AetheriaEveCommandBridge.AcceptObservedAsync(
-                node,
-                existingStatus?.AccountedCommandIds)
-            .ConfigureAwait(false);
+        var report = await AetheriaEveCommandBridge.AcceptObservedAsync(node).ConfigureAwait(false);
         await node.MutableDocument<AetheriaEveCommandAcceptanceStatus>(AetheriaStateNode.EveCommandAcceptanceStatusKey)
             .ReplaceAsync(new AetheriaEveCommandAcceptanceStatus
             {
@@ -2559,7 +2560,7 @@ static async Task AcceptEveCommandsAsync(
                 LastPollAtUtc = now,
                 LastAcceptedAtUtc = existing?.LastAcceptedAtUtc ?? "",
                 ObservedBeforeAccept = commandCountBefore,
-                AccountedCommandIds = existing?.AccountedCommandIds ?? [],
+                AccountedCommandIds = [],
                 ConsecutiveFailures = (existing?.ConsecutiveFailures ?? 0) + 1,
                 LastError = ex.ToString(),
                 Status = "error"
@@ -3959,7 +3960,6 @@ internal sealed class AetheriaHotEntityPublicationState
 
 internal sealed class AetheriaDaemonIngressState
 {
-    public int ObservedEveCommandCount { get; set; } = -1;
     public bool ControlPlaneInitialized { get; set; }
     public string GameMode { get; set; } = "";
     public double RequestedSimulationRate { get; set; }

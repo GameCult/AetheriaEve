@@ -339,6 +339,15 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
             fact);
     }
 
+    public Task DeleteDaemonCommandAsync(string commandId)
+    {
+        if (string.IsNullOrWhiteSpace(commandId))
+            throw new ArgumentException("Daemon command id must be non-empty.", nameof(commandId));
+
+        return Database.DeleteAsync<AetheriaRuntimeDaemonCommandDocument>(
+            AetheriaRuntimeVerseRecordKeys.DaemonCommand(commandId));
+    }
+
     private static CultRecordKey DaemonCommandKey(string commandId)
     {
         return new CultRecordKey($"daemon:commands:{StableToken(commandId)}:gamecult.aetheria.daemon_command.v1");
