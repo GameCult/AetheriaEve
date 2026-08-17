@@ -177,20 +177,32 @@ a parallel gameplay path.
 
 ## Current Migration Seam
 
-The daemon now owns one typed local Hangar, its starter ship, stored equipment,
-saved loadout template, Hangar revision, and immutable Terminus deployment
-receipt. It publishes `aetheria.hangar` as the ordinary Unity entry surface.
-The surface advertises equip, remove, launch, and continue operations. Launch
+The daemon now owns one typed progression-source selection plus the local
+Hangar, starter ship, stored equipment, saved loadout template, Hangar revision,
+and immutable Terminus deployment receipt. It publishes `aetheria.hangar` as
+the ordinary entry surface. Its Eve `control.select` lists **Local** first and
+then every stable Verse identity discovered through the configured Odin
+rendezvous endpoints. Discovery refreshes while the daemon is ready in the
+Hangar, so a Verse may appear without restarting the client. The persisted
+selection, not renderer state, decides
+which Verse supplies Hangar and progression truth.
+
+Local selection reads and writes the daemon's moddable `.cc` state. A remote
+selection reads that Verse's typed Hangar/catalog documents and forwards equip,
+remove, launch, and continue operations to that Verse's authority. Launch
 instantiates the current committed loadout into a newly identified Terminus
 run; continue reopens the deployed run selected by the existing checkpoint.
-Unity remains a generic Eve lowerer and never edits those documents directly.
+The accepted Eve receipt carries the selected Verse, its Odin-discovered
+rendezvous route, and `aetheria.pilot` as a renderer-neutral navigation target.
+EveUnity rediscoveries and remounts that provider; Aetheria's Unity shell has no
+Verse, Hangar, or navigation code.
 
 This is the first vertical slice, not the completed cross-mode progression
-machine. Settlement, currencies/unlocks, multiple owned ships, richer fitting
-interaction, Starbridge admission, and Arena admission still need to enter the
-same Hangar boundary. The old main-menu `New Game` writer is no longer a
-product run-creation authority. Explicit Terminus proof profiles remain
-verification-only inputs.
+machine. Remote authentication/account binding, Settlement, currencies/unlocks,
+multiple owned ships, richer fitting interaction, Starbridge admission, and
+Arena admission still need to enter the same Hangar boundary. The old main-menu
+`New Game` writer is no longer a product run-creation authority. Explicit
+Terminus proof profiles remain verification-only inputs.
 
 Arena does not yet have a named server/session/admission/score document family
 or a preserved headless controller harness. Shared simulation smokes are useful

@@ -10,7 +10,6 @@ public sealed class AetheriaUnityClient : MonoBehaviour
 {
     private EveUnityCultMeshPlayableWorldProvider _provider;
     private EveUnityPlayableWorldClientBootstrap _bootstrap;
-    [SerializeField] private string _status = "Starting EveUnity...";
 
     private void Awake()
     {
@@ -37,7 +36,7 @@ public sealed class AetheriaUnityClient : MonoBehaviour
     private IEnumerator ConnectAfterFirstFrame()
     {
         yield return null;
-        _status = "Connecting to the advertised Eve surface...";
+        string lastPreparationError = null;
         while (true)
         {
             var preparation = _provider.PrepareAsync();
@@ -54,11 +53,15 @@ public sealed class AetheriaUnityClient : MonoBehaviour
             }
             if (preparationError == null)
                 break;
-            _status = "Waiting for Aetheria daemon: " + preparationError.Message;
+            if (!string.Equals(lastPreparationError, preparationError.Message, StringComparison.Ordinal))
+            {
+                lastPreparationError = preparationError.Message;
+                Debug.LogWarning("Waiting for Aetheria Eve provider: " + preparationError.Message);
+            }
             yield return new WaitForSecondsRealtime(0.5f);
         }
         var presentation = _bootstrap.Mount();
-        _status = $"Connected: {_provider.Selection.ProviderId} / {_provider.Selection.SurfaceId} / {presentation.ActiveEntities} entities";
+        Debug.Log($"Connected to Eve provider {_provider.Selection.ProviderId} / {_provider.Selection.SurfaceId} / {presentation.ActiveEntities} entities.");
     }
 
     private static void CreateView()
@@ -73,11 +76,5 @@ public sealed class AetheriaUnityClient : MonoBehaviour
         camera.nearClipPlane = 0.05f;
         camera.farClipPlane = 10000f;
 
-    }
-
-    private void OnGUI()
-    {
-        GUI.Box(new Rect(12, 12, Math.Min(Screen.width - 24, 760), 54),
-            _status + "\nWASD / left stick: move    Mouse 1 / controller action: activate");
     }
 }

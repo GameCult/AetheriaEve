@@ -120,6 +120,9 @@ namespace GameCult.Aetheria.State.Verse
         public static CultRecordKey HangarSurface { get; } =
             new CultRecordKey("eve:surface:aetheria.hangar");
 
+        public static CultRecordKey ProgressionSource { get; } =
+            new CultRecordKey(AetheriaProgressionSourceDocument.DocumentKey);
+
         public static CultRecordKey DaemonCommand(string commandId)
         {
             return new CultRecordKey($"daemon:commands:{StableToken(commandId)}:gamecult.aetheria.daemon_command.v1");
@@ -183,6 +186,7 @@ namespace GameCult.Aetheria.State.Verse
             typeof(AetheriaRuntimeStarbridgePlayerSeatDocument),
             typeof(AetheriaRuntimePlayerSettingsDocument),
             typeof(AetheriaRuntimeVerseHostSettingsDocument),
+            typeof(AetheriaProgressionSourceDocument),
             typeof(EveSurfaceDocument),
             typeof(EveProviderAdvertisementDocument),
             typeof(EveSurfaceCommandRequest),

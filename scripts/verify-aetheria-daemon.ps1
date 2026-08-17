@@ -11,6 +11,7 @@ if ([string]::IsNullOrWhiteSpace($CultLibRoot)) { $CultLibRoot = Join-Path $proj
 if ([string]::IsNullOrWhiteSpace($EveRoot)) { $EveRoot = Join-Path $projectsRoot "Eve" }
 if ([string]::IsNullOrWhiteSpace($YmirRoot)) { $YmirRoot = Join-Path $projectsRoot "Ymir" }
 $project = Join-Path $repoRoot "Aetheria.State.Daemon.Smoke\Aetheria.State.Daemon.Smoke.csproj"
+$progressionProject = Join-Path $repoRoot "Aetheria.State.ProgressionSmoke\Aetheria.State.ProgressionSmoke.csproj"
 
 & (Join-Path $PSScriptRoot "verify-portable-game-framework.ps1") -Root $repoRoot
 
@@ -49,6 +50,11 @@ if ($LASTEXITCODE -ne 0) {
 & dotnet run --project $project @properties --no-restore
 if ($LASTEXITCODE -ne 0) {
     throw "Aetheria daemon smoke failed with exit code $LASTEXITCODE."
+}
+
+& dotnet run --project $progressionProject @properties
+if ($LASTEXITCODE -ne 0) {
+    throw "Aetheria progression Verse smoke failed with exit code $LASTEXITCODE."
 }
 
 Write-Host "Aetheria daemon dependency-root and simulation verification passed."

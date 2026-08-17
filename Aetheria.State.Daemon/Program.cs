@@ -74,6 +74,9 @@ if (persistedRuntimeCatalog == null ||
 TraceStartup("runtime-catalog");
 await AetheriaDaemonHangarCoordinator.EnsureAsync(node, node.RuntimeCatalog().Latest(), startedAtUtc).ConfigureAwait(false);
 TraceStartup("hangar");
+using (var progressionVerses = CreateProgressionVerseCoordinator(node, options))
+    await progressionVerses.EnsureAndRefreshAsync(startedAtUtc).ConfigureAwait(false);
+TraceStartup("progression-verses");
 var verseHost = await EnsureVerseHostSettingsAsync(node, options, startedAtUtc).ConfigureAwait(false);
 TraceStartup("verse-host");
 await EnsureVerseAuthorityPolicyAsync(node, options).ConfigureAwait(false);
@@ -121,11 +124,17 @@ while (!stopped.Task.IsCompleted)
     {
         await PublishRuntimeSessionAsync(node, options, startedAtUtc, "ready").ConfigureAwait(false);
         Console.WriteLine("Aetheria daemon ready; waiting for a client to load or generate a world.");
+        var nextProgressionRefreshUtc = DateTimeOffset.UtcNow.AddSeconds(5);
         while (!stopped.Task.IsCompleted)
         {
             ThrowIfClientHostFaulted(cultMeshClientHost);
             hangarActivationRequested |= await AcceptCoreEveInvocationsAsync(node, options, latestFrame).ConfigureAwait(false);
             await AcceptEveCommandsAsync(node, options, ingressState).ConfigureAwait(false);
+            if (options.OdinDiscoveryEndpoints.Count > 0 && DateTimeOffset.UtcNow >= nextProgressionRefreshUtc)
+            {
+                await PublishStateSurfacesAsync(node, options, DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
+                nextProgressionRefreshUtc = DateTimeOffset.UtcNow.AddSeconds(5);
+            }
             if (hangarActivationRequested && playableWorldDemand.IsActive &&
                 (HasPlayableRun(latestFrame?.Run) ||
                  HasPlayableRun(await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings).ConfigureAwait(false))))
@@ -1083,13 +1092,6 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                 response,
                 AetheriaRuntimeVerseRecordKeys.MainMenuPlayerSettingsSurface.ToString(),
                 "main-menu-player-settings").ConfigureAwait(false);
-            await InjectEveSurfaceSnapshotAsync(
-                node,
-                options,
-                request,
-                response,
-                AetheriaRuntimeVerseRecordKeys.MainMenuVerseSettingsSurface.ToString(),
-                "main-menu-verse-settings").ConfigureAwait(false);
             await InjectEveSurfaceSnapshotAsync(
                 node,
                 options,
@@ -2224,52 +2226,19 @@ static async Task PublishDaemonMenuSurfacesAsync(
         ? new AetheriaRuntimeInventoryDocument()
         : AetheriaRuntimeGameDocuments.Inventory(frame, currentEntity.EntityIndex);
 
-    var verseHost = await EnsureVerseHostSettingsAsync(node, options, updatedAtUtc)
-        .ConfigureAwait(false);
-    var stateBoot = AetheriaRuntimeStateBoot.Inspect(
-        new DirectoryInfo(Path.GetDirectoryName(node.StatePath) ?? "."),
-        node.StatePath);
     var mainMenu = AetheriaRuntimeMainMenuSurfaceBuilder.BuildRoot(
-        stateBoot,
-        frame,
-        AetheriaRuntimeVerseHostSettingsDocument.FromSnapshot(new AetheriaRuntimeVerseHostSettingsSnapshot(
-            verseHost.ServiceId,
-            verseHost.VerseId,
-            verseHost.RootVerse,
-            verseHost.CanonicalService,
-            verseHost.LocatedService,
-            verseHost.CultMeshAddress,
-            verseHost.Title,
-            verseHost.Visibility,
-            verseHost.LastUpdatedAtUtc)),
-        playerSettings,
-        canOpenRuntimeInputScreen: true,
         inGame: true,
         updatedAtUtc);
     var mainMenuSettings = AetheriaRuntimeMainMenuSurfaceBuilder.BuildSettings(updatedAtUtc);
     var mainMenuInputSettings = AetheriaRuntimeMainMenuSurfaceBuilder.BuildInputSettings(
-        stateBoot,
-        playerSettings,
+        playerSettings.BindingOverrides?.Length ?? 0,
+        playerSettings.ActionBarInputs?.Length ?? 0,
         canOpenRuntimeInputScreen: true,
         inGame: true,
         updatedAtUtc);
     var mainMenuPlayerSettings = AetheriaRuntimeMainMenuSurfaceBuilder.BuildPlayerSettings(
         playerSettings,
         updatedAtUtc);
-    var mainMenuVerseSettings = AetheriaRuntimeMainMenuSurfaceBuilder.BuildVerseSettings(
-        AetheriaRuntimeClientTargetSurfaceBuilder.Build(
-            stateBoot,
-            AetheriaRuntimeVerseHostSettingsDocument.FromSnapshot(new AetheriaRuntimeVerseHostSettingsSnapshot(
-                verseHost.ServiceId,
-                verseHost.VerseId,
-                verseHost.RootVerse,
-                verseHost.CanonicalService,
-                verseHost.LocatedService,
-                verseHost.CultMeshAddress,
-                verseHost.Title,
-                verseHost.Visibility,
-                verseHost.LastUpdatedAtUtc)),
-            updatedAtUtc));
     var inventoryPanel = AetheriaRuntimeInventoryPanelSurfaceBuilder.BuildFromDocuments(
         currentEntity,
         stationRefit,
@@ -2296,9 +2265,6 @@ static async Task PublishDaemonMenuSurfacesAsync(
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.MainMenuPlayerSettingsSurface)
         .ReplaceAsync(mainMenuPlayerSettings)
-        .ConfigureAwait(false);
-    await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.MainMenuVerseSettingsSurface)
-        .ReplaceAsync(mainMenuVerseSettings)
         .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.InventoryPanelSurface)
         .ReplaceAsync(inventoryPanel)
@@ -2486,11 +2452,32 @@ static async Task<bool> AcceptHangarInvocationAsync(
     var accepted = false;
     var diagnostic = "";
     var activatesSession = false;
+    EveSurfaceNavigationTarget? navigation = null;
     try
     {
+        using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
+        var progressionSource = await node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
+            .ReadAsync().ConfigureAwait(false)
+            ?? await progressionVerses.EnsureAndRefreshAsync(now).ConfigureAwait(false);
+        if (string.Equals(command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal))
+        {
+            await progressionVerses.SelectAsync(Payload(request, "value"), now).ConfigureAwait(false);
+            await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
+            accepted = true;
+        }
+        else if (!progressionSource.UsesLocalProgression)
+        {
+            var remoteReceipt = await progressionVerses.ForwardHangarInvocationAsync(request).ConfigureAwait(false);
+            await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), remoteReceipt)
+                .ConfigureAwait(false);
+            await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
+            await node.FlushAsync().ConfigureAwait(false);
+            return false;
+        }
+
         var shipId = Payload(request, "shipId");
         var expectedRevision = PayloadLong(request, "expectedHangarRevision", -1);
-        switch (command)
+        if (!accepted) switch (command)
         {
             case AetheriaRuntimeHangarCommands.SelectShip:
             case AetheriaRuntimeHangarCommands.SelectTerminus:
@@ -2543,6 +2530,11 @@ static async Task<bool> AcceptHangarInvocationAsync(
                 {
                     await ActivateTerminusSessionAsync(node, options, request.CommandId, now).ConfigureAwait(false);
                     activatesSession = true;
+                    navigation = new EveSurfaceNavigationTarget(
+                        options.VerseId,
+                        request.ProviderId,
+                        AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+                        "interactive-world");
                 }
                 break;
             }
@@ -2557,6 +2549,11 @@ static async Task<bool> AcceptHangarInvocationAsync(
                 {
                     await ActivateTerminusSessionAsync(node, options, request.CommandId, now).ConfigureAwait(false);
                     activatesSession = true;
+                    navigation = new EveSurfaceNavigationTarget(
+                        options.VerseId,
+                        request.ProviderId,
+                        AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+                        "interactive-world");
                 }
                 break;
             }
@@ -2572,17 +2569,18 @@ static async Task<bool> AcceptHangarInvocationAsync(
     }
 
     var receiptDocument = new EveCommandReceiptDocument(
-        $"receipt:{request.CommandId}:{(accepted ? "applied" : "denied")}",
+        $"receipt:{request.CommandId}:{(accepted ? "accepted" : "denied")}",
         request.CommandId,
         command,
-        accepted ? "applied" : "denied",
+        accepted ? "accepted" : "denied",
         "Aetheria Hangar",
         options.DaemonId,
         request.ProviderId,
         request.SurfaceId,
         diagnostic,
         now,
-        0);
+        0,
+        navigation);
     await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), receiptDocument)
         .ConfigureAwait(false);
     await node.FlushAsync().ConfigureAwait(false);
@@ -2696,13 +2694,12 @@ static async Task PublishStateSurfacesAsync(
     var playerSettingsUpdatedAt = string.IsNullOrWhiteSpace(playerSettings.LastUpdatedAtUtc)
         ? updatedAtUtc
         : playerSettings.LastUpdatedAtUtc;
-    var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
-        .ReadAsync().ConfigureAwait(false);
-    AetheriaLoadoutTemplate? hangarLoadout = null;
-    var selectedHangarShip = hangar?.Ships?.FirstOrDefault();
-    if (!string.IsNullOrWhiteSpace(selectedHangarShip?.LoadoutTemplateKey))
-        hangarLoadout = await node.MutableDocument<AetheriaLoadoutTemplate>(new(selectedHangarShip.LoadoutTemplateKey))
-            .ReadAsync().ConfigureAwait(false);
+    AetheriaProgressionVerseView? hangarView = null;
+    if (publishHangar)
+    {
+        using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
+        hangarView = await progressionVerses.ReadViewAsync(updatedAtUtc).ConfigureAwait(false);
+    }
 
     await node.MutableDocument<EveSurfaceDocument>(AetheriaStateNode.OperationsSurfaceKey)
         .ReplaceAsync(AetheriaEveSurfaceDocuments.BuildOperationsSurface(eveStatus, verseHost, runtimeSession))
@@ -2713,19 +2710,28 @@ static async Task PublishStateSurfacesAsync(
     await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaStateNode.ProviderAdvertisementSurfaceKey)
         .ReplaceAsync(AetheriaEveSurfaceDocuments.BuildProviderAdvertisement(verseHost, node.StatePath, updatedAtUtc))
         .ConfigureAwait(false);
-    if (publishHangar && hangar != null)
+    if (publishHangar && hangarView != null)
+    {
+        var selectedHangarShip = hangarView.Hangar.Ships?.FirstOrDefault();
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.HangarSurface)
             .ReplaceAsync(AetheriaRuntimeHangarSurfaceBuilder.Build(
-                hangar,
+                hangarView.Hangar,
                 selectedHangarShip?.ShipId ?? "",
                 AetheriaGameModes.Terminus,
                 updatedAtUtc,
-                Math.Max(1, hangar.Revision),
-                hangarLoadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(hangarLoadout),
-                node.RuntimeCatalog().Latest()))
+                Math.Max(1, hangarView.Hangar.Revision + hangarView.Source.Revision),
+                hangarView.Loadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(hangarView.Loadout),
+                hangarView.Catalog,
+                hangarView.Source))
             .ConfigureAwait(false);
+    }
     await node.FlushAsync().ConfigureAwait(false);
 }
+
+static AetheriaProgressionVerseCoordinator CreateProgressionVerseCoordinator(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options) =>
+    new(node, options.DaemonId, options.VerseId, options.OdinDiscoveryEndpoints);
 
 static async Task PublishOdinSurfaceAnnouncementsAsync(
     AetheriaStateNode node,
@@ -2747,7 +2753,6 @@ static async Task PublishOdinSurfaceAnnouncementsAsync(
         ("aetheria.main_menu.settings", "Main Menu Settings", AetheriaRuntimeVerseRecordKeys.MainMenuSettingsSurface),
         ("aetheria.main_menu.input_settings", "Main Menu Input Settings", AetheriaRuntimeVerseRecordKeys.MainMenuInputSettingsSurface),
         ("aetheria.main_menu.player_settings", "Main Menu Player Settings", AetheriaRuntimeVerseRecordKeys.MainMenuPlayerSettingsSurface),
-        ("aetheria.main_menu.verse_settings", "Main Menu Verse Settings", AetheriaRuntimeVerseRecordKeys.MainMenuVerseSettingsSurface),
         ("aetheria.inventory.panel", "Inventory Panel", AetheriaRuntimeVerseRecordKeys.InventoryPanelSurface),
         ("aetheria.inventory.panel.dropdown", "Inventory Dropdown", AetheriaRuntimeVerseRecordKeys.InventoryDropdownSurface),
         (AetheriaRuntimeSectorMapSurfaceBuilder.SurfaceId, "Sector Map", AetheriaRuntimeVerseRecordKeys.MapMenuSurface),
@@ -4175,6 +4180,7 @@ internal sealed class AetheriaClientCultMeshHost : IAsyncDisposable
 
 internal sealed class AetheriaDaemonHostOptions
 {
+    public const string OdinDiscoveryEndpointsEnvironmentVariable = "AETHERIA_ODIN_DISCOVERY_ENDPOINTS";
     public string StatePath { get; init; } = "";
     public string DaemonId { get; init; } = "aetheria-daemon";
     public string SessionId { get; init; } = "local";
@@ -4192,6 +4198,7 @@ internal sealed class AetheriaDaemonHostOptions
     public TimeSpan PeerSyncTimeout { get; init; } = TimeSpan.FromMilliseconds(250);
     public string OdinCultMeshUri { get; init; } = "";
     public bool EnableOdinAnnouncements { get; init; }
+    public IReadOnlyList<string> OdinDiscoveryEndpoints { get; init; } = Array.Empty<string>();
     public TimeSpan TickInterval { get; init; } = TimeSpan.FromMilliseconds(20);
     public TimeSpan ApiPublicationInterval { get; init; } = TimeSpan.FromSeconds(1);
     public double FixedDeltaSeconds { get; init; } = 0.02;
@@ -4229,6 +4236,13 @@ internal sealed class AetheriaDaemonHostOptions
         RejectRemovedOption(args, "--odin-cultmesh-rudp", "--odin-cultmesh-uri");
         RejectRemovedOption(args, "--odin-cultnet-rudp", "--odin-cultmesh-uri");
         var odinCultMeshUri = ReadOption(args, "--odin-cultmesh-uri");
+        var odinDiscoveryEndpoints = ReadOptions(args, "--odin-discovery-endpoint")
+            .Concat((Environment.GetEnvironmentVariable(OdinDiscoveryEndpointsEnvironmentVariable) ?? "")
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            .Where(endpoint => !string.IsNullOrWhiteSpace(endpoint))
+            .Select(endpoint => endpoint.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         var noOdinAnnouncements = HasFlag(args, "--no-odin-announcements");
         var apiPublicationIntervalMs = ReadPositiveInt(args, "--api-publication-interval-ms") ?? 1000;
         var sessionId = ReadOption(args, "--session-id");
@@ -4273,6 +4287,7 @@ internal sealed class AetheriaDaemonHostOptions
             PeerSyncTimeout = TimeSpan.FromMilliseconds(peerSyncTimeoutMs),
             OdinCultMeshUri = noOdinAnnouncements ? "" : odinCultMeshUri,
             EnableOdinAnnouncements = !noOdinAnnouncements && !string.IsNullOrWhiteSpace(odinCultMeshUri),
+            OdinDiscoveryEndpoints = odinDiscoveryEndpoints,
             TickInterval = TimeSpan.FromMilliseconds(intervalMs),
             ApiPublicationInterval = TimeSpan.FromMilliseconds(apiPublicationIntervalMs),
             FixedDeltaSeconds = fixedDeltaMs / 1000.0,

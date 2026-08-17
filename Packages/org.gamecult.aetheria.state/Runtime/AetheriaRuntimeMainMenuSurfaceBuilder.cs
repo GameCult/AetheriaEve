@@ -108,10 +108,10 @@ namespace GameCult.Aetheria.State.Verse
                 "Back");
         }
 
-        private static EveSurfaceDocument BuildRoot(
+        public static EveSurfaceDocument BuildRoot(
             bool inGame,
             string updatedAtUtc,
-            long version)
+            long version = 1)
         {
             var actions = new List<EveSurfaceComponent>();
             if (!inGame)
@@ -199,7 +199,6 @@ namespace GameCult.Aetheria.State.Verse
                     actions =>
                     {
                         actions.Button("Player Settings", Operation(AetheriaRuntimeMainMenuCommands.ShowPlayerSettings, "Player Settings"));
-                        actions.Button("Verse", Operation(AetheriaRuntimeMainMenuCommands.ShowVerseSettings, "Verse"));
                         actions.Button("Input", Operation(AetheriaRuntimeMainMenuCommands.ShowInputSettings, "Input"));
                         actions.Button("Back", Operation(AetheriaRuntimeMainMenuCommands.BackToMain, "Back"));
                     });
@@ -207,13 +206,13 @@ namespace GameCult.Aetheria.State.Verse
             return (builder.Build());
         }
 
-        private static EveSurfaceDocument BuildInputSettings(
+        public static EveSurfaceDocument BuildInputSettings(
             int bindingOverrideCount,
             int actionBarInputCount,
             bool canOpenRuntimeInputScreen,
             bool inGame,
             string updatedAtUtc,
-            long version)
+            long version = 1)
         {
             var builder = MainMenuSurface(
                     AetheriaRuntimeMainMenuCommands.InputSettingsSurfaceId,

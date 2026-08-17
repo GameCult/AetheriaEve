@@ -1,6 +1,6 @@
 # Renderless Aetheria Architecture
 
-Date: 2026-07-06
+Date: 2026-08-17
 
 This document records the intended architecture before the next demolition pass.
 It is not an implementation claim. It is the map the implementation must be
@@ -105,6 +105,17 @@ consume the same daemon-published documents and Eve surfaces. Direct user input,
 programmatic commands, replay/import, reconnect, and automation should all enter
 through typed operations, scoped Pilot candidates, or an explicitly declared
 mergeable-state strategy. None is a generic gameplay-document write path.
+
+Progression Verse selection:
+The local daemon owns a typed progression-source document and publishes its
+selector inside the Hangar Eve surface. Its inputs are the Local Verse and
+stable Verse descriptors discovered from configured Odin endpoints. Local
+selection uses the local moddable `.cc` Hangar; remote selection reads and
+invokes the selected Verse's authoritative Hangar. An accepted launch or
+continue receipt carries a renderer-neutral navigation target: stable Verse,
+provider, surface, kind, and discovered rendezvous routes. Eve lowerers follow
+that target through generic rediscovery. Renderer-local preferences, Unity
+sidecars, and hard-coded remote endpoints cannot select progression truth.
 
 Deletion line:
 Before adding new client behavior, delete or demote any path that lets a client

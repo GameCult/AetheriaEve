@@ -49,6 +49,19 @@ The launcher imports local typed state when necessary, builds provider bundles
 with `Aetheria.Assets.Unity`, builds the minimal Eve client, starts the daemon,
 and mounts `aetheria.hangar`.
 
+To populate the Hangar's Verse dropdown from one or more configured Odin
+rendezvous endpoints:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-aetheria-unity.ps1 `
+  -OdinDiscoveryEndpoint cultnet+tcp://odin.example:3076
+```
+
+The dropdown itself is daemon-published Eve/CultUI. **Local** uses the local
+moddable `.cc` progression state; discovered remote Verses keep their own
+authority. Accepted launch/continue receipts route the generic lowerer to the
+selected Verse's Pilot surface.
+
 ## Architecture
 
 Start with:

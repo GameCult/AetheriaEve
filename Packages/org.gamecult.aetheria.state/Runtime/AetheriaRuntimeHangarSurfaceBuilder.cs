@@ -15,6 +15,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string SelectTerminus = "aetheria.hangar.select_mode.terminus";
         public const string SelectStarbridge = "aetheria.hangar.select_mode.starbridge";
         public const string SelectArena = "aetheria.hangar.select_mode.arena";
+        public const string SelectVerse = "aetheria.hangar.select_verse";
         public const string EditLoadout = "aetheria.hangar.edit_loadout";
         public const string EquipItem = "aetheria.hangar.loadout.equip";
         public const string RemoveItem = "aetheria.hangar.loadout.remove";
@@ -31,7 +32,8 @@ namespace GameCult.Aetheria.State.Verse
             string updatedAtUtc,
             long version = 1,
             AetheriaRuntimeLoadoutTemplateCommit? loadout = null,
-            AetheriaRuntimeCatalogSnapshot? catalog = null)
+            AetheriaRuntimeCatalogSnapshot? catalog = null,
+            AetheriaProgressionSourceDocument? progressionSource = null)
         {
             if (hangar == null) throw new ArgumentNullException(nameof(hangar));
             var ships = hangar.Ships ?? Array.Empty<AetheriaHangarShip>();
@@ -42,6 +44,17 @@ namespace GameCult.Aetheria.State.Verse
             var canContinue = selected != null && string.Equals(selected.Status, AetheriaHangarShipStatuses.Deployed, StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(selected.ActiveDeploymentId);
             var equipment = loadout?.RootEntity?.Equipment ?? Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>();
             var inventory = hangar.Inventory ?? Array.Empty<AetheriaHangarItemStack>();
+            progressionSource ??= new AetheriaProgressionSourceDocument
+            {
+                AvailableVerses = new[]
+                {
+                    new AetheriaProgressionVerseOption
+                    {
+                        VerseId = AetheriaProgressionSources.Local,
+                        DisplayName = "Local"
+                    }
+                }
+            };
 
             var root = Component(
                 "aetheria.hangar.root",
@@ -109,6 +122,7 @@ namespace GameCult.Aetheria.State.Verse
                         Layout(("gridArea", "bays"), ("display", "flex"), ("overflowX", "auto"), ("gap", "8"))),
                     Component("aetheria.hangar.launcher", "row", Props(), new[]
                     {
+                        VerseSelect(progressionSource),
                         Button("aetheria.hangar.mode.terminus", "TERMINUS", AetheriaRuntimeHangarCommands.SelectTerminus,
                             ("selected", (mode == AetheriaGameModes.Terminus).ToString().ToLowerInvariant())),
                         Button("aetheria.hangar.mode.starbridge", "STARBRIDGE", AetheriaRuntimeHangarCommands.SelectStarbridge,
@@ -148,6 +162,7 @@ namespace GameCult.Aetheria.State.Verse
                     Command(AetheriaRuntimeHangarCommands.SelectTerminus, "Select Terminus"),
                     Command(AetheriaRuntimeHangarCommands.SelectStarbridge, "Select Starbridge"),
                     Command(AetheriaRuntimeHangarCommands.SelectArena, "Select Arena"),
+                    Command(AetheriaRuntimeHangarCommands.SelectVerse, "Select Verse"),
                     Command(AetheriaRuntimeHangarCommands.EditLoadout, "Edit Loadout"),
                     Command(AetheriaRuntimeHangarCommands.EquipItem, "Equip Item"),
                     Command(AetheriaRuntimeHangarCommands.RemoveItem, "Remove Item"),
@@ -170,6 +185,35 @@ namespace GameCult.Aetheria.State.Verse
 
         private static EveSurfaceComponent Button(string id, string label, string command, params (string Key, string Value)[] extra) =>
             Component(id, "control.button", Props(new[] { ("label", label), ("command", command) }.Concat(extra).ToArray()), Array.Empty<EveSurfaceComponent>());
+
+        private static EveSurfaceComponent VerseSelect(AetheriaProgressionSourceDocument source)
+        {
+            var options = (source.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
+                .Where(option => !string.IsNullOrWhiteSpace(option.VerseId))
+                .GroupBy(option => option.VerseId, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .OrderBy(option => string.Equals(option.VerseId, AetheriaProgressionSources.Local, StringComparison.Ordinal) ? 0 : 1)
+                .ThenBy(option => option.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(option => Component(
+                    "aetheria.hangar.verse.option." + StableToken(option.VerseId),
+                    "control.option",
+                    Props(
+                        ("label", string.IsNullOrWhiteSpace(option.DisplayName) ? option.VerseId : option.DisplayName),
+                        ("value", option.VerseId)),
+                    Array.Empty<EveSurfaceComponent>()))
+                .ToArray();
+
+            return Component(
+                "aetheria.hangar.verse",
+                "control.select",
+                Props(
+                    ("label", "VERSE"),
+                    ("value", string.IsNullOrWhiteSpace(source.SelectedVerseId) ? AetheriaProgressionSources.Local : source.SelectedVerseId),
+                    ("command", AetheriaRuntimeHangarCommands.SelectVerse),
+                    ("status", source.Status ?? ""),
+                    ("diagnostic", source.Diagnostic ?? "")),
+                options);
+        }
 
         private static EveCommandTemplate Command(string command, string label) =>
             AetheriaRuntimeSurfaceDocuments.Command(command, label, "cultmesh");

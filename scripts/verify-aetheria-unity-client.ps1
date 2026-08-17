@@ -14,17 +14,17 @@ $manifest = Get-Content (Join-Path $ProjectPath "Packages/manifest.json") -Raw |
 $lock = Get-Content (Join-Path $ProjectPath "Packages/packages-lock.json") -Raw | ConvertFrom-Json
 $expected = @{
     "org.gamecult.cultlib" = @(
-        "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#cultlib-unity-v1.0.45",
-        "03840d0430bc727f1322861a1ab46b396eaca860")
+        "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#cultlib-unity-v1.0.46",
+        "1fc68a4701b663ee8d4b575dc914377c7b67ee84")
     "org.gamecult.eve.surface" = @(
-        "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#eve-surface-v0.3.0",
-        "fe0dddf28267decbb416325a3d0b2c62432825c2")
+        "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#eve-surface-v0.3.1",
+        "0c486796ab38d6dbad99c9e724d1f1eb7c6b8c6d")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#50cd42137a1b94fa8c578918463ddcd822d2bfc9",
-        "50cd42137a1b94fa8c578918463ddcd822d2bfc9")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#c6b7ecebc56cf3adcb77e41c7f5f6fa36f8e2bdb",
+        "c6b7ecebc56cf3adcb77e41c7f5f6fa36f8e2bdb")
     "org.gamecult.eve.unity-uitoolkit" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#50cd42137a1b94fa8c578918463ddcd822d2bfc9",
-        "50cd42137a1b94fa8c578918463ddcd822d2bfc9")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#c6b7ecebc56cf3adcb77e41c7f5f6fa36f8e2bdb",
+        "c6b7ecebc56cf3adcb77e41c7f5f6fa36f8e2bdb")
 }
 
 foreach ($packageName in $expected.Keys) {
@@ -37,9 +37,9 @@ foreach ($packageName in $expected.Keys) {
 
 $cultLibPackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.cultlib@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "1.0.45" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "1.0.46" } |
     Select-Object -First 1
-if (-not $cultLibPackage) { throw "Resolved CultLib 1.0.45 package is missing from Library/PackageCache." }
+if (-not $cultLibPackage) { throw "Resolved CultLib 1.0.46 package is missing from Library/PackageCache." }
 
 $meshAssembly = Join-Path $cultLibPackage.FullName "Runtime/Plugins/GameCult.Mesh.dll"
 if (-not (Test-Path $meshAssembly)) { throw "Resolved GameCult.Mesh.dll is missing." }
@@ -59,9 +59,9 @@ foreach ($apiName in $requiredMeshApiNames) {
 
 $surfacePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.surface@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.0" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.1" } |
     Select-Object -First 1
-if (-not $surfacePackage) { throw "Resolved Eve surface 0.3.0 package is missing from Library/PackageCache." }
+if (-not $surfacePackage) { throw "Resolved Eve surface 0.3.1 package is missing from Library/PackageCache." }
 $inputContractSource = Get-Content (Join-Path $surfacePackage.FullName "Runtime/EveInputCapabilityDocument.cs") -Raw
 foreach ($requiredInputContract in @("PayloadKeys", "CurrentValue", "ActionBar", "IconRef")) {
     if ($inputContractSource -notmatch $requiredInputContract) {
@@ -71,15 +71,23 @@ foreach ($requiredInputContract in @("PayloadKeys", "CurrentValue", "ActionBar",
 
 $scenePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.unity-scene@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.104" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.105" } |
     Select-Object -First 1
-if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.104 package is missing from Library/PackageCache." }
+if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.105 package is missing from Library/PackageCache." }
 $advertisedInputSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityAdvertisedInputAction.cs") -Raw
 $inputDriverSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityPlayableWorldInputDriver.cs") -Raw
 $actionBarSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityInputActionBar.cs") -Raw
 foreach ($requiredInputContract in @("view-direction.v1", "BuildViewDirectionPayload", "SubmitChangedPerformedActions", "scalar.v1", "BuildScalarPayload", "EveUnityInputActionBar")) {
     if (($advertisedInputSource + $inputDriverSource + $actionBarSource) -notmatch [regex]::Escape($requiredInputContract)) {
         throw "Resolved Eve Unity scene package is missing generic input lowering '$requiredInputContract'."
+    }
+}
+
+$navigationSource = (Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityPlayableWorldClientBootstrap.cs") -Raw) +
+    (Get-Content (Join-Path $scenePackage.FullName "Runtime/CultMesh/EveUnityCultMeshPlayableWorldProvider.cs") -Raw)
+foreach ($requiredNavigation in @("receipt.Navigation", "NavigateAsync", "RendezvousEndpoints")) {
+    if ($navigationSource -notmatch [regex]::Escape($requiredNavigation)) {
+        throw "Resolved Eve Unity scene package is missing provider-owned navigation '$requiredNavigation'."
     }
 }
 
@@ -115,6 +123,9 @@ foreach ($required in @("EVEUNITY_RENDEZVOUS_ENDPOINT", "EveUnityCultMeshPlayabl
 }
 foreach ($forbiddenInput in @("AetheriaRuntimeVerseSchemas", "AetheriaRuntimeVerseRecordKeys", "productSchema", "recordKey")) {
     if ($bootstrapSource -match [regex]::Escape($forbiddenInput)) { throw "Client bootstrap depends on forbidden product input '$forbiddenInput'." }
+}
+foreach ($forbiddenUnityUi in @("OnGUI(", "GUI.Box", "UnityEngine.GUI")) {
+    if ($bootstrapSource -match [regex]::Escape($forbiddenUnityUi)) { throw "Client bootstrap contains forbidden Unity-authored UI '$forbiddenUnityUi'." }
 }
 if ($bootstrapSource -notmatch [regex]::Escape('?? "aetheria.hangar"')) {
     throw "The standalone Unity client must default to the daemon-owned Hangar surface."

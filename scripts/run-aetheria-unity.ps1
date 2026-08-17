@@ -2,6 +2,7 @@ param(
   [string] $UnityExe = "C:\Program Files\Unity\Hub\Editor\6000.4.2f1\Editor\Unity.exe",
   [int] $Port = 3076,
   [string] $State = "",
+  [string[]] $OdinDiscoveryEndpoint = @(),
   [switch] $SkipBuild
 )
 
@@ -57,7 +58,7 @@ if (-not $SkipBuild) {
 
 if (-not (Test-Path $clientExe)) { throw "Client executable not found. Run without -SkipBuild first." }
 $daemonLog = Join-Path $artifacts "daemon.log"
-$daemon = Start-Process dotnet -ArgumentList @(
+$daemonArguments = @(
   "run", "--project", $daemonProject, "--",
   "--root", $root,
   "--state", $state,
@@ -67,7 +68,13 @@ $daemon = Start-Process dotnet -ArgumentList @(
   "--tick-interval-ms", 20,
   "--fixed-delta-ms", 20,
   "--no-odin-announcements"
-) -PassThru -WindowStyle Hidden -RedirectStandardOutput $daemonLog -RedirectStandardError "$daemonLog.error"
+)
+foreach ($endpoint in $OdinDiscoveryEndpoint) {
+  if (-not [string]::IsNullOrWhiteSpace($endpoint)) {
+    $daemonArguments += @("--odin-discovery-endpoint", $endpoint.Trim())
+  }
+}
+$daemon = Start-Process dotnet -ArgumentList $daemonArguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $daemonLog -RedirectStandardError "$daemonLog.error"
 Write-Host "Daemon PID: $($daemon.Id)"
 Write-Host "Daemon log: $daemonLog"
 

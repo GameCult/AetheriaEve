@@ -175,16 +175,41 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     .ReadAsync().GetAwaiter().GetResult()!;
                 var surface = AetheriaRuntimeHangarSurfaceBuilder.Build(
                     hangar, ship.ShipId, AetheriaGameModes.Terminus, "2026-08-08T00:00:01Z", 1,
-                    AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(template), runtimeCatalog);
+                    AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(template), runtimeCatalog,
+                    new AetheriaProgressionSourceDocument
+                    {
+                        SelectedVerseId = "gamecult.aetheria",
+                        Status = AetheriaProgressionSourceStatuses.Ready,
+                        AvailableVerses =
+                        [
+                            new AetheriaProgressionVerseOption
+                            {
+                                VerseId = AetheriaProgressionSources.Local,
+                                DisplayName = "Local"
+                            },
+                            new AetheriaProgressionVerseOption
+                            {
+                                VerseId = "gamecult.aetheria",
+                                DisplayName = "GameCult Aetheria"
+                            }
+                        ]
+                    });
                 var world = surface.Surface.Root.Children.Single(component => component.Kind == "world.scene3d");
+                var launcher = surface.Surface.Root.Children.Single(component => component.Id == "aetheria.hangar.launcher");
+                var verse = launcher.Children.Single(component => component.Id == "aetheria.hangar.verse");
                 Require(surface.Surface.Id == AetheriaRuntimeHangarCommands.SurfaceId &&
                         world.Props.Any(prop => prop.Key == "entityViewPointerId" && !string.IsNullOrWhiteSpace(prop.Value)) &&
                         world.Props.Any(prop => prop.Key == "entityBodyId" && !string.IsNullOrWhiteSpace(prop.Value)) &&
+                        verse.Kind == "control.select" &&
+                        verse.Props["value"] == "gamecult.aetheria" &&
+                        verse.Children.Count == 2 &&
+                        verse.Children.All(option => option.Kind == "control.option") &&
+                        surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.SelectVerse) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.EquipItem) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.RemoveItem) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Launch) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Continue),
-                    "the daemon-owned Hangar surface must advertise loadout, launch, and continuation operations");
+                    "the daemon-owned Hangar surface must advertise Verse selection, loadout, launch, and continuation operations");
 
                 var receipt = AetheriaDaemonHangarCoordinator.LaunchTerminusAsync(
                         node, runtimeCatalog, "launch-configured", ship.ShipId, mutation.HangarRevision, "2026-08-08T00:00:02Z")

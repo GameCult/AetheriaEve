@@ -9,8 +9,10 @@ the automated integration proof and is not required for ordinary iteration.
 development state under `Aetheria.Unity/Build`. **Start daemon** launches the
 already-prepared Debug apphost immediately; it never performs a build. The editor owns
 the daemon process, its PID, and its output streams. The generic EveUnity
-client connects directly to the daemon's local CultMesh endpoint. Odin is not
-part of this path.
+client connects first to the daemon's local CultMesh endpoint. With no
+`--odin-discovery-endpoint` values this is a Local-only development Verse.
+Configured Odin endpoints populate the daemon-owned Hangar Verse selector and
+may route the generic client to a remote provider after an accepted operation.
 
 The named daemon apphost is launched with both system .NET runtime-root
 variables pinned explicitly rather than inheriting Unity's embedded runtime
@@ -60,9 +62,10 @@ being debugged.
    build** only when the isolated development state must be replaced.
 2. Press **Start daemon** and wait for the window to report the live endpoint.
 3. Enter Unity Play Mode. The generic client mounts `aetheria.hangar`.
-4. Configure the saved loadout, then choose **Launch** for a new Terminus run
-   or **Continue** for the currently deployed saved run. The same mounted Eve
-   surface becomes the gameplay composition after activation.
+4. Choose **Local** or an Odin-discovered Verse, configure that Verse's saved
+   loadout, then choose **Launch** for a new Terminus run or **Continue** for
+   the currently deployed saved run. The provider-owned receipt tells EveUnity
+   which Verse's `aetheria.pilot` surface to rediscover and mount.
 5. Use Unity Pause to submit the advertised `simulation.pause` action to the
    daemon. Unity unpause submits `simulation.rate.realtime`.
 6. While paused, use **Advance one step** to commit exactly one fixed daemon

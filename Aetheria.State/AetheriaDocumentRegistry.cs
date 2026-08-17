@@ -29,6 +29,7 @@ public static class AetheriaDocumentRegistry
         typeof(AetheriaNameFile),
         typeof(AetheriaPlayerProfile),
         typeof(AetheriaHangarState),
+        typeof(AetheriaProgressionSourceDocument),
         typeof(AetheriaRuntimeSession),
         typeof(AetheriaMigrationLedger),
         typeof(AetheriaLegacyCatalogQuarantine),

@@ -80,9 +80,25 @@ if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -Pattern 'public stat
 }
 
 $daemonProgram = Join-Path $Root "Aetheria.State.Daemon\Program.cs"
+$daemonSource = Get-Content -LiteralPath $daemonProgram -Raw
+if ($daemonSource -match 'AetheriaRuntime(ClientTarget|VerseReplicaBridge|StateBoot)') {
+    throw "The daemon must own progression Verse discovery and selection; client-target sidecars and replica bridges are forbidden in its path."
+}
 $hangarWriters = @(Select-String -LiteralPath $daemonProgram -Pattern 'MutableDocument<EveSurfaceDocument>\(AetheriaRuntimeVerseRecordKeys\.HangarSurface\)').Count
 if ($hangarWriters -ne 1) {
     throw "The canonical Hangar surface must have exactly one daemon writer; found $hangarWriters."
+}
+
+$progressionDocument = Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeProgressionSourceDocuments.cs"
+$progressionCoordinator = Join-Path $Root "Aetheria.State.Daemon\AetheriaProgressionVerseCoordinator.cs"
+foreach ($required in @($progressionDocument, $progressionCoordinator)) {
+    if (-not (Test-Path -LiteralPath $required)) {
+        throw "The daemon-owned progression Verse boundary is missing: $required"
+    }
+}
+if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch '"control.select"') -or
+    -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'AetheriaRuntimeHangarCommands.SelectVerse')) {
+    throw "The Hangar must publish the daemon-owned progression Verse selector as an Eve control.select."
 }
 
 Write-Host "Portable game framework boundary verification passed."

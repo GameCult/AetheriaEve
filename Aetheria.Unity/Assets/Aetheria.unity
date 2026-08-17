@@ -148,7 +148,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 290906a425a95484b9ba8ed0ff616509, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AetheriaUnityClient
-  _status: Starting EveUnity...
 --- !u!4 &188005314
 Transform:
   m_ObjectHideFlags: 0
