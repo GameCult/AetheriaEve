@@ -340,8 +340,7 @@ namespace GameCult.Aetheria.State.Verse
                 AetheriaRuntimeDaemonSchemas.Health,
                 AetheriaRuntimeDaemonSchemas.CommandBoundary,
                 AetheriaRuntimeDaemonSchemas.StarbridgeSessionSummary,
-                AetheriaRuntimeDaemonSchemas.GameSurface,
-                AetheriaRuntimeDaemonSchemas.EditorSurface
+                EveSurfaceDocument.SchemaId
             };
 
             if (!options.BuildPublications)

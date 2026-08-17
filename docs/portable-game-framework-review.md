@@ -139,14 +139,15 @@ test rather than achieved properties.
 | --- | --- | --- | --- |
 | P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. Aetheria consumes observed mirrors. Nested-edit and snapshot-mutation negatives are live, and writable mirrors create no idle detection work. | Add the scaling benchmark gate so allocation, timer/thread creation, and update latency remain visible across runtime changes. |
 | P0 | Browser lowerer instance isolation | Eve browser lowering now carries surface/options/styles/component indexes per host, patches only bound component subtrees, and coalesces synchronous binding bursts. A two-host DOM test proves command/asset/skin isolation plus focus, selection, scroll, and root preservation. | Add the browser host witness to CI and the released-artifact consumer smoke. |
-| P0 | Conformance witnesses | Aetheria fixtures still name the legacy repository and stale schemas; the verifier trusts self-declared JSON. | Resolve witnesses against this repository and a running provider, validate schemas, execute a command/receipt/reconnect chronology, and reject unproved lowerer claims. |
+| P0 | Conformance witnesses | The static pack now resolves repository witnesses, checks Aetheria schema IDs against typed `CultDocument` source, rejects obsolete daemon IDs and absolute workspaces, and labels its evidence boundary. Phantom game/editor surface schemas were deleted in favor of canonical `gamecult.eve.surface.v1`. | Add the separate live provider command/receipt/reconnect witness; static fixture agreement must never satisfy it. |
 | P0 | Stable identity path | `AetheriaRuntimeVerseClient` manually snapshots physical endpoints and uses `aetheria.local`; the intended `CultMeshClient` already owns provider identity and reconnection. | Replace the parallel remote client and client-owned surface reconstruction with generated typed handles over `CultMeshClient`. |
 | P1 | Contract ownership | Renderer-neutral C# Eve contracts live inside EveUnity, forcing a headless daemon and CultLib tutorials to depend on a renderer repository. | Move/publish the Eve contract from a renderer-neutral owner and consume it as a released dependency. |
-| P1 | Executable onboarding | The getting-started series openly lacks its browser/Electron client and command-driven two-runtime sample. | Build one clean-checkout provider plus two clients, shared receipts/state versions, reconnect, and a forbidden direct-write proof. Use its source as the tutorial. |
+| P1 | Executable onboarding | The artifact-only `samples/eve-two-runtime` verifier installs packed CultCache/CultNet/CultMesh/Eve browser artifacts into an empty consumer, drives one idempotent command from browser and headless clients, observes the same receipt/state, and reopens persisted state. | Extend the same lesson to a real Odin/network session and a second implementation language; keep the artifact-only smoke honest about that boundary. |
 | P1 | Client resource lifetime | `CultMeshClient` retains dynamic document resources until the entire client dies. | Add leases/reference counting or bounded eviction and a 100k-key churn memory/subscription gate. |
 | P1 | Long-session state growth | Full frames retain cumulative command/imported-fact ID arrays. | Move chronology to indexed append-only records and benchmark checkpoint size over long sessions. |
 
-The active repair is now the stable identity and onboarding boundary. A runtime
-must be able to start from released artifacts, discover a provider by identity,
-lower the same Eve surface in browser and headless consumers, execute a typed
-command, observe one receipt, and reconnect without a sibling source checkout.
+The active repair is now the stable identity and live-network boundary. A
+runtime must discover a provider by identity, lower the same Eve surface in
+browser and headless consumers, execute a typed command, observe one receipt,
+and reconnect without application-owned endpoint loops. The artifact-only
+sample is the consumer baseline, not a substitute for that live witness.

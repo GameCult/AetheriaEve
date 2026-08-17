@@ -89,8 +89,6 @@ namespace GameCult.Aetheria.State.Verse
         public const string Health = "gamecult.aetheria.daemon_health.v1";
         public const string CommandBoundary = "gamecult.aetheria.daemon_command_boundary.v1";
         public const string EveCommandAcceptanceStatus = "aetheria.eve_command_acceptance_status.v1";
-        public const string GameSurface = "gamecult.aetheria.daemon_game_surface.v1";
-        public const string EditorSurface = "gamecult.aetheria.daemon_editor_surface.v1";
     }
 
     public static class AetheriaRuntimeProviderIdentity
@@ -328,8 +326,6 @@ namespace GameCult.Aetheria.State.Verse
                     AetheriaRuntimeDaemonSchemas.ZoneRender,
                     AetheriaRuntimeDaemonSchemas.SelectedObject,
                     AetheriaRuntimeDaemonSchemas.Inventory,
-                    AetheriaRuntimeDaemonSchemas.GameSurface,
-                    AetheriaRuntimeDaemonSchemas.EditorSurface,
                     "gamecult.eve.surface.v1",
                     AetheriaRuntimeDaemonSchemas.Command,
                     AetheriaRuntimeDaemonSchemas.StarbridgeScenario,

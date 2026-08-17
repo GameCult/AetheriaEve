@@ -29,14 +29,12 @@
     "aetheria.verse_host_settings.v1",
     "aetheria.runtime_session.v1",
     "aetheria.eve_command_acceptance_status.v1",
-    "aetheria.runtime.daemon.provider_advertisement.v1",
-    "aetheria.runtime.daemon.frame.v1",
-    "aetheria.runtime.daemon.soa_view.v1",
-    "aetheria.runtime.daemon.health.v1",
-    "aetheria.runtime.daemon.command_boundary.v1",
-    "aetheria.runtime.daemon.game_surface.v1",
-    "aetheria.runtime.daemon.editor_surface.v1",
-    "aetheria.runtime.daemon.command.v1",
+    "gamecult.aetheria.daemon_provider_advertisement.v1",
+    "gamecult.aetheria.daemon_frame.v1",
+    "gamecult.aetheria.daemon_soa_view.v1",
+    "gamecult.aetheria.daemon_health.v1",
+    "gamecult.aetheria.daemon_command_boundary.v1",
+    "gamecult.aetheria.daemon_command.v1",
     "aetheria.game_session.v1",
     "gamecult.eve.surface.v1",
     "gamecult.eve.command.v1",
@@ -46,12 +44,12 @@
   "witnesses": [
     {
       "kind": "repo",
-      "ref": "E:\\Projects\\Aetheria",
-      "summary": "Aetheria owns daemon state, Unity/web clients, assets, receipts, and provider scenarios."
+      "ref": ".",
+      "summary": "AetheriaEve owns daemon state, authored surfaces, assets, receipts, and provider scenarios."
     },
     {
       "kind": "source",
-      "ref": "E:\\Projects\\Aetheria\\Aetheria.State\\AetheriaEveSurfaceDocuments.cs",
+      "ref": "Aetheria.State/AetheriaEveSurfaceDocuments.cs",
       "summary": "BuildProviderAdvertisement publishes the live provider advertisement from typed Aetheria state."
     },
     {
@@ -108,12 +106,12 @@
         "projectionKind": "provider-authored-world-surface",
         "stateSchemas": [
           "aetheria.world_state.v1",
-          "aetheria.runtime.daemon.frame.v1",
-          "aetheria.runtime.daemon.soa_view.v1"
+          "gamecult.aetheria.daemon_frame.v1",
+          "gamecult.aetheria.daemon_soa_view.v1"
         ],
         "commandBoundary": "aetheria.daemon.commands",
-        "receiptSchema": "aetheria.eve_command_acceptance_status.v1",
-        "loweringTargets": ["web-reference", "unity-uitoolkit", "unity-scene", "electron-shell", "tui"],
+        "receiptSchema": "gamecult.eve.command_receipt.v1",
+        "compatibleLoweringTargets": ["web-reference", "unity-uitoolkit", "unity-scene", "electron-shell", "tui"],
         "ownership": "provider-owns-world-state-assets-command-acceptance-and-receipts"
       },
       "summary": "Embodied pilot surface shared by Terminus and Starbridge and lowered by generic Eve runtimes."
@@ -132,12 +130,12 @@
         "projectionKind": "provider-authored-world-surface",
         "stateSchemas": [
           "aetheria.world_state.v1",
-          "aetheria.runtime.daemon.frame.v1",
-          "aetheria.runtime.daemon.soa_view.v1"
+          "gamecult.aetheria.daemon_frame.v1",
+          "gamecult.aetheria.daemon_soa_view.v1"
         ],
         "commandBoundary": "aetheria.daemon.commands",
-        "receiptSchema": "aetheria.eve_command_acceptance_status.v1",
-        "loweringTargets": ["web-reference", "unity-uitoolkit", "unity-scene", "electron-shell", "tui"],
+        "receiptSchema": "gamecult.eve.command_receipt.v1",
+        "compatibleLoweringTargets": ["web-reference", "unity-uitoolkit", "unity-scene", "electron-shell", "tui"],
         "ownership": "provider-owns-world-state-assets-command-acceptance-and-receipts"
       },
       "summary": "Strategic Starbridge surface lowered full-screen by Electron or embedded by Unity."
@@ -165,12 +163,12 @@
         "projectionKind": "provider-authored-world-editor-surface",
         "stateSchemas": [
           "aetheria.world_state.v1",
-          "aetheria.runtime.daemon.editor_surface.v1",
-          "aetheria.runtime.daemon.command_boundary.v1"
+          "gamecult.eve.surface.v1",
+          "gamecult.aetheria.daemon_command_boundary.v1"
         ],
         "commandBoundary": "aetheria.daemon.commands",
-        "receiptSchema": "aetheria.eve_command_acceptance_status.v1",
-        "loweringTargets": ["web-reference", "unity-uitoolkit", "electron-shell", "tui"],
+        "receiptSchema": "gamecult.eve.command_receipt.v1",
+        "compatibleLoweringTargets": ["web-reference", "unity-uitoolkit", "electron-shell", "tui"],
         "ownership": "provider-owns-editor-state-assets-command-acceptance-and-receipts"
       }
     }
@@ -217,10 +215,9 @@
       }
     }
   ],
-  "contacts": [
-    {
-      "kind": "repo",
-      "path": "E:\\Projects\\Aetheria"
-    }
-  ]
+  "evidence": {
+    "level": "static-contract-fixture",
+    "limitations": "Does not prove a running provider, command execution, receipts, reconnect, or any lowering target."
+  },
+  "contacts": [{ "kind": "repo", "path": "." }]
 }

@@ -952,8 +952,7 @@ await using (var reopened = await AetheriaStateNode.OpenAsync(statePath, "aether
         !advertisement.Schemas.Contains(AetheriaRuntimeDaemonSchemas.SoaView) ||
         !advertisement.Schemas.Contains(AetheriaRuntimeDaemonSchemas.Health) ||
         !advertisement.Schemas.Contains(AetheriaRuntimeDaemonSchemas.CommandBoundary) ||
-        !advertisement.Schemas.Contains(AetheriaRuntimeDaemonSchemas.GameSurface) ||
-        !advertisement.Schemas.Contains(AetheriaRuntimeDaemonSchemas.EditorSurface) ||
+        !advertisement.Schemas.Contains(EveSurfaceDocument.SchemaId) ||
         !advertisement.Witnesses.Any(witness =>
             witness.Kind == "cultcache" &&
             witness.Reference == statePath) ||

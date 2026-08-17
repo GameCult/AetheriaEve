@@ -3,13 +3,14 @@
   "fixtureId": "aetheria-world",
   "title": "Aetheria Interactive World",
   "pack": "provider",
-  "ownerRepo": "Aetheria",
+  "ownerRepo": "AetheriaEve",
   "surface": {
     "transport": "local-json",
     "path": "conformance/eve/aetheria-world-surface.json"
   },
-  "purpose": "Proves Aetheria can expose daemon-owned interactive world surfaces through Eve without moving game truth into Eve.",
-  "exitCriteria": "Move to Aetheria when generated level state, assets, command receipts, and scenario conformance become product-owned fixtures.",
+  "evidenceLevel": "static-contract-fixture",
+  "purpose": "Describes the daemon-owned interactive world surface contract without moving game truth into Eve.",
+  "limitations": "This fixture proves document shape only. Executable daemon, command, receipt, reconnect, and lowering evidence is verified separately.",
   "asserts": [
     "world.scene3d playable ARPG root",
     "world.entity3d provider-authored entity rows",
@@ -22,5 +23,5 @@
     "provider-advertised world interaction contract",
     "Aetheria style tokens"
   ],
-  "splitTarget": "Aetheria"
+  "owner": "AetheriaEve"
 }

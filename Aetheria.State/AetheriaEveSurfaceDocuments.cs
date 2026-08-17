@@ -242,8 +242,6 @@ public static class AetheriaEveSurfaceDocuments
             AetheriaRuntimeDaemonSchemas.SoaView,
             AetheriaRuntimeDaemonSchemas.Health,
             AetheriaRuntimeDaemonSchemas.CommandBoundary,
-            AetheriaRuntimeDaemonSchemas.GameSurface,
-            AetheriaRuntimeDaemonSchemas.EditorSurface,
             AetheriaRuntimeDaemonSchemas.Command
         };
         var witnesses = new[]

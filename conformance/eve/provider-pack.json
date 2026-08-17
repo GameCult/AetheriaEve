@@ -1,7 +1,7 @@
 {
   "schema": "gamecult.eve.provider_conformance_pack.v1",
   "providerId": "aetheria",
-  "ownerRepo": "Aetheria",
+  "ownerRepo": "AetheriaEve",
   "advertisementPath": "conformance/eve/aetheria.provider-advertisement.json",
   "fixtures": [
     {
@@ -12,6 +12,7 @@
   ],
   "scenarios": ["conformance/eve/aetheria-world-scenario.json"],
   "assets": ["conformance/eve/aetheria.unity-playable-world-asset-manifest.json"],
-  "authority": "Aetheria owns authored surfaces, state, assets, command acceptance, receipts, and scenarios; Eve owns only contracts and conformance policy."
+  "evidenceLevel": "static-contract-fixture",
+  "authority": "AetheriaEve owns authored surfaces, state, assets, command acceptance, receipts, and scenarios; Eve owns only contracts and conformance policy."
 }
 
