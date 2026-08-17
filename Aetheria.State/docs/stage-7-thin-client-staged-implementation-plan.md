@@ -1270,8 +1270,9 @@ Inputs:
 
 - Electron thin client from 7C.
 - Unity thin client from 7D.
-- Stage 6 scoped transport plus the Pilot-candidate/Commander-finality contract;
-  the current peer committed-fact importer is migration evidence to remove.
+- Stage 6 scoped transport plus the Pilot-candidate/Commander-finality contract.
+  The peer committed-fact importer has been deleted and cannot serve as this
+  stage's transport or convergence proof.
 
 Build:
 

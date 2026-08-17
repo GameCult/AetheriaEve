@@ -135,7 +135,7 @@ the network as candidate evidence, never as already committed truth.
 | `AetheriaRuntimeVerseClient` | client-side typed state facade, but registry currently omits newer authority/fact documents | canonical thin client facade over the same typed Verse documents clients need |
 | `AetheriaRuntimeAuthorityRouter` | pure policy decision engine | keep pure, allocation-light, topology-free |
 | `AetheriaRuntimeDaemonTickRunner` | simulation tick and operation execution | only place local commands mutate sim state |
-| `AetheriaRuntimeCommittedFactImporter` | replays trusted remote facts through policy gate | delete or quarantine; replace with Pilot candidate ingestion, selection receipts, and Commander correction/replay |
+| retired peer committed-fact lane | deleted from daemon/runtime/authority smoke; removed CLI options reject explicitly | replace with Pilot candidate ingestion, selection receipts, and Commander correction/replay |
 | `AetheriaVerseReplica.SyncSnapshotAsync` | broad snapshot helper used by smoke tests | diagnostic/scoped transport verifier, not gameplay architecture |
 | RTS web/Electron client | map renderer plus command sender | thin local Verse client using same state loop as Unity |
 | Unity shell | still has legacy gameplay shell pressure | input/rendering only, local Verse command submitter and state renderer |
@@ -253,8 +253,12 @@ Known mutation points:
 
 - `AetheriaRuntimeDaemonOperations.Execute`;
 - `AetheriaRuntimeDaemonSimulation.Step`;
-- fact import through `AetheriaRuntimeCommittedFactImporter`;
 - any Unity-side gameplay mutation found by follow-up audit.
+
+Deleted mutation point:
+
+- peer committed-fact import and replay through
+  `AetheriaRuntimeCommittedFactImporter`.
 
 Demolition target:
 
@@ -481,9 +485,9 @@ Notes:
 - The authority smoke now waits separately for frame receipt visibility and
   committed fact visibility.
 - Legacy evidence only: scoped typed fetch proved live daemon transport without
-  opening a heavyweight replica node on every tick. Asking peers for committed
-  facts does not satisfy corrected Stage 6 and must leave the gameplay mutation
-  path; Pilot output must arrive as pre-finality candidate evidence.
+  opening a heavyweight replica node on every tick. The peer committed-fact
+  mutation lane is now deleted. Pilot output must arrive as pre-finality
+  candidate evidence when the corrected Stage 6 protocol is built.
 
 ## Stage 5: Candidate And Final Fact Publication
 
@@ -529,15 +533,16 @@ Exit criteria:
 
 Verification:
 
-- Current evidence, not target proof: `Aetheria.State.AuthoritySmoke` can observe
-  applied/rejected command facts between peers. The corrected proof must observe
-  Pilot candidate publication, Commander selection/replay, and one finalized
-  Commander fact.
+- Current evidence, not target proof: the authority smoke boots a real daemon
+  through canonical Terminus run bootstrap and observes provider-owned state.
+  The corrected proof must observe Pilot candidate publication, Commander
+  selection/replay, and one finalized Commander fact.
 
 ## Stage 6: Live Pilot Candidate Selection And Commander Finality
 
-Status: target corrected; the implemented peer committed-fact importer is an
-obsolete convergence experiment and must not remain a gameplay mutation path.
+Status: target corrected; the obsolete peer committed-fact importer, CLI route,
+frame counters, and convergence smokes are deleted. Candidate selection and
+Commander correction/replay remain to build.
 
 Owner: Commander candidate selector/finality loop.
 
@@ -563,9 +568,9 @@ Pilot candidate -> jurisdiction/validation gate -> typed comparison
 
 Migration evidence:
 
-- Scoped typed fetch and two-daemon process harnesses are reusable.
-- `AetheriaRuntimeCommittedFactImporter`, import counters, and peer facts that
-  mutate local state encode the wrong finality model. Replace them with
+- Scoped typed fetch remains reusable transport evidence.
+- The old two-daemon convergence harness encoded two committers and was
+  deleted with the importer. A new process witness must be built around
   candidate evidence, selection receipts, and one Commander-owned log.
 
 Demolition target:
@@ -1963,10 +1968,10 @@ npm run build
 The focused Stage 4/5 verifier passes: live daemons can expose scoped frames
 and committed facts to an external verifier.
 
-The old Stage 6 peer committed-fact lane passes as migration evidence, but it no
-longer satisfies the target. Starbridge requires Pilot candidates to enter
-before Commander finality, validated mismatches to correct/replay Commander
-provisional state, and one Commander-owned canonical log.
+The old Stage 6 peer committed-fact lane is deleted. Starbridge now has no live
+Pilot correction path until Pilot candidates enter before Commander finality,
+validated mismatches correct/replay Commander provisional state, and one
+Commander-owned canonical log records the result.
 
 The current known risk is Stage 7 client parity. RTS/Electron no longer exposes
 public generic `command` or `viewport` APIs, the TS contract metadata is

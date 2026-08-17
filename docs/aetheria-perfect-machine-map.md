@@ -876,30 +876,36 @@ finality, replay, and negative authority invariants.
 
 ## Current Authority Map
 
-### Direct CultMesh Session And Peer Transport
+### CultMesh Session And Starbridge Finality
 
-- Owner: each Aetheria daemon owns its advertised client CultMesh endpoint and
-  its explicitly configured direct daemon-peer endpoints.
-- Inputs: typed client sessions, commands, snapshot requests, committed facts,
-  and optional `--peer-cultmesh-endpoint` routes. Odin publication is disabled
-  unless an operator explicitly supplies `--odin-cultmesh-uri`.
-- Outputs: typed state/surface snapshots, receipts, provider-owned assets, and
-  policy-filtered committed-fact convergence between directly connected
-  daemons.
-- Derived state: discovery catalogs and external provider indexes may mirror
-  advertisements, but they do not grant authority or mediate an Aetheria
-  session.
-- Forbidden writers: Odin, Eve lowerers, Unity, and remote peers cannot apply a
-  fact directly. Imported facts pass the daemon authority policy and execute
-  through the daemon's required Ymir world-physics owner.
-- Shared paths: local commands and accepted remote facts enter the same daemon
-  command transaction and receipt chronology.
-- Cut line: the rejection that forced `--peer-cultmesh-endpoint` through Odin
-  is deleted. Direct CultMesh is the Aetheria path; Odin is optional external
-  indexing only.
-- Verification layer: `Aetheria.State.AuthoritySmoke` boots real child daemons,
-  connects replicas directly, proves accepted/rejected policy outcomes, and
-  proves committed-fact convergence with production Ymir physics injected.
+- Owner: the Commander daemon owns the Starbridge simulation schedule,
+  canonical selection/finality, persistence, and its advertised CultMesh
+  endpoint. Pilot daemons may eventually publish typed candidate evidence for
+  their current jurisdiction; they never publish already-final gameplay truth.
+- Inputs: typed client sessions, operations, snapshot requests, and—once the
+  corrected protocol exists—Pilot candidates for Commander-open fact slots.
+  Odin publication remains optional discovery/indexing through
+  `--odin-cultmesh-uri`; it does not decide gameplay finality.
+- Outputs: typed state/surface snapshots, operation receipts, provider-owned
+  assets, candidate/selection receipts, and one Commander-finalized fact log.
+- Derived state: discovery catalogs, external provider indexes, Pilot caches,
+  candidate evidence, and rendered projections are not canonical gameplay.
+- Forbidden writers: Odin, Eve lowerers, Unity, Pilot peers, imported facts,
+  caches, and replicas cannot mutate the Commander log. The retired
+  `--peer-cultmesh-endpoint` option is rejected rather than restoring peer fact
+  import.
+- Shared paths: player operations, AI policies, replay, reconnect, and future
+  Pilot candidates enter typed gates before Commander finality. Finalized facts
+  alone may affect gameplay checkpoints, score, Hangar settlement, or external
+  effects.
+- Cut line: `AetheriaRuntimeCommittedFactImporter`, its frame counters, direct
+  peer routes, and the two-writer convergence smokes are deleted. The next
+  transport cut is pre-finality candidate evidence, not another replica writer.
+- Verification layer: `Aetheria.State.AuthoritySmoke` boots a real child daemon
+  through canonical Terminus run bootstrap and proves provider-owned typed
+  state. The missing Starbridge authority witness must prove Pilot-wins
+  mismatch, Commander replay/finality, late-candidate rejection, restart, and
+  one durable canonical log.
 
 ### Daemon Sector-Map Surface
 

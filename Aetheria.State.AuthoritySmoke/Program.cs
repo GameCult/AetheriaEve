@@ -33,9 +33,6 @@ internal sealed class AuthoritySmokeChecks
         await AetheriaClientStateDocumentsProjectAndSubmitAsync().ConfigureAwait(false);
         await DaemonOncePublishesStarbridgeSessionFactsAsync().ConfigureAwait(false);
         await SamePolicyDocumentCanBeLoadedByTwoNodesAsync().ConfigureAwait(false);
-        await TwoDaemonProcessesApplyDelegatedPolicyAsync().ConfigureAwait(false);
-        await ConcurrentDaemonsPublishRemoteFramesToLocalReplicasAsync().ConfigureAwait(false);
-        TrustedCommittedFactsConvergeLocalRuns();
     }
 
     private static void DefaultTrustedPolicyAcceptsCommand()
@@ -730,7 +727,11 @@ internal sealed class AuthoritySmokeChecks
         const string runtimeId = "starbridge-daemon-smoke";
 
         await SeedCanonicalCatalogAsync(statePath, runtimeId).ConfigureAwait(false);
-        await RunDaemonOnceAsync(statePath, runtimeId, clientCultMeshPort).ConfigureAwait(false);
+        await RunDaemonOnceAsync(
+            statePath,
+            runtimeId,
+            clientCultMeshPort,
+            useTerminusFixture: true).ConfigureAwait(false);
 
         using var client = await AetheriaClient
             .OpenAsync(statePath, "starbridge-smoke-client", sessionId: "authority-smoke", pullOnOpen: true)
@@ -785,358 +786,6 @@ internal sealed class AuthoritySmokeChecks
         RequireEqual(policy.Rules.Length, commanderPolicy.Rules.Length, "commander loaded rule count");
     }
 
-    private static async Task TwoDaemonProcessesApplyDelegatedPolicyAsync()
-    {
-        var smokeId = Guid.NewGuid().ToString("N");
-        var policy = CoopPolicy();
-        var ravenKey = EntityKey("coop-smoke", 0, 0);
-        var hostileKey = EntityKey("coop-smoke", 0, 1);
-
-        var ravenByRaven = MovementCommand("pilot-client", ravenKey, directionX: 1, directionY: 0, magnitude: 1);
-        var hostileByRaven = MovementCommand("pilot-client", hostileKey, directionX: 0, directionY: 1, magnitude: 1);
-        var ravenStatePath = Path.Combine(Path.GetTempPath(), $"aetheria-authority-raven-daemon-{smokeId}.cc");
-        await SeedDaemonStateAsync(
-            ravenStatePath,
-            "pilot-local",
-            policy,
-            [ravenByRaven, hostileByRaven]).ConfigureAwait(false);
-        await RunDaemonOnceAsync(ravenStatePath, "pilot-local", clientCultMeshPort: 41076).ConfigureAwait(false);
-        var ravenFrame = await ReadPublishedFrameAsync(ravenStatePath, "pilot-local").ConfigureAwait(false);
-
-        Require(ravenFrame.AppliedCommandIds.Contains(ravenByRaven.CommandId), "raven daemon should apply Raven-authored Raven movement");
-        Require(ravenFrame.RejectedCommandIds.Contains(hostileByRaven.CommandId), "raven daemon should reject Raven-authored hostile movement");
-        Require(ravenFrame.AccountedCommandIds.Contains(ravenByRaven.CommandId), "raven daemon should account applied command");
-        Require(ravenFrame.AccountedCommandIds.Contains(hostileByRaven.CommandId), "raven daemon should account rejected command");
-
-        var ravenByCommander = MovementCommand("commander-client", ravenKey, directionX: -1, directionY: 0, magnitude: 1);
-        var hostileByCommander = MovementCommand("commander-client", hostileKey, directionX: 0, directionY: -1, magnitude: 1);
-        var commanderStatePath = Path.Combine(Path.GetTempPath(), $"aetheria-authority-commander-daemon-{smokeId}.cc");
-        await SeedDaemonStateAsync(
-            commanderStatePath,
-            "commander-local",
-            policy,
-            [ravenByCommander, hostileByCommander]).ConfigureAwait(false);
-        await RunDaemonOnceAsync(commanderStatePath, "commander-local", clientCultMeshPort: 41077).ConfigureAwait(false);
-        var commanderFrame = await ReadPublishedFrameAsync(commanderStatePath, "commander-local").ConfigureAwait(false);
-
-        Require(commanderFrame.RejectedCommandIds.Contains(ravenByCommander.CommandId), "commander daemon should reject Commander-authored Raven movement");
-        Require(commanderFrame.AppliedCommandIds.Contains(hostileByCommander.CommandId), "commander daemon should apply Commander-authored hostile movement");
-        Require(commanderFrame.AccountedCommandIds.Contains(ravenByCommander.CommandId), "commander daemon should account rejected command");
-        Require(commanderFrame.AccountedCommandIds.Contains(hostileByCommander.CommandId), "commander daemon should account applied command");
-    }
-
-    private static async Task ConcurrentDaemonsPublishRemoteFramesToLocalReplicasAsync()
-    {
-        var smokeId = Guid.NewGuid().ToString("N");
-        var policy = CoopPolicy();
-        var ravenKey = EntityKey("coop-smoke", 0, 0);
-        var hostileKey = EntityKey("coop-smoke", 0, 1);
-        var ravenStatePath = Path.Combine(Path.GetTempPath(), $"aetheria-authority-raven-live-{smokeId}.cc");
-        var commanderStatePath = Path.Combine(Path.GetTempPath(), $"aetheria-authority-commander-live-{smokeId}.cc");
-        var ravenReplicaPath = Path.Combine(Path.GetTempPath(), $"aetheria-authority-raven-replica-{smokeId}.cc");
-        var commanderReplicaPath = Path.Combine(Path.GetTempPath(), $"aetheria-authority-commander-replica-{smokeId}.cc");
-        var ravenPort = GetFreeUdpPort();
-        var commanderPort = GetFreeUdpPort();
-
-        var ravenByRaven = MovementCommand("pilot-client", ravenKey, directionX: 1, directionY: 0, magnitude: 1);
-        var hostileByRaven = MovementCommand("pilot-client", hostileKey, directionX: 0, directionY: 1, magnitude: 1);
-        await SeedDaemonStateAsync(
-            ravenStatePath,
-            "pilot-local",
-            policy,
-            [ravenByRaven, hostileByRaven]).ConfigureAwait(false);
-
-        var ravenByCommander = MovementCommand("commander-client", ravenKey, directionX: -1, directionY: 0, magnitude: 1);
-        var hostileByCommander = MovementCommand("commander-client", hostileKey, directionX: 0, directionY: -1, magnitude: 1);
-        await SeedDaemonStateAsync(
-            commanderStatePath,
-            "commander-local",
-            policy,
-            [ravenByCommander, hostileByCommander]).ConfigureAwait(false);
-
-        using var ravenDaemon = StartDaemonProcess(
-            ravenStatePath,
-            "pilot-local",
-            ravenPort,
-            once: false,
-            peerEndpoints: [$"rudp://127.0.0.1:{commanderPort}"]);
-        using var commanderDaemon = StartDaemonProcess(
-            commanderStatePath,
-            "commander-local",
-            commanderPort,
-            once: false,
-            peerEndpoints: [$"rudp://127.0.0.1:{ravenPort}"]);
-        try
-        {
-            var ravenRemoteFrame = await WaitForReplicaFrameAsync(
-                $"rudp://127.0.0.1:{ravenPort}",
-                commanderReplicaPath,
-                "commander-observes-raven",
-                [ravenDaemon, commanderDaemon],
-                frame =>
-                    string.Equals(frame.DaemonId, "pilot-local", StringComparison.Ordinal) &&
-                    frame.CumulativeAppliedCommandIds.Contains(ravenByRaven.CommandId) &&
-                    frame.CumulativeRejectedCommandIds.Contains(hostileByRaven.CommandId),
-                "Raven frame with Raven movement applied and hostile movement rejected").ConfigureAwait(false);
-            var commanderRemoteFrame = await WaitForReplicaFrameAsync(
-                $"rudp://127.0.0.1:{commanderPort}",
-                ravenReplicaPath,
-                "raven-observes-commander",
-                [ravenDaemon, commanderDaemon],
-                frame =>
-                    string.Equals(frame.DaemonId, "commander-local", StringComparison.Ordinal) &&
-                    frame.CumulativeAppliedCommandIds.Contains(hostileByCommander.CommandId) &&
-                    frame.CumulativeRejectedCommandIds.Contains(ravenByCommander.CommandId),
-                "Commander frame with hostile movement applied and Raven movement rejected").ConfigureAwait(false);
-
-            RequireEqual("pilot-local", ravenRemoteFrame.DaemonId, "Commander local replica should observe Raven daemon id");
-            Require(ravenRemoteFrame.CumulativeAppliedCommandIds.Contains(ravenByRaven.CommandId), "Commander local replica should observe Raven-applied Raven command");
-            Require(ravenRemoteFrame.CumulativeRejectedCommandIds.Contains(hostileByRaven.CommandId), "Commander local replica should observe Raven rejection receipt");
-            var commanderObservedRavenFacts = await WaitForReplicaFactsAsync(
-                $"rudp://127.0.0.1:{ravenPort}",
-                commanderReplicaPath,
-                "commander-observes-raven-facts",
-                [ravenDaemon, commanderDaemon],
-                facts =>
-                    facts.Any(fact =>
-                        string.Equals(fact.SourceDaemonId, "pilot-local", StringComparison.Ordinal) &&
-                        string.Equals(fact.CommandId, ravenByRaven.CommandId, StringComparison.Ordinal) &&
-                        string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Applied, StringComparison.Ordinal)) &&
-                    facts.Any(fact =>
-                        string.Equals(fact.SourceDaemonId, "pilot-local", StringComparison.Ordinal) &&
-                        string.Equals(fact.CommandId, hostileByRaven.CommandId, StringComparison.Ordinal) &&
-                        string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Rejected, StringComparison.Ordinal)),
-                "Raven applied and rejected committed facts").ConfigureAwait(false);
-            Require(
-                commanderObservedRavenFacts.Any(fact =>
-                    string.Equals(fact.SourceDaemonId, "pilot-local", StringComparison.Ordinal) &&
-                    string.Equals(fact.CommandId, ravenByRaven.CommandId, StringComparison.Ordinal) &&
-                    string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Applied, StringComparison.Ordinal)),
-                "Commander local replica should observe Raven committed movement fact");
-            Require(
-                commanderObservedRavenFacts.Any(fact =>
-                    string.Equals(fact.SourceDaemonId, "pilot-local", StringComparison.Ordinal) &&
-                    string.Equals(fact.CommandId, hostileByRaven.CommandId, StringComparison.Ordinal) &&
-                    string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Rejected, StringComparison.Ordinal)),
-                "Commander local replica should observe Raven policy rejection fact");
-
-            RequireEqual("commander-local", commanderRemoteFrame.DaemonId, "Raven local replica should observe Commander daemon id");
-            Require(commanderRemoteFrame.CumulativeAppliedCommandIds.Contains(hostileByCommander.CommandId), "Raven local replica should observe Commander-applied hostile command");
-            Require(commanderRemoteFrame.CumulativeRejectedCommandIds.Contains(ravenByCommander.CommandId), "Raven local replica should observe Commander rejection receipt");
-            var ravenObservedCommanderFacts = await WaitForReplicaFactsAsync(
-                $"rudp://127.0.0.1:{commanderPort}",
-                ravenReplicaPath,
-                "raven-observes-commander-facts",
-                [ravenDaemon, commanderDaemon],
-                facts =>
-                    facts.Any(fact =>
-                        string.Equals(fact.SourceDaemonId, "commander-local", StringComparison.Ordinal) &&
-                        string.Equals(fact.CommandId, hostileByCommander.CommandId, StringComparison.Ordinal) &&
-                        string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Applied, StringComparison.Ordinal)) &&
-                    facts.Any(fact =>
-                        string.Equals(fact.SourceDaemonId, "commander-local", StringComparison.Ordinal) &&
-                        string.Equals(fact.CommandId, ravenByCommander.CommandId, StringComparison.Ordinal) &&
-                        string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Rejected, StringComparison.Ordinal)),
-                "Commander applied and rejected committed facts").ConfigureAwait(false);
-            Require(
-                ravenObservedCommanderFacts.Any(fact =>
-                    string.Equals(fact.SourceDaemonId, "commander-local", StringComparison.Ordinal) &&
-                    string.Equals(fact.CommandId, hostileByCommander.CommandId, StringComparison.Ordinal) &&
-                    string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Applied, StringComparison.Ordinal)),
-                "Raven local replica should observe Commander committed hostile fact");
-            Require(
-                ravenObservedCommanderFacts.Any(fact =>
-                    string.Equals(fact.SourceDaemonId, "commander-local", StringComparison.Ordinal) &&
-                    string.Equals(fact.CommandId, ravenByCommander.CommandId, StringComparison.Ordinal) &&
-                    string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Rejected, StringComparison.Ordinal)),
-                "Raven local replica should observe Commander policy rejection fact");
-
-            var ravenMovementFactId = commanderObservedRavenFacts.First(fact =>
-                string.Equals(fact.SourceDaemonId, "pilot-local", StringComparison.Ordinal) &&
-                string.Equals(fact.CommandId, ravenByRaven.CommandId, StringComparison.Ordinal) &&
-                string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Applied, StringComparison.Ordinal)).FactId;
-            var commanderHostileFactId = ravenObservedCommanderFacts.First(fact =>
-                string.Equals(fact.SourceDaemonId, "commander-local", StringComparison.Ordinal) &&
-                string.Equals(fact.CommandId, hostileByCommander.CommandId, StringComparison.Ordinal) &&
-                string.Equals(fact.Outcome, AetheriaRuntimeCommandFactOutcomes.Applied, StringComparison.Ordinal)).FactId;
-
-            var commanderConvergedFrame = await WaitForLocalFrameAsync(
-                commanderStatePath,
-                "commander-local-converges-raven",
-                [ravenDaemon, commanderDaemon],
-                frame =>
-                    frame.CumulativeImportedFactIds.Contains(ravenMovementFactId) &&
-                    Entity(frame.Run, ravenKey).PositionX > 0,
-                "Commander live daemon imports Raven movement fact and moves Raven locally").ConfigureAwait(false);
-            Require(
-                commanderConvergedFrame.CumulativeImportedFactIds.Any(),
-                "Commander live daemon should record imported remote fact ids");
-
-            var ravenConvergedFrame = await WaitForLocalFrameAsync(
-                ravenStatePath,
-                "pilot-local-converges-commander",
-                [ravenDaemon, commanderDaemon],
-                frame =>
-                    frame.CumulativeImportedFactIds.Contains(commanderHostileFactId) &&
-                    Entity(frame.Run, hostileKey).PositionZ < 0,
-                "Raven live daemon imports Commander hostile movement fact and moves hostile locally").ConfigureAwait(false);
-            Require(
-                ravenConvergedFrame.CumulativeImportedFactIds.Any(),
-                "Raven live daemon should record imported remote fact ids");
-        }
-        finally
-        {
-            StopProcess(ravenDaemon);
-            StopProcess(commanderDaemon);
-        }
-    }
-
-    private static async Task<IReadOnlyList<AetheriaRuntimeCommittedCommandFactDocument>> ReadFactsAsync(
-        string statePath,
-        string runtimeId)
-    {
-        await using var node = await AetheriaStateNode.OpenAsync(
-            statePath,
-            runtimeId,
-            startServer: false,
-            enableDurableShardLogs: false).ConfigureAwait(false);
-        return node.Documents<AetheriaRuntimeCommittedCommandFactDocument>()
-            .OrderBy(fact => fact.CommittedAtUtc ?? "", StringComparer.Ordinal)
-            .ThenBy(fact => fact.FactId ?? "", StringComparer.Ordinal)
-            .ToArray();
-    }
-
-    private static void TrustedCommittedFactsConvergeLocalRuns()
-    {
-        using var physics = new AetheriaYmirWorldPhysics();
-        var smokeId = Guid.NewGuid().ToString("N");
-        var policy = CoopPolicyWithMetadata();
-        var ravenKey = EntityKey("coop-smoke", 0, 0);
-        var hostileKey = EntityKey("coop-smoke", 0, 1);
-
-        var ravenMovement = MovementCommand("pilot-client", ravenKey, directionX: 1, directionY: 0, magnitude: 1);
-        var ravenSourceFrame = TickWithPolicy(
-            "pilot-local",
-            InitialCoopFactRun(),
-            policy,
-            [ravenMovement]);
-        var ravenMovementFact = AetheriaRuntimeCommittedCommandFactDocument.FromAppliedCommand(
-            ravenSourceFrame,
-            ravenMovement,
-            policy.VerseId);
-
-        var commanderImport = AetheriaRuntimeCommittedFactImporter.ImportIntoFrame(
-            Path.Combine(Path.GetTempPath(), $"aetheria-authority-facts-commander-{smokeId}.cc"),
-            AetheriaRuntimeDaemonFrameDocument.Create(
-                InitialCoopFactRun(),
-                "commander-local",
-                "authority-smoke",
-                frameId: 0,
-                simulationTimeSeconds: 0,
-                fixedDeltaSeconds: 0.02),
-            [ravenMovementFact],
-            policy,
-            leases: null,
-            localRuntimeId: "commander-local",
-            daemonId: "commander-local",
-            sessionId: "authority-smoke",
-            verseId: policy.VerseId,
-            worldPhysics: physics);
-
-        Require(commanderImport.AcceptedFactIds.Contains(ravenMovementFact.FactId), "Commander should accept Raven's committed Raven movement fact");
-        Require(!commanderImport.RejectedFactIds.Contains(ravenMovementFact.FactId), "Commander should not reject Raven's authorized movement fact");
-        Require(Entity(commanderImport.Run, ravenKey).PositionX > 0, "Commander local run should converge Raven movement into local state");
-
-        var hostileRename = MetadataNameCommand("commander-client", hostileKey, "Commander Marked Hostile");
-        var commanderSourceFrame = TickWithPolicy(
-            "commander-local",
-            InitialCoopFactRun(),
-            policy,
-            [hostileRename]);
-        var hostileRenameFact = AetheriaRuntimeCommittedCommandFactDocument.FromAppliedCommand(
-            commanderSourceFrame,
-            hostileRename,
-            policy.VerseId);
-
-        var ravenImport = AetheriaRuntimeCommittedFactImporter.ImportIntoFrame(
-            Path.Combine(Path.GetTempPath(), $"aetheria-authority-facts-raven-{smokeId}.cc"),
-            AetheriaRuntimeDaemonFrameDocument.Create(
-                InitialCoopFactRun(),
-                "pilot-local",
-                "authority-smoke",
-                frameId: 0,
-                simulationTimeSeconds: 0,
-                fixedDeltaSeconds: 0.02),
-            [hostileRenameFact],
-            policy,
-            leases: null,
-            localRuntimeId: "pilot-local",
-            daemonId: "pilot-local",
-            sessionId: "authority-smoke",
-            verseId: policy.VerseId,
-            worldPhysics: physics);
-
-        Require(ravenImport.AcceptedFactIds.Contains(hostileRenameFact.FactId), "Raven should accept Commander's hostile metadata fact");
-        RequireEqual("Commander Marked Hostile", Entity(ravenImport.Run, hostileKey).Name, "Raven local run should converge Commander hostile metadata into local state");
-
-        var unauthorizedRename = MetadataNameCommand("pilot-client", hostileKey, "Raven Should Not Own This");
-        var unauthorizedFact = AetheriaRuntimeCommittedCommandFactDocument.FromAppliedCommand(
-            ravenSourceFrame,
-            unauthorizedRename,
-            policy.VerseId);
-        var rejectedImport = AetheriaRuntimeCommittedFactImporter.ImportIntoFrame(
-            Path.Combine(Path.GetTempPath(), $"aetheria-authority-facts-rejected-{smokeId}.cc"),
-            AetheriaRuntimeDaemonFrameDocument.Create(
-                InitialCoopFactRun(),
-                "commander-local",
-                "authority-smoke",
-                frameId: 0,
-                simulationTimeSeconds: 0,
-                fixedDeltaSeconds: 0.02),
-            [unauthorizedFact],
-            policy,
-            leases: null,
-            localRuntimeId: "commander-local",
-            daemonId: "commander-local",
-            sessionId: "authority-smoke",
-            verseId: policy.VerseId,
-            worldPhysics: physics);
-
-        Require(rejectedImport.RejectedFactIds.Contains(unauthorizedFact.FactId), "Commander should reject Raven-authored hostile metadata fact");
-        RequireEqual("Commander Hostile", Entity(rejectedImport.Run, hostileKey).Name, "Rejected facts should not mutate local state");
-    }
-
-    private static async Task SeedDaemonStateAsync(
-        string statePath,
-        string runtimeId,
-        AetheriaRuntimeVerseAuthorityPolicyDocument policy,
-        IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> commands)
-    {
-        await SeedCanonicalCatalogAsync(statePath, runtimeId).ConfigureAwait(false);
-        await using var node = await AetheriaStateNode.OpenAsync(
-            statePath,
-            runtimeId,
-            startServer: false,
-            enableDurableShardLogs: false).ConfigureAwait(false);
-
-        await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
-            .ReplaceAsync(policy)
-            .ConfigureAwait(false);
-        foreach (var command in commands)
-            await node.SubmitDaemonCommandAsync(command).ConfigureAwait(false);
-        await node.FlushAsync().ConfigureAwait(false);
-
-        await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
-            .ReplaceAsync(AetheriaRuntimeDaemonFrameDocument.Create(
-                InitialCoopRun(),
-                runtimeId,
-                "authority-smoke",
-                frameId: -1,
-                simulationTimeSeconds: 0,
-                fixedDeltaSeconds: 0.02))
-            .ConfigureAwait(false);
-        await node.FlushAsync().ConfigureAwait(false);
-    }
 
     private static async Task SeedCanonicalCatalogAsync(string statePath, string runtimeId)
     {
@@ -1309,10 +958,12 @@ internal sealed class AuthoritySmokeChecks
         [
             Hull("authority-smoke-ship", "Ship"),
             Hull("authority-smoke-station", "Station"),
+            Hull("82efc0a5-1ba5-4ff3-a281-b2e6e247521d", "Station"),
             Item("authority-smoke-cockpit", AetheriaRuntimeItemCategories.Gear, "ControlModule", "Cockpit"),
             Item("authority-smoke-turret-controller", AetheriaRuntimeItemCategories.Gear, "ControlModule", "TurretController"),
             cargo,
             Item("authority-smoke-docking", AetheriaRuntimeItemCategories.DockingBay, "Internal"),
+            Item("3e930a2c-ac72-4385-98aa-1c5b0b90db46", AetheriaRuntimeItemCategories.DockingBay, "Internal"),
             Item("authority-smoke-reactor", AetheriaRuntimeItemCategories.Gear, "Internal", "Reactor"),
             Item("authority-smoke-capacitor", AetheriaRuntimeItemCategories.Gear, "Internal", "Capacitor")
         ];
@@ -1321,9 +972,15 @@ internal sealed class AuthoritySmokeChecks
     private static async Task RunDaemonOnceAsync(
         string statePath,
         string runtimeId,
-        int clientCultMeshPort)
+        int clientCultMeshPort,
+        bool useTerminusFixture = false)
     {
-        using var process = StartDaemonProcess(statePath, runtimeId, clientCultMeshPort, once: true);
+        using var process = StartDaemonProcess(
+            statePath,
+            runtimeId,
+            clientCultMeshPort,
+            once: true,
+            useTerminusFixture);
         await WaitForProcessSuccessAsync(process, runtimeId, TimeSpan.FromSeconds(90)).ConfigureAwait(false);
     }
 
@@ -1331,17 +988,8 @@ internal sealed class AuthoritySmokeChecks
         string statePath,
         string runtimeId,
         int clientCultMeshPort,
-        bool once)
-    {
-        return StartDaemonProcess(statePath, runtimeId, clientCultMeshPort, once, peerEndpoints: null);
-    }
-
-    private static Process StartDaemonProcess(
-        string statePath,
-        string runtimeId,
-        int clientCultMeshPort,
         bool once,
-        IReadOnlyList<string>? peerEndpoints)
+        bool useTerminusFixture = false)
     {
         var repoRoot = Directory.GetCurrentDirectory();
         var executablePath = Path.Combine(
@@ -1383,8 +1031,7 @@ internal sealed class AuthoritySmokeChecks
             clientCultMeshPort.ToString(),
             "--api-publication-interval-ms",
             "50",
-            string.Join(" ", (peerEndpoints ?? Array.Empty<string>())
-                .Select(endpoint => "--peer-cultmesh-endpoint " + Quote(endpoint))),
+            useTerminusFixture ? "--terminus-scenario standard" : "",
             once ? "--once" : "");
         var startInfo = executableExists
             ? new ProcessStartInfo(executablePath, arguments)
@@ -1485,164 +1132,6 @@ internal sealed class AuthoritySmokeChecks
         }
     }
 
-    private static async Task<AetheriaRuntimeDaemonFrameDocument> WaitForReplicaFrameAsync(
-        string endpoint,
-        string replicaPath,
-        string runtimeId,
-        IReadOnlyList<Process> childProcesses,
-        Func<AetheriaRuntimeDaemonFrameDocument, bool> isReady,
-        string expectedFrame)
-    {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(45);
-        Exception? lastError = null;
-        AetheriaRuntimeDaemonFrameDocument? lastFrame = null;
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            try
-            {
-                await AetheriaVerseReplica.SyncScopedSnapshotAsync(
-                    replicaPath,
-                    endpoint,
-                    runtimeId,
-                    schemaIds:
-                    [
-                        AetheriaRuntimeDaemonSchemas.Frame,
-                        AetheriaRuntimeDaemonSchemas.CommittedCommandFact
-                    ]).ConfigureAwait(false);
-                await using var node = await AetheriaStateNode.OpenAsync(
-                    replicaPath,
-                    runtimeId,
-                    startServer: false,
-                    enableDurableShardLogs: false).ConfigureAwait(false);
-                var frame = await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest).ReadAsync().ConfigureAwait(false);
-                if (frame != null)
-                {
-                    lastFrame = frame;
-                }
-
-                if (frame != null && frame.FrameId >= 0 && isReady(frame))
-                    return frame;
-            }
-            catch (Exception ex)
-            {
-                lastError = ex;
-            }
-
-            await Task.Delay(250).ConfigureAwait(false);
-        }
-
-        throw new TimeoutException(
-            $"Timed out waiting for replica frame from {endpoint}. Expected {expectedFrame}." +
-            $" Requested schemas=[{AetheriaRuntimeDaemonSchemas.Frame},{AetheriaRuntimeDaemonSchemas.CommittedCommandFact}]." +
-            (lastFrame == null ? "" : $" Last frame: daemon={lastFrame.DaemonId}, frame={lastFrame.FrameId}, applied=[{string.Join(",", lastFrame.AppliedCommandIds)}], rejected=[{string.Join(",", lastFrame.RejectedCommandIds)}], cumulativeApplied=[{string.Join(",", lastFrame.CumulativeAppliedCommandIds)}], cumulativeRejected=[{string.Join(",", lastFrame.CumulativeRejectedCommandIds)}].") +
-            ProcessDiagnostics(childProcesses) +
-            (lastError == null ? "" : $" Last error: {lastError.GetType().Name}: {lastError.Message}"));
-    }
-
-    private static async Task<IReadOnlyList<AetheriaRuntimeCommittedCommandFactDocument>> WaitForReplicaFactsAsync(
-        string endpoint,
-        string replicaPath,
-        string runtimeId,
-        IReadOnlyList<Process> childProcesses,
-        Func<IReadOnlyList<AetheriaRuntimeCommittedCommandFactDocument>, bool> isReady,
-        string expectedFacts)
-    {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(45);
-        Exception? lastError = null;
-        IReadOnlyList<AetheriaRuntimeCommittedCommandFactDocument> lastFacts = Array.Empty<AetheriaRuntimeCommittedCommandFactDocument>();
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            try
-            {
-                await AetheriaVerseReplica.SyncScopedSnapshotAsync(
-                    replicaPath,
-                    endpoint,
-                    runtimeId,
-                    schemaIds:
-                    [
-                        AetheriaRuntimeDaemonSchemas.Frame,
-                        AetheriaRuntimeDaemonSchemas.CommittedCommandFact
-                    ]).ConfigureAwait(false);
-                var facts = await ReadFactsAsync(replicaPath, runtimeId).ConfigureAwait(false);
-                lastFacts = facts;
-                if (isReady(facts))
-                    return facts;
-            }
-            catch (Exception ex)
-            {
-                lastError = ex;
-            }
-
-            await Task.Delay(250).ConfigureAwait(false);
-        }
-
-        throw new TimeoutException(
-            $"Timed out waiting for committed facts from {endpoint}. Expected {expectedFacts}." +
-            $" Requested schemas=[{AetheriaRuntimeDaemonSchemas.Frame},{AetheriaRuntimeDaemonSchemas.CommittedCommandFact}]." +
-            $" Last facts=[{string.Join(",", lastFacts.Select(fact => $"{fact.SourceDaemonId}:{fact.CommandId}:{fact.Outcome}"))}]." +
-            ProcessDiagnostics(childProcesses) +
-            (lastError == null ? "" : $" Last error: {lastError.GetType().Name}: {lastError.Message}"));
-    }
-
-    private static async Task<AetheriaRuntimeDaemonFrameDocument> WaitForLocalFrameAsync(
-        string statePath,
-        string runtimeId,
-        IReadOnlyList<Process> childProcesses,
-        Func<AetheriaRuntimeDaemonFrameDocument, bool> isReady,
-        string expectedFrame)
-    {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(45);
-        Exception? lastError = null;
-        AetheriaRuntimeDaemonFrameDocument? lastFrame = null;
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            try
-            {
-                var frame = await TryReadPublishedFrameAsync(statePath, runtimeId).ConfigureAwait(false);
-                if (frame != null)
-                {
-                    lastFrame = frame;
-                    if (isReady(frame))
-                        return frame;
-                }
-            }
-            catch (Exception ex)
-            {
-                lastError = ex;
-            }
-
-            await Task.Delay(250).ConfigureAwait(false);
-        }
-
-        throw new TimeoutException(
-            $"Timed out waiting for local daemon frame at {statePath}. Expected {expectedFrame}." +
-            (lastFrame == null ? "" : $" Last frame: daemon={lastFrame.DaemonId}, frame={lastFrame.FrameId}, imported=[{string.Join(",", lastFrame.ImportedFactIds)}], cumulativeImported=[{string.Join(",", lastFrame.CumulativeImportedFactIds)}], rejectedImported=[{string.Join(",", lastFrame.CumulativeRejectedImportedFactIds)}].") +
-            ProcessDiagnostics(childProcesses) +
-            (lastError == null ? "" : $" Last error: {lastError.GetType().Name}: {lastError.Message}"));
-    }
-
-    private static async Task<AetheriaRuntimeDaemonFrameDocument> ReadPublishedFrameAsync(
-        string statePath,
-        string runtimeId)
-    {
-        var frame = await TryReadPublishedFrameAsync(statePath, runtimeId).ConfigureAwait(false);
-        if (frame == null)
-            throw new InvalidOperationException($"No managed latest daemon frame is published at {statePath}.");
-
-        return frame;
-    }
-
-    private static async Task<AetheriaRuntimeDaemonFrameDocument?> TryReadPublishedFrameAsync(
-        string statePath,
-        string runtimeId)
-    {
-        await using var node = await AetheriaStateNode.OpenAsync(
-            statePath,
-            runtimeId,
-            startServer: false,
-            enableDurableShardLogs: false).ConfigureAwait(false);
-        return await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest).ReadAsync().ConfigureAwait(false);
-    }
 
     private static string ProcessDiagnostics(IReadOnlyList<Process> childProcesses)
     {
@@ -1824,18 +1313,6 @@ internal sealed class AuthoritySmokeChecks
         return command;
     }
 
-    private static AetheriaRuntimeDaemonCommandDocument MetadataNameCommand(
-        string runtimeId,
-        string subjectKey,
-        string name)
-    {
-        var command = Command(runtimeId, subjectKey, AetheriaRuntimeDaemonCommandKinds.SetEntityName);
-        command.TargetEntityKey = subjectKey;
-        command.TextValue = name;
-        command.ClaimKind = AetheriaRuntimeClaimKinds.Metadata;
-        return command;
-    }
-
     private static AetheriaRuntimeRunCheckpointCommit InitialCoopRun()
     {
         return new AetheriaRuntimeRunCheckpointCommit
@@ -1871,15 +1348,6 @@ internal sealed class AuthoritySmokeChecks
                 }
             ]
         };
-    }
-
-    private static AetheriaRuntimeRunCheckpointCommit InitialCoopFactRun()
-    {
-        var run = InitialCoopRun();
-        var zone = run.Zones[0];
-        zone.Entities[0].FactionKey = "player";
-        zone.Entities[1].FactionKey = "raider";
-        return run;
     }
 
     private static AetheriaRuntimeEntitySnapshotCommit Entity(

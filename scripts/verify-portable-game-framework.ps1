@@ -21,6 +21,9 @@ $forbidden = @(
     @{ Pattern = 'gamecult\.aetheria\.runtime_surface'; Reason = 'The retired Aetheria surface schema must not return.' },
     @{ Pattern = '\b(ToPortableSurface|FromPortableSurface)\s*\('; Reason = 'Aetheria surfaces must not cross a duplicate conversion bridge.' }
     @{ Pattern = '\bCultMeshReactiveDocument\s*<'; Reason = 'Aetheria client mirrors are observers; document write authority must be selected explicitly at an operation boundary.' }
+    @{ Pattern = '\bAetheriaRuntimeCommittedFactImporter\b'; Reason = 'Peer committed facts cannot mutate gameplay; Pilot output must enter as pre-finality candidate evidence.' }
+    @{ Pattern = '\b(CumulativeImportedFactIds|CumulativeRejectedImportedFactIds|DuplicateImportedFactIds)\b'; Reason = 'Daemon frames cannot retain peer-import chronology or imply peer finality.' }
+    @{ Pattern = '\bPeerCultMeshEndpoints\b|ReadOptions\(args,\s*"--peer-cultmesh-endpoint"'; Reason = 'Direct peer fact import is retired; Starbridge requires Pilot candidates and Commander selection.' }
 )
 
 foreach ($rule in $forbidden) {

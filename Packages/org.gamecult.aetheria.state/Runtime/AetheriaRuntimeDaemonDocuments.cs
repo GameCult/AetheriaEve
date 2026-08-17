@@ -524,21 +524,6 @@ namespace GameCult.Aetheria.State.Verse
         [Key(15)]
         public IReadOnlyList<string> CumulativeRejectedCommandIds { get; set; } = Array.Empty<string>();
 
-        [Key(16)]
-        public IReadOnlyList<string> ImportedFactIds { get; set; } = Array.Empty<string>();
-
-        [Key(17)]
-        public IReadOnlyList<string> RejectedImportedFactIds { get; set; } = Array.Empty<string>();
-
-        [Key(18)]
-        public IReadOnlyList<string> DuplicateImportedFactIds { get; set; } = Array.Empty<string>();
-
-        [Key(19)]
-        public IReadOnlyList<string> CumulativeImportedFactIds { get; set; } = Array.Empty<string>();
-
-        [Key(20)]
-        public IReadOnlyList<string> CumulativeRejectedImportedFactIds { get; set; } = Array.Empty<string>();
-
         [Key(21)]
         public AetheriaRuntimeDaemonRenderSettings RenderSettings { get; set; } =
             AetheriaRuntimeDaemonRenderSettings.AetheriaDefault;
