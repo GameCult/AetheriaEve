@@ -13,9 +13,6 @@ if ([string]::IsNullOrWhiteSpace($YmirRoot)) { $YmirRoot = Join-Path $projectsRo
 $project = Join-Path $repoRoot "Aetheria.State.Daemon.Smoke\Aetheria.State.Daemon.Smoke.csproj"
 
 & (Join-Path $PSScriptRoot "verify-portable-game-framework.ps1") -Root $repoRoot
-if ($LASTEXITCODE -ne 0) {
-    throw "Portable game framework boundary verification failed with exit code $LASTEXITCODE."
-}
 
 foreach ($dependency in @(
     @{ Name = "CultLib"; Path = $CultLibRoot },

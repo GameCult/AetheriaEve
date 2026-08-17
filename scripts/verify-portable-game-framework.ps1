@@ -36,6 +36,12 @@ if ($canonicalRegistrations -ne 1) {
     throw "Aetheria must register canonical EveSurfaceDocument exactly once; found $canonicalRegistrations."
 }
 
+$runtimeRegistry = Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeVerseClient.cs"
+$runtimeRegistrations = @(Select-String -LiteralPath $runtimeRegistry -Pattern 'typeof\(EveSurfaceDocument\)').Count
+if ($runtimeRegistrations -ne 1) {
+    throw "The runtime Verse contract registry must list EveSurfaceDocument exactly once; found $runtimeRegistrations."
+}
+
 $hangarBuilder = Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeHangarSurfaceBuilder.cs"
 if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -Pattern 'public static EveSurfaceDocument Build\(')) {
     throw "The Hangar surface builder does not return the canonical EveSurfaceDocument."

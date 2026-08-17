@@ -185,7 +185,6 @@ namespace GameCult.Aetheria.State.Verse
             typeof(AetheriaRuntimeVerseHostSettingsDocument),
             typeof(EveSurfaceDocument),
             typeof(EveProviderAdvertisementDocument),
-            typeof(EveSurfaceDocument),
             typeof(EveSurfaceCommandRequest),
             typeof(EveCommandReceiptDocument),
             typeof(EveAssetCatalogDocument),
