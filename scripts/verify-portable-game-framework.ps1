@@ -43,6 +43,20 @@ if ($runtimeRegistrations -ne 1) {
     throw "The runtime Verse contract registry must list EveSurfaceDocument exactly once; found $runtimeRegistrations."
 }
 
+$runtimeClientSource = Get-Content -LiteralPath $runtimeRegistry -Raw
+$runtimeClientForbidden = @(
+    @{ Pattern = '\bOpenRemoteAsync\b'; Reason = 'The local Aetheria state facade must not open remote providers.' },
+    @{ Pattern = '\bRefreshRemoteAsync\b'; Reason = 'The local Aetheria state facade must not refresh an application-owned remote replica.' },
+    @{ Pattern = '\b(RemoteEndpoint|RemoteShardId|IsRemoteReplica)\b'; Reason = 'Physical remote routing belongs to CultMeshClient identity/discovery.' },
+    @{ Pattern = '\bSnapshotEndpoint\b'; Reason = 'The local Aetheria state facade must not bypass CultMeshClient with endpoint snapshots.' },
+    @{ Pattern = 'AetheriaRuntime(ZoneDetails|InventoryPanel|InventoryDropdown|MainMenu)SurfaceBuilder\.'; Reason = 'Clients must consume daemon-published Eve surfaces, not rebuild them.' }
+)
+foreach ($rule in $runtimeClientForbidden) {
+    if ($runtimeClientSource -match $rule.Pattern) {
+        throw $rule.Reason
+    }
+}
+
 $hangarBuilder = Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeHangarSurfaceBuilder.cs"
 if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -Pattern 'public static EveSurfaceDocument Build\(')) {
     throw "The Hangar surface builder does not return the canonical EveSurfaceDocument."

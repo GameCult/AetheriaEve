@@ -62,10 +62,14 @@ physics port and committed by that same daemon writer. Combat state remains in
 the native run/zone/entity snapshot graph;
 there is no separate abstract combat save model or optional second writer.
 Unity Eve surfaces construct typed `gamecult.eve.command.v1` command documents.
-`AetheriaRuntimeVerseClient` is the shared CultMesh client boundary for
-headless, Unity, and non-Unity runtimes. Typed command clients submit directly
-to the same Verse records; there is no command-port facade or cached submitter
-between client code and the Aetheria state graph.
+`AetheriaRuntimeVerseClient` is a local tool/daemon-adjacent boundary for opening
+an explicit `.cc` state path. It does not discover remote providers, snapshot a
+physical endpoint, maintain a gameplay replica, or compose Eve surfaces.
+Networked Unity, headless, and non-Unity consumers use the generic
+`CultMeshClient` identity/discovery path and lower the daemon-published Eve
+surface. Typed command clients submit to the same Verse operation records;
+there is no command-port facade or cached submitter between client code and the
+Aetheria state graph.
 `AetheriaEveCommandBridge` is the provider-owned command acceptor for those
 records: it validates the provider, surface, and command template before
 running the narrow refresh handlers for the catalog and operations surfaces

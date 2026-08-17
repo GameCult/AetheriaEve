@@ -1,147 +1,93 @@
 # Aetheria Verse Client Contract
 
-Aetheria clients should enter the runtime through CultMesh typed Verse records, not through
-daemon internals. The daemon owns simulation authority over canonical shared
-documents; it does not own a separate private truth that is then copied into
-client state. Unity, tools, test harnesses, and later non-Unity clients open the
-same state store with the same runtime document registry and read/write the same
-typed documents through CultMesh/CultNet according to authority policy.
+Aetheria has two deliberately different client boundaries. They must not blur
+into an application-owned replica.
 
-The ergonomic contract is stricter than "typed records are available
-somewhere." A client must be able to ask CultMesh for the domain state it wants
-in one semantic call and receive a typed reactive document, collection, query
-result, operation handle, or native view. The caller should not manually walk
-through daemon frames, projected rows, record keys, schema slots, state refs,
-renderer-local facade indexes, or transport route decisions to reconstruct one
-gameplay value.
+## Network consumers
 
-The default implementation contract is one canonical document type per gameplay
-state concept. If `AetheriaRuntimeFooDocument` is the gameplay state, that is
-the document the daemon mutates/publishes and the document clients receive from
-the shared assembly. A separate projected document exists only when the shape is
-intentionally different: hidden-info filtering, expensive aggregation, viewport
-windowing, SoA/native layout, lossy UI summaries, surface documents, or a named
-compatibility bridge. "The client needs to see it" is not a projection reason.
+Unity, browser, Electron, TUI, headless agents, and other network consumers use
+the generic `CultMeshClient`. They select an Odin rendezvous endpoint, discover
+a provider by stable Verse/provider/surface identity, lease typed documents and
+collections, and submit typed operations. Physical routes are discovery output,
+not application state.
 
-The shared entrypoint is `AetheriaRuntimeVerseClient` in the runtime state
-package. It opens a local `CultMeshNode` with the runtime-only Aetheria contract
-registry and exposes:
+The Aetheria daemon publishes the complete Eve/CultUI surface. A lowerer mounts
+that document and resolves its CultMesh state and operation bindings. It does
+not reconstruct menus, inventory panels, Hangar screens, or zone details from
+gameplay records. Unity owns rendering and input collection; it owns no gameplay
+or UI composition truth.
 
-- current typed reads for provider advertisement, health, command boundary,
-  latest daemon frame, latest SoA view, and daemon game/editor Eve surfaces;
-- reactive watches via `WatchRecord<T>(CultRecordKey)`, with record identity
-  passed as data instead of one watch helper per document lane;
-- `MutableDocument<T>(CultRecordKey)` handles for transparent reactive POCO
-  presentation, including read, watch, and replace through shared CultMesh
-  Verse context semantics, with record identity passed as data;
-- typed daemon and Eve command submission through the same command record keys
-  used by the daemon.
+A network consumer must not:
 
-This is the baseline local-record shape:
+- open a physical provider endpoint directly;
+- maintain a private Aetheria gameplay replica or snapshot loop;
+- hard-code a logical Verse identity such as `aetheria.local` for remote play;
+- build an Aetheria Eve surface from daemon records;
+- mutate provider state except through an accepted typed operation.
+
+Provider restart or route movement is handled by `CultMeshClient` using the
+stable identity selected by the application. The consumer may cache downloaded
+content and non-authoritative presentation data, but that cache cannot become a
+second state owner.
+
+## Local state tools
+
+`AetheriaRuntimeVerseClient` is the explicit local `.cc` boundary. It opens a
+caller-supplied state path with the runtime contract registry for daemon-adjacent
+tools, importers, smokes, and local state inspection. Its `aetheria.local`
+context describes that local file-backed process only.
 
 ```csharp
 using var client = await AetheriaRuntimeVerseClient.OpenAsync(
     statePath,
-    runtimeId: "unity-render-client");
+    runtimeId: "state-inspector");
 
 using var frames = client
     .WatchRecord<AetheriaRuntimeDaemonFrameDocument>(
         AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
     .Subscribe(change =>
-{
-    var frame = change.Document;
-    if (frame == null)
-        return;
-
-    // Feed presentation jobs from the authoritative daemon frame.
-});
-
-var soa = await client
-    .Document<AetheriaRuntimeDaemonSoaViewDocument>(
-        AetheriaRuntimeVerseRecordKeys.DaemonSoaViewLatest)
-    .LatestAsync();
+    {
+        var frame = change.Document;
+        if (frame != null)
+            Inspect(frame);
+    });
 ```
 
-That baseline is not the desired presentation API for gameplay state. Unity
-menus, HUDs, renderers, RTS panels, and tools should move toward semantic
-handles:
+The local facade exposes typed records and headless domain projections. It does
+not expose remote endpoint, remote refresh, remote shard, or client-side Eve
+surface construction APIs. If a tool needs a remote provider, it uses
+`CultMeshClient` like every other network consumer.
 
-```csharp
-using var verse = await AetheriaRuntimeVerseClient.OpenAsync(statePath, "tool-client");
-var aetheria = verse.Aetheria();
+## Typed domain contract
 
-using var inventory = aetheria.State.Reactive<AetheriaRuntimeInventoryDocument>(entityIndex);
-using var docking = aetheria.State.Reactive<AetheriaRuntimeCurrentDockingDocument>();
-using var support = aetheria.State.Reactive<AetheriaRuntimeStationSupportDocument>();
+The default is one canonical document type per gameplay concept. If
+`AetheriaRuntimeFooDocument` is canonical state, the daemon commits it and
+clients receive that type. A second projection exists only for a named semantic
+reason: hidden-information filtering, expensive aggregation, viewport
+windowing, SoA/native layout, lossy summaries, or an explicit compatibility
+boundary.
 
-var stationRefit = await aetheria.State.LatestAsync<AetheriaRuntimeStationRefitDocument>();
-var visibleObjects = await aetheria.Zone(currentZoneId)
-    .Objects
-    .VisibleToCurrentPlayer()
-    .Within(cameraRect)
-    .LatestAsync();
-```
+Callers should ask CultMesh for a semantic document, query, collection, native
+view, or operation handle. They should not manually join frames, record keys,
+schema slots, renderer-local indexes, and route decisions to reconstruct one
+gameplay value. Generated Aetheria handles may wrap the generic client, but they
+must preserve its identity, lifetime, reconnection, and authority semantics.
 
-The implementation behind those handles may read a local CultCache record,
-execute a derived query against the latest daemon frame, subscribe to a remote
-Verse, bind an Eve state pointer, or expose a native slab view. That decision is
-CultMesh infrastructure. The caller gets a typed domain value and diagnostics
-when it asks for them.
+Input follows the same typed operation boundary. Terminus and Arena reconcile
+to daemon/server-authoritative state. Starbridge uses Commander-default
+simulation with Pilot correction inside typed Pilot jurisdiction: a valid Pilot
+mismatch corrects the provisional Commander result before finality. Pilot output
+enters as candidate evidence, never as an already committed peer fact.
 
-Client input follows the same rule. Ordinary and Arena clients submit typed
-operations and reconcile to authoritative state. In Starbridge Pilot
-jurisdiction the prediction policy is reversed: the Commander daemon publishes
-the default provisional result, a Pilot daemon submits a candidate derived from
-the same tick envelope, and a valid mismatch corrects/replays Commander state
-to the Pilot result before finality. Mutating a managed typed document may be
-the ergonomic prediction surface, but it never appends canonical state
-directly. Outside Pilot jurisdiction, the Commander result stands.
+## Eve surface boundary
 
-Unity should treat the client as its Aetheria-facing runtime surface. It can
-still use Burst, DOTS rendering, and native views for presentation, but the state
-authority boundary is the typed CultMesh contract. No Unity-facing code should
-reach for string command names, mutable payload dictionaries, local simulation
-ticks, or daemon implementation classes.
+The daemon owns and publishes every Aetheria Eve surface, including Hangar,
+mode selection, Verse selection, gameplay, editor, inventory/refit, and compact
+TUI variants. `GameCult.Eve.Surface.EveSurfaceDocument` is the single surface
+contract. CultMesh owns discovery, transport, leases, state refs, operation
+bindings, and routes. Eve lowerers own presentation.
 
-No Unity-facing code should reconstruct state by joining `Current*Async()`,
-`StationRefitAsync()`, raw frame projections, typed rows, record keys, and
-`AetheriaUnityObservedFacadeIndex`. Renderer-local facades are temporary
-presentation caches, not gameplay-state accessors. If the caller wants current
-docking bay, target details, station stock, current inventory, or zone contacts,
-the public API should expose that as a typed CultMesh handle directly.
-
-## Embedded Host Option
-
-Running an embeddable daemon core in Unity remains a deployment option, but it
-does not change the client contract. Even in-process hosting should publish and
-consume the same typed records so that the Unity renderer, a standalone daemon,
-and another client all agree on schema and semantics.
-
-The alternative idea of "Unity runs CultMesh using the same state assembly, but
-not the daemon assembly" is exactly what this contract supports. The Unity side
-references the runtime state package, opens `AetheriaRuntimeVerseClient`, and
-uses CultMesh reactive wrappers to observe daemon state as if it were native
-state. `AetheriaRuntimeVerseClient.Aetheria()` now exposes the first shared C#
-domain facade for projected current/station/zone documents, and `AetheriaClient`
-delegates to that same facade instead of owning a private projection wrapper.
-
-## Eve Surface Boundary
-
-The daemon already publishes game and editor Eve surface records at these keys:
-
-- `eve:surface:aetheria.daemon.game`
-- `eve:surface:aetheria.daemon.game.tui`
-- `eve:surface:aetheria.daemon.editor`
-- `eve:surface:aetheria.daemon.editor.tui`
-
-`AetheriaRuntimeVerseRecordKeys` exposes those keys and
-`AetheriaRuntimeVerseClient` exposes typed reads, mutable state pointers, and
-`WatchRecord<GameCult.Eve.Surface.EveSurfaceDocument>(CultRecordKey)`
-subscriptions for all four. Eve owns the surface document and composition DSL;
-CultMesh owns the transport, typed handles, state refs, operation bindings, and
-route hints that let clients observe and invoke that surface. A Unity client,
-terminal client, daemon inspector, or later non-C# runtime binding lowers the
-same published `GameCult.Eve.Surface.EveSurfaceDocument`. The existing Eve Unity
-runtime host can keep resolving Aetheria state refs automatically; it consumes
-those refs as part of lowering the shared surface, not as a separate authority
-path.
+The lowerer-visible test is the contract: two clients can discover the same
+surface, render it independently, submit typed commands, observe one canonical
+receipt/state result, and reconnect after provider route movement without an
+Aetheria-owned endpoint loop or UI reconstruction path.
