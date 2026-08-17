@@ -80,6 +80,7 @@ namespace Aetheria.Editor
             EditorGUILayout.LabelField("PID", AetheriaDaemonDevelopmentController.ProcessIdText);
             EditorGUILayout.LabelField("State", AetheriaDaemonDevelopmentController.StatePath, EditorStyles.wordWrappedLabel);
             EditorGUILayout.LabelField("CultLib source", AetheriaDaemonDevelopmentController.CultLibRoot, EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField("Eve source", AetheriaDaemonDevelopmentController.EveRoot, EditorStyles.wordWrappedLabel);
             EditorGUILayout.LabelField("Ymir source", AetheriaDaemonDevelopmentController.YmirRoot, EditorStyles.wordWrappedLabel);
 
             EditorGUILayout.Space(8);
@@ -196,7 +197,7 @@ namespace Aetheria.Editor
         public static string StatePath => Path.Combine(ProjectRoot, "Aetheria.Unity", "Build", "aetheria-unity-dev.cc");
         public static string CultLibRoot => ResolveSibling("CultLib-codex-cultmesh-reliability", "CultLib-release", "CultLib");
         public static string YmirRoot => ResolveSibling("Ymir-aetheria-integration", "Ymir");
-        public static string EveUnityRoot => ResolveSibling("EveUnity");
+        public static string EveRoot => ResolveSibling("Eve");
         private static int Port => EditorPrefs.GetInt(PortPreference, 3076);
         private static string ProjectRoot => Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".."));
         private static string ArtifactsRoot => Path.Combine(ProjectRoot, "Aetheria.Unity", "Build", "DaemonDevelopment");
@@ -247,7 +248,7 @@ namespace Aetheria.Editor
             var script = Path.Combine(ProjectRoot, "scripts", "start-aetheria-daemon-editor.ps1");
             var arguments = $"-NoProfile -ExecutionPolicy Bypass -File {Quote(script)} " +
                             $"-Root {Quote(ProjectRoot)} -State {Quote(StatePath)} " +
-                            $"-CultLibRoot {Quote(CultLibRoot)} -YmirRoot {Quote(YmirRoot)} -EveUnityRoot {Quote(EveUnityRoot)}" +
+                            $"-CultLibRoot {Quote(CultLibRoot)} -YmirRoot {Quote(YmirRoot)} -EveRoot {Quote(EveRoot)}" +
                             (forceImport ? " -ForceImport" : "");
             _launcher = Process.Start(new ProcessStartInfo("powershell.exe", arguments)
             {
@@ -529,7 +530,7 @@ namespace Aetheria.Editor
         private static void ApplyClientEnvironment()
         {
             Environment.SetEnvironmentVariable("EVEUNITY_RENDEZVOUS_ENDPOINT", Endpoint);
-            Environment.SetEnvironmentVariable("EVEUNITY_SURFACE_ID", "aetheria.pilot");
+            Environment.SetEnvironmentVariable("EVEUNITY_SURFACE_ID", "aetheria.hangar");
             Environment.SetEnvironmentVariable("EVEUNITY_ASSET_CACHE_PATH",
                 Path.Combine(ProjectRoot, "Aetheria.Unity", "Build", "AssetCache"));
         }

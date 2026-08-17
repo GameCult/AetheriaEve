@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <CultLibRoot Condition="'$(CultLibRoot)' == ''">$(MSBuildThisFileDirectory)..\..\CultLib</CultLibRoot>
-    <EveUnityRoot Condition="'$(EveUnityRoot)' == ''">$(MSBuildThisFileDirectory)..\..\EveUnity</EveUnityRoot>
+    <EveRoot Condition="'$(EveRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Eve</EveRoot>
     <YmirRoot Condition="'$(YmirRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Ymir</YmirRoot>
   </PropertyGroup>
 </Project>

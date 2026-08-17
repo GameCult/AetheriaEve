@@ -57,6 +57,23 @@ foreach ($rule in $runtimeClientForbidden) {
     }
 }
 
+$headlessProjectFiles = & rg --files $Root -g '*.csproj' -g '*.props' -g '!**/obj/**' -g '!**/bin/**' |
+    Where-Object { $_ -match '[\\/]Aetheria\.State' }
+$rendererProjectReferences = if ($headlessProjectFiles) {
+    Select-String -LiteralPath $headlessProjectFiles -Pattern 'EveUnityRoot|EveUnity[\\/]packages'
+} else {
+    @()
+}
+if ($rendererProjectReferences) {
+    $locations = $rendererProjectReferences | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "Headless Aetheria projects must consume renderer-neutral contracts from Eve, not EveUnity.`n$($locations -join [Environment]::NewLine)"
+}
+
+$stateProject = Join-Path $Root "Aetheria.State\Aetheria.State.csproj"
+if (-not (Select-String -LiteralPath $stateProject -Quiet -SimpleMatch '$(EveRoot)\packages\org.gamecult.eve.surface\GameCult.Eve.Surface.csproj')) {
+    throw "Aetheria.State must resolve the canonical renderer-neutral surface contract from EveRoot."
+}
+
 $hangarBuilder = Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeHangarSurfaceBuilder.cs"
 if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -Pattern 'public static EveSurfaceDocument Build\(')) {
     throw "The Hangar surface builder does not return the canonical EveSurfaceDocument."

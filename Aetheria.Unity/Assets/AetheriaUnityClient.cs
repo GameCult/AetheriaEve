@@ -16,7 +16,7 @@ public sealed class AetheriaUnityClient : MonoBehaviour
     {
         Application.runInBackground = true;
         var endpoint = Environment.GetEnvironmentVariable("EVEUNITY_RENDEZVOUS_ENDPOINT") ?? "cultnet+tcp://127.0.0.1:3076";
-        var surfaceId = Environment.GetEnvironmentVariable("EVEUNITY_SURFACE_ID") ?? "aetheria.pilot";
+        var surfaceId = Environment.GetEnvironmentVariable("EVEUNITY_SURFACE_ID") ?? "aetheria.hangar";
         var replicaPath = Path.Combine(Application.persistentDataPath, "aetheria-unity.cc");
 
         CreateView();

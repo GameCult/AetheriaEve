@@ -16,8 +16,10 @@ dependency of AetheriaEve.
   inputs;
 - typed CultCache state and configured Verse identity;
 - provider presentation assets authored in `Aetheria.Assets.Unity`;
-- sibling development checkouts of CultLib, EveUnity, EvePlugins, CultMath, and
-  Ymir, or their released package equivalents.
+- sibling development checkouts of CultLib, Eve, EveUnity, EvePlugins,
+  CultMath, and Ymir, or their released package equivalents. The daemon reads
+  renderer-neutral Eve contracts from Eve; only lowering clients consume
+  EveUnity.
 
 ## Outputs
 

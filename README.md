@@ -35,8 +35,9 @@ Requirements:
 
 - Unity `6000.4.2f1`;
 - .NET SDK 10;
-- sibling checkouts of `CultLib`, `EveUnity`, and `Ymir` under the same parent
-  directory for daemon development builds.
+- sibling checkouts of `CultLib`, `Eve`, and `Ymir` under the same parent
+  directory for daemon development builds. Unity consumes released EveUnity
+  lowering packages and does not make the daemon depend on the renderer repo.
 
 From the repository root:
 

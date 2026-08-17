@@ -47,6 +47,8 @@ The launcher displays and passes the exact source dependency roots used for the
 Debug daemon build. CultLib prefers the active
 `CultLib-codex-cultmesh-reliability` checkout, then `CultLib-release`, and
 finally the canonical `CultLib` sibling.
+The renderer-neutral Eve contract resolves from the canonical `Eve` sibling;
+the daemon does not reference EveUnity.
 Ymir still prefers the active `Ymir-aetheria-integration` sibling checkout and
 falls back to the canonical `Ymir` sibling when that integration checkout is
 absent. This prevents an older sibling assembly from impersonating the daemon

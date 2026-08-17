@@ -1,6 +1,6 @@
 param(
     [string] $CultLibRoot = "",
-    [string] $EveUnityRoot = "",
+    [string] $EveRoot = "",
     [string] $YmirRoot = ""
 )
 
@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectsRoot = Split-Path -Parent $repoRoot
 if ([string]::IsNullOrWhiteSpace($CultLibRoot)) { $CultLibRoot = Join-Path $projectsRoot "CultLib" }
-if ([string]::IsNullOrWhiteSpace($EveUnityRoot)) { $EveUnityRoot = Join-Path $projectsRoot "EveUnity" }
+if ([string]::IsNullOrWhiteSpace($EveRoot)) { $EveRoot = Join-Path $projectsRoot "Eve" }
 if ([string]::IsNullOrWhiteSpace($YmirRoot)) { $YmirRoot = Join-Path $projectsRoot "Ymir" }
 $project = Join-Path $repoRoot "Aetheria.State.Daemon.Smoke\Aetheria.State.Daemon.Smoke.csproj"
 
@@ -16,7 +16,7 @@ $project = Join-Path $repoRoot "Aetheria.State.Daemon.Smoke\Aetheria.State.Daemo
 
 foreach ($dependency in @(
     @{ Name = "CultLib"; Path = $CultLibRoot },
-    @{ Name = "EveUnity"; Path = $EveUnityRoot },
+    @{ Name = "Eve"; Path = $EveRoot },
     @{ Name = "Ymir"; Path = $YmirRoot }
 )) {
     if (-not (Test-Path -LiteralPath $dependency.Path -PathType Container)) {
@@ -37,7 +37,7 @@ if (-not (Test-Path -LiteralPath $box2DSource -PathType Leaf)) {
 
 $properties = @(
     "-p:CultLibRoot=$CultLibRoot",
-    "-p:EveUnityRoot=$EveUnityRoot",
+    "-p:EveRoot=$EveRoot",
     "-p:YmirRoot=$YmirRoot"
 )
 
