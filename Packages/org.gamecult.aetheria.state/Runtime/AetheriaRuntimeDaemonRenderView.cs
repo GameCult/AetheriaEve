@@ -27,9 +27,9 @@ namespace GameCult.Aetheria.State.Verse
         public AetheriaRuntimeRunCheckpointCommit Run => Frame.Run;
 
         public static bool TryCreateCurrent(
-            CultMeshReactiveDocument<AetheriaRuntimeDaemonFrameDocument> frame,
-            CultMeshReactiveDocument<AetheriaRuntimeDaemonSoaViewDocument>? soaView,
-            CultMeshReactiveDocument<AetheriaRuntimeZoneRenderDocument> zoneRender,
+            CultMeshObservedDocument<AetheriaRuntimeDaemonFrameDocument> frame,
+            CultMeshObservedDocument<AetheriaRuntimeDaemonSoaViewDocument>? soaView,
+            CultMeshObservedDocument<AetheriaRuntimeZoneRenderDocument> zoneRender,
             out AetheriaRuntimeDaemonRenderView? observed)
         {
             observed = null;

@@ -137,7 +137,7 @@ test rather than achieved properties.
 
 | Priority | Fracture | Current evidence | Required repair/proof |
 | --- | --- | --- | --- |
-| P0 | Reactive document authority and idle work | A database handle exposes replace and prediction together; `SetAsync` silently prefers prediction. Writable C# documents poll and serialize at 16 ms, Python creates recursive timers, and TypeScript misses nested edits. | Separate read, authoritative-write, and prediction/candidate capabilities. Use one explicit mutation primitive across runtimes. Prove near-zero idle work and identical nested-edit traces. |
+| P0 | Reactive document authority and idle work | The C# reference cut now exposes read-only observed mirrors plus explicit authoritative or prediction writers, and Aetheria consumes observed mirrors. Python still creates recursive timers and TypeScript still uses shallow proxy mutation. | Apply the explicit mutation boundary to TypeScript and Python. Prove near-zero idle work and identical nested-edit traces in all three runtimes. |
 | P0 | Browser lowerer instance isolation | Browser lowering stores active surface/options/styles in module globals and rebuilds the whole root for each binding update. | Move all state into one host instance. Add two-host command/asset isolation, focus/scroll preservation, and render-count tests. |
 | P0 | Conformance witnesses | Aetheria fixtures still name the legacy repository and stale schemas; the verifier trusts self-declared JSON. | Resolve witnesses against this repository and a running provider, validate schemas, execute a command/receipt/reconnect chronology, and reject unproved lowerer claims. |
 | P0 | Stable identity path | `AetheriaRuntimeVerseClient` manually snapshots physical endpoints and uses `aetheria.local`; the intended `CultMeshClient` already owns provider identity and reconnection. | Replace the parallel remote client and client-owned surface reconstruction with generated typed handles over `CultMeshClient`. |
@@ -146,7 +146,7 @@ test rather than achieved properties.
 | P1 | Client resource lifetime | `CultMeshClient` retains dynamic document resources until the entire client dies. | Add leases/reference counting or bounded eviction and a 100k-key churn memory/subscription gate. |
 | P1 | Long-session state growth | Full frames retain cumulative command/imported-fact ID arrays. | Move chronology to indexed append-only records and benchmark checkpoint size over long sessions. |
 
-The next repair is the P0 reactive-document authority boundary. It is both an
-ergonomic lie and a performance trap: a reader can pay writer polling costs,
-while a generic setter can choose a different authority path than its name
-admits.
+The active repair is the cross-runtime half of the reactive-document authority
+boundary. C# no longer lets a reader acquire mutation polling or lets a generic
+setter select an authority path. TypeScript and Python must now converge on the
+same explicit update/replace-local contract before this boundary is complete.

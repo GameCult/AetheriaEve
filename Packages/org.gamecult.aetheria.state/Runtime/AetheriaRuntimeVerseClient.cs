@@ -216,12 +216,12 @@ namespace GameCult.Aetheria.State.Verse
 
         private readonly CultMeshNode _node;
         private AetheriaClientState? _aetheriaState;
-        private CultMeshReactiveDocument<AetheriaRuntimeDaemonFrameDocument>? _managedDaemonFrame;
-        private CultMeshReactiveDocument<AetheriaRuntimeCatalogSnapshot>? _managedCatalog;
-        private CultMeshReactiveDocument<AetheriaRuntimeLoadoutTemplatesDocument>? _managedLoadoutTemplates;
-        private CultMeshReactiveDocument<AetheriaRuntimePlayerSettingsDocument>? _managedPlayerSettings;
-        private CultMeshReactiveDocument<AetheriaRuntimeStarbridgeScenarioDocument>? _managedStarbridgeScenario;
-        private CultMeshReactiveDocument<AetheriaRuntimeStarbridgeSessionDocument>? _managedStarbridgeSession;
+        private CultMeshObservedDocument<AetheriaRuntimeDaemonFrameDocument>? _managedDaemonFrame;
+        private CultMeshObservedDocument<AetheriaRuntimeCatalogSnapshot>? _managedCatalog;
+        private CultMeshObservedDocument<AetheriaRuntimeLoadoutTemplatesDocument>? _managedLoadoutTemplates;
+        private CultMeshObservedDocument<AetheriaRuntimePlayerSettingsDocument>? _managedPlayerSettings;
+        private CultMeshObservedDocument<AetheriaRuntimeStarbridgeScenarioDocument>? _managedStarbridgeScenario;
+        private CultMeshObservedDocument<AetheriaRuntimeStarbridgeSessionDocument>? _managedStarbridgeSession;
         private bool _disposed;
 
         private AetheriaRuntimeVerseClient(string statePath, string runtimeId, CultMeshNode node)
@@ -567,12 +567,12 @@ namespace GameCult.Aetheria.State.Verse
                 AetheriaRuntimeVerseRecordKeys.StarbridgeSessionLatest);
             var latestFrameDocument = Document<AetheriaRuntimeDaemonFrameDocument>(
                 AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest);
-            CultMeshReactiveDocument<AetheriaRuntimeDaemonFrameDocument>? managedDaemonFrame = null;
-            CultMeshReactiveDocument<AetheriaRuntimeCatalogSnapshot>? managedCatalog = null;
-            CultMeshReactiveDocument<AetheriaRuntimeLoadoutTemplatesDocument>? managedLoadoutTemplates = null;
-            CultMeshReactiveDocument<AetheriaRuntimePlayerSettingsDocument>? managedPlayerSettings = null;
-            CultMeshReactiveDocument<AetheriaRuntimeStarbridgeScenarioDocument>? managedStarbridgeScenario = null;
-            CultMeshReactiveDocument<AetheriaRuntimeStarbridgeSessionDocument>? managedStarbridgeSession = null;
+            CultMeshObservedDocument<AetheriaRuntimeDaemonFrameDocument>? managedDaemonFrame = null;
+            CultMeshObservedDocument<AetheriaRuntimeCatalogSnapshot>? managedCatalog = null;
+            CultMeshObservedDocument<AetheriaRuntimeLoadoutTemplatesDocument>? managedLoadoutTemplates = null;
+            CultMeshObservedDocument<AetheriaRuntimePlayerSettingsDocument>? managedPlayerSettings = null;
+            CultMeshObservedDocument<AetheriaRuntimeStarbridgeScenarioDocument>? managedStarbridgeScenario = null;
+            CultMeshObservedDocument<AetheriaRuntimeStarbridgeSessionDocument>? managedStarbridgeSession = null;
 
             var state = new AetheriaClientState(
                 Document<AetheriaRuntimeDaemonProviderAdvertisementDocument>(
@@ -693,7 +693,7 @@ namespace GameCult.Aetheria.State.Verse
                 seatId => Document<AetheriaRuntimeStarbridgePlayerSeatDocument>(
                     AetheriaRuntimeVerseRecordKeys.StarbridgePlayerSeat(seatId)));
 
-            managedPlayerSettings = state.PlayerSettings.Reactive();
+            managedPlayerSettings = state.PlayerSettings.Observe();
             _managedPlayerSettings = managedPlayerSettings;
             return state;
 
@@ -729,7 +729,7 @@ namespace GameCult.Aetheria.State.Verse
 
             AetheriaRuntimeDaemonFrameDocument RequireManagedFrame()
             {
-                managedDaemonFrame ??= latestFrameDocument.Reactive();
+                managedDaemonFrame ??= latestFrameDocument.Observe();
                 _managedDaemonFrame = managedDaemonFrame;
                 return managedDaemonFrame?.Current
                     ?? throw new InvalidOperationException("Aetheria Verse client has no daemon frame yet.");
@@ -737,7 +737,7 @@ namespace GameCult.Aetheria.State.Verse
 
             AetheriaRuntimeCatalogSnapshot RequireManagedCatalog()
             {
-                managedCatalog ??= catalogDocument.Reactive();
+                managedCatalog ??= catalogDocument.Observe();
                 _managedCatalog = managedCatalog;
                 return managedCatalog?.Current
                     ?? throw new InvalidOperationException("Aetheria Verse client has no runtime catalog document yet.");
@@ -745,7 +745,7 @@ namespace GameCult.Aetheria.State.Verse
 
             AetheriaRuntimeLoadoutTemplatesDocument RequireManagedLoadoutTemplates()
             {
-                managedLoadoutTemplates ??= loadoutTemplatesDocument.Reactive();
+                managedLoadoutTemplates ??= loadoutTemplatesDocument.Observe();
                 _managedLoadoutTemplates = managedLoadoutTemplates;
                 return managedLoadoutTemplates?.Current
                     ?? throw new InvalidOperationException("Aetheria Verse client has no loadout templates document yet.");
@@ -836,7 +836,7 @@ namespace GameCult.Aetheria.State.Verse
             {
                 try
                 {
-                    managedStarbridgeScenario ??= starbridgeScenarioDocument.Reactive();
+                    managedStarbridgeScenario ??= starbridgeScenarioDocument.Observe();
                     _managedStarbridgeScenario = managedStarbridgeScenario;
                     return managedStarbridgeScenario.Current;
                 }
@@ -854,7 +854,7 @@ namespace GameCult.Aetheria.State.Verse
             {
                 try
                 {
-                    managedStarbridgeSession ??= starbridgeSessionDocument.Reactive();
+                    managedStarbridgeSession ??= starbridgeSessionDocument.Observe();
                     _managedStarbridgeSession = managedStarbridgeSession;
                     return managedStarbridgeSession.Current;
                 }
@@ -977,7 +977,7 @@ namespace GameCult.Aetheria.State.Verse
             {
                 try
                 {
-                    managedPlayerSettings ??= playerSettingsDocument.Reactive();
+                    managedPlayerSettings ??= playerSettingsDocument.Observe();
                     _managedPlayerSettings = managedPlayerSettings;
                     return managedPlayerSettings.Current;
                 }

@@ -20,6 +20,7 @@ $forbidden = @(
     @{ Pattern = 'class\s+AetheriaRuntimeSurface(Component|Tree|CommandTemplate|StyleToken|EmbeddedDocumentSlot)\b'; Reason = 'Aetheria must not own cloned Eve surface members.' },
     @{ Pattern = 'gamecult\.aetheria\.runtime_surface'; Reason = 'The retired Aetheria surface schema must not return.' },
     @{ Pattern = '\b(ToPortableSurface|FromPortableSurface)\s*\('; Reason = 'Aetheria surfaces must not cross a duplicate conversion bridge.' }
+    @{ Pattern = '\bCultMeshReactiveDocument\s*<'; Reason = 'Aetheria client mirrors are observers; document write authority must be selected explicitly at an operation boundary.' }
 )
 
 foreach ($rule in $forbidden) {

@@ -31,10 +31,10 @@ namespace GameCult.Aetheria.State.Verse
         private readonly Func<int, CultMeshDocumentHandle<AetheriaRuntimeSelectedObjectDocument>> _selectedObject;
         private readonly Func<int, CultMeshDocumentHandle<AetheriaRuntimeInventoryDocument>> _inventory;
         private readonly Func<string, CultMeshDocumentHandle<AetheriaRuntimeStarbridgePlayerSeatDocument>> _starbridgePlayerSeat;
-        private CultMeshReactiveDocument<AetheriaRuntimeDaemonFrameDocument>? _eveStateRefFrame;
-        private CultMeshReactiveDocument<AetheriaRuntimeDaemonHealthDocument>? _eveStateRefHealth;
-        private CultMeshReactiveDocument<AetheriaRuntimeDaemonCommandBoundaryDocument>? _eveStateRefCommandBoundary;
-        private CultMeshReactiveDocument<AetheriaRuntimeCatalogSnapshot>? _eveStateRefCatalog;
+        private CultMeshObservedDocument<AetheriaRuntimeDaemonFrameDocument>? _eveStateRefFrame;
+        private CultMeshObservedDocument<AetheriaRuntimeDaemonHealthDocument>? _eveStateRefHealth;
+        private CultMeshObservedDocument<AetheriaRuntimeDaemonCommandBoundaryDocument>? _eveStateRefCommandBoundary;
+        private CultMeshObservedDocument<AetheriaRuntimeCatalogSnapshot>? _eveStateRefCatalog;
 
         internal AetheriaClientState(
             CultMeshDocumentHandle<AetheriaRuntimeDaemonProviderAdvertisementDocument> providerAdvertisement,
@@ -302,20 +302,20 @@ namespace GameCult.Aetheria.State.Verse
         public CultMeshStateRefResolver CreateEveSurfaceCultMeshStateRefResolver()
         {
             return AetheriaRuntimeStateRefResolver.CreateEveSurfaceCultMeshStateRefResolver(
-                () => ReadOptionalReactive(ref _eveStateRefFrame, DaemonFrame),
-                () => ReadOptionalReactive(ref _eveStateRefHealth, Health),
-                () => ReadOptionalReactive(ref _eveStateRefCommandBoundary, CommandBoundary),
-                () => ReadOptionalReactive(ref _eveStateRefCatalog, Catalog));
+                () => ReadOptionalObserved(ref _eveStateRefFrame, DaemonFrame),
+                () => ReadOptionalObserved(ref _eveStateRefHealth, Health),
+                () => ReadOptionalObserved(ref _eveStateRefCommandBoundary, CommandBoundary),
+                () => ReadOptionalObserved(ref _eveStateRefCatalog, Catalog));
         }
 
-        private static TDocument? ReadOptionalReactive<TDocument>(
-            ref CultMeshReactiveDocument<TDocument>? reactive,
+        private static TDocument? ReadOptionalObserved<TDocument>(
+            ref CultMeshObservedDocument<TDocument>? reactive,
             CultMeshDocumentHandle<TDocument> handle)
             where TDocument : class
         {
             try
             {
-                reactive ??= handle.Reactive();
+                reactive ??= handle.Observe();
                 return reactive.Current;
             }
             catch (KeyNotFoundException)

@@ -18,7 +18,7 @@ namespace GameCult.Aetheria.State.Verse
         private readonly AetheriaControl _control;
         private readonly AetheriaUi _ui;
         private readonly AetheriaClientState _state;
-        private CultMeshReactiveDocument<AetheriaRuntimeDaemonFrameDocument>? _daemonFrame;
+        private CultMeshObservedDocument<AetheriaRuntimeDaemonFrameDocument>? _daemonFrame;
         private bool _disposed;
 
         private AetheriaClient(AetheriaRuntimeVerseClient verse, string clientId, string sessionId)
@@ -211,7 +211,7 @@ namespace GameCult.Aetheria.State.Verse
             ThrowIfDisposed();
             try
             {
-                _daemonFrame ??= State.DaemonFrame.Reactive();
+                _daemonFrame ??= State.DaemonFrame.Observe();
                 return _daemonFrame.Current;
             }
             catch
