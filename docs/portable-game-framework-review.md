@@ -176,6 +176,16 @@ After this cut the full clean-consumer plus real-network chronology passed with
 10,000 retained-session operations at 0.68 ms p99 and 272 KiB post-GC managed
 growth.
 
+The getting-started chapters now keep the same counter application from the
+first `.cc` write through the live Chromium/C# route-replacement proof. The
+former fourth chapter switched without warning to a VoidBot TypeScript
+provider and made the sequence look compositional when it was not; that
+lifecycle material remains in the TypeScript package guide, while chapter 4
+now executes and explains the game built by chapters 1–3. Public quickstarts
+use `.cc` and no longer present an undefined `playerKey`/`PlayerData` sketch as
+runnable code. The exact persistence command printed in chapter 1 passes, and
+all relative links in the chapter set resolve.
+
 ## Target authority map
 
 Owner:
