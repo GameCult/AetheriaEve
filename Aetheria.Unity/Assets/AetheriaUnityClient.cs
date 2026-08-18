@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using GameCult.Eve.UnityScene;
 using GameCult.Mesh;
@@ -30,10 +31,26 @@ public sealed class AetheriaUnityClient : MonoBehaviour
             requiredSurfaceKind: "interactive-world",
             clientRuntimeId: "aetheria-unity",
             authorityTrust: new CultMeshAuthorityTrustPolicy(
-                CultMeshAuthorityTrustMode.LocalDevelopment));
+                CultMeshAuthorityTrustMode.LocalDevelopment),
+            navigationAuthorityTrust: ReadRemoteAuthorityTrust());
         _bootstrap = gameObject.AddComponent<EveUnityPlayableWorldClientBootstrap>();
         _bootstrap.ConfigureProvider(_provider);
         StartCoroutine(ConnectAfterFirstFrame());
+    }
+
+    private static CultMeshAuthorityTrustPolicy ReadRemoteAuthorityTrust()
+    {
+        var roots = new List<CultMeshEcdsaP256PublicKey>();
+        foreach (var encoded in (Environment.GetEnvironmentVariable("AETHERIA_ODIN_ROOT_P256") ?? "")
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = encoded.Trim().Split(':');
+            if (parts.Length != 3)
+                throw new InvalidOperationException(
+                    "AETHERIA_ODIN_ROOT_P256 entries must be '<key-id>:<base64-x>:<base64-y>'.");
+            roots.Add(new CultMeshEcdsaP256PublicKey(parts[0], parts[1], parts[2]));
+        }
+        return new CultMeshAuthorityTrustPolicy(CultMeshAuthorityTrustMode.AuthenticatedRemote, roots);
     }
 
     private IEnumerator ConnectAfterFirstFrame()

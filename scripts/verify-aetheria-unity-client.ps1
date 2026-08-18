@@ -14,17 +14,17 @@ $manifest = Get-Content (Join-Path $ProjectPath "Packages/manifest.json") -Raw |
 $lock = Get-Content (Join-Path $ProjectPath "Packages/packages-lock.json") -Raw | ConvertFrom-Json
 $expected = @{
     "org.gamecult.cultlib" = @(
-        "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#cultlib-unity-v1.0.46",
-        "1fc68a4701b663ee8d4b575dc914377c7b67ee84")
+        "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#99458dbb57bcb677bb72edba1362bce9fc9cab9d",
+        "99458dbb57bcb677bb72edba1362bce9fc9cab9d")
     "org.gamecult.eve.surface" = @(
-        "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#eve-surface-v0.3.2",
-        "2c4a9adb05fdce316e922f08b6e2070a691d62fa")
+        "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#27b56c85abc6ecf8fa1121b9e1e58cd17338edd4",
+        "27b56c85abc6ecf8fa1121b9e1e58cd17338edd4")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#83f9d2e0cc7fec6049104f6a7a7e5235d4868696",
-        "83f9d2e0cc7fec6049104f6a7a7e5235d4868696")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#e8e116ecc48d61a3d78642eab77f5a31d20e9ae3",
+        "e8e116ecc48d61a3d78642eab77f5a31d20e9ae3")
     "org.gamecult.eve.unity-uitoolkit" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#83f9d2e0cc7fec6049104f6a7a7e5235d4868696",
-        "83f9d2e0cc7fec6049104f6a7a7e5235d4868696")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#e8e116ecc48d61a3d78642eab77f5a31d20e9ae3",
+        "e8e116ecc48d61a3d78642eab77f5a31d20e9ae3")
 }
 
 foreach ($packageName in $expected.Keys) {
@@ -37,9 +37,9 @@ foreach ($packageName in $expected.Keys) {
 
 $cultLibPackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.cultlib@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "1.0.46" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "1.0.49" } |
     Select-Object -First 1
-if (-not $cultLibPackage) { throw "Resolved CultLib 1.0.46 package is missing from Library/PackageCache." }
+if (-not $cultLibPackage) { throw "Resolved CultLib 1.0.49 package is missing from Library/PackageCache." }
 
 $meshAssembly = Join-Path $cultLibPackage.FullName "Runtime/Plugins/GameCult.Mesh.dll"
 if (-not (Test-Path $meshAssembly)) { throw "Resolved GameCult.Mesh.dll is missing." }
@@ -50,6 +50,8 @@ $requiredMeshApiNames = @(
     "CultMeshBodyPublicationHandle",
     "CultMeshFrameBodyPublisher",
     "CultMeshTcpContentServer",
+    "CultMeshHttpsContentTransportConnector",
+    "CultMeshAuthorityTrustPolicy",
     "CultMeshSessionContentProvider")
 foreach ($apiName in $requiredMeshApiNames) {
     if (-not ($meshApi | Where-Object { $_ -eq $apiName })) {
@@ -59,9 +61,9 @@ foreach ($apiName in $requiredMeshApiNames) {
 
 $surfacePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.surface@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.2" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.3" } |
     Select-Object -First 1
-if (-not $surfacePackage) { throw "Resolved Eve surface 0.3.2 package is missing from Library/PackageCache." }
+if (-not $surfacePackage) { throw "Resolved Eve surface 0.3.3 package is missing from Library/PackageCache." }
 $inputContractSource = Get-Content (Join-Path $surfacePackage.FullName "Runtime/EveInputCapabilityDocument.cs") -Raw
 foreach ($requiredInputContract in @("PayloadKeys", "CurrentValue", "ActionBar", "IconRef")) {
     if ($inputContractSource -notmatch $requiredInputContract) {
@@ -71,9 +73,9 @@ foreach ($requiredInputContract in @("PayloadKeys", "CurrentValue", "ActionBar",
 
 $scenePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.unity-scene@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.106" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.111" } |
     Select-Object -First 1
-if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.106 package is missing from Library/PackageCache." }
+if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.111 package is missing from Library/PackageCache." }
 $advertisedInputSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityAdvertisedInputAction.cs") -Raw
 $inputDriverSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityPlayableWorldInputDriver.cs") -Raw
 $actionBarSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityInputActionBar.cs") -Raw

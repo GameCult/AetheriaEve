@@ -470,9 +470,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
     {
         if (receipt.Navigation == null || receipt.Navigation.RendezvousEndpoints.Length > 0)
             return receipt;
-        var selected = (source.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
-            .FirstOrDefault(option => string.Equals(option.VerseId, source.SelectedVerseId, StringComparison.Ordinal));
-        var endpoints = selected?.DiscoveryEndpoints ?? Array.Empty<string>();
+        var endpoints = source.OdinDiscoveryEndpoints ?? Array.Empty<string>();
         if (endpoints.Length == 0)
             return receipt;
         return new EveCommandReceiptDocument(

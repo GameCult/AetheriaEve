@@ -173,8 +173,18 @@ try
             $"Remote Terminus launch must return an accepted Eve navigation target for the selected Verse; state='{launchReceipt.State}', message='{launchReceipt.Message}', navigation='{launchNavigation?.VerseId ?? "<none>"}'.");
         Require(launchNavigation!.SurfaceId == AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
             "Remote Terminus launch must navigate the generic client to the Pilot surface.");
-        Require(launchNavigation.RendezvousEndpoints.Contains(remoteEndpoint, StringComparer.Ordinal),
-            "Remote Terminus navigation must carry the Odin-discovered rendezvous route, not strand the client on the local daemon.");
+        Require(launchNavigation.RendezvousEndpoints.SequenceEqual(new[] { remoteEndpoint }, StringComparer.Ordinal),
+            "Remote Terminus navigation must carry only the configured Odin rendezvous route, not flattened content or realtime provider routes.");
+        using (var navigatedClient = Client(launchNavigation.RendezvousEndpoints[0]))
+        {
+            await ReadUntilAsync(
+                navigatedClient,
+                remoteTarget,
+                AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString(),
+                (EveSurfaceDocument surface) =>
+                    string.Equals(surface.Surface.Id, AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId, StringComparison.Ordinal),
+                TimeSpan.FromSeconds(10));
+        }
         await ReadUntilAsync(
             remoteClient,
             remoteTarget,

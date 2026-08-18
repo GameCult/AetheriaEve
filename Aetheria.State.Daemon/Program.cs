@@ -4444,7 +4444,7 @@ internal sealed class AetheriaDaemonHostOptions
         var parts = (value ?? "").Trim().Split(':');
         if (parts.Length != 3 || parts.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException(
-                "--odin-root-p256 must be '<key-id>:<base64url-x>:<base64url-y>'.");
+                "--odin-root-p256 must be '<key-id>:<base64-x>:<base64-y>' using standard padded Base64 coordinates.");
         return new CultMeshEcdsaP256PublicKey(parts[0], parts[1], parts[2]);
     }
 }

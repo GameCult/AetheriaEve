@@ -57,7 +57,7 @@ rendezvous endpoints:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run-aetheria-unity.ps1 `
   -OdinDiscoveryEndpoint wss://odin.example/cultmesh `
-  -OdinRootP256 gamecult-odin-2026:<base64url-x>:<base64url-y>
+  -OdinRootP256 gamecult-odin-2026:<base64-x>:<base64-y>
 ```
 
 The dropdown itself is daemon-published Eve/CultUI. **Local** uses the local

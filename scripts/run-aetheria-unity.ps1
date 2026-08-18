@@ -98,6 +98,7 @@ try {
   if (-not $ready) { throw "Aetheria daemon did not publish its Eve endpoint." }
   $env:EVEUNITY_RENDEZVOUS_ENDPOINT = "cultnet+tcp://127.0.0.1:$Port"
   $env:EVEUNITY_SURFACE_ID = "aetheria.hangar"
+  $env:AETHERIA_ODIN_ROOT_P256 = ($OdinRootP256 | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ";"
   $client = Start-Process $clientExe -ArgumentList "-force-d3d11" -PassThru
   Write-Host "Client PID: $($client.Id)"
   Write-Host "Close the client window to stop the daemon."
