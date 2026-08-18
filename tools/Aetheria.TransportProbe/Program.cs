@@ -17,6 +17,10 @@ var catalog = await discovery.FetchAsync(
 var advertised = catalog.Verses
     .SingleOrDefault(candidate => string.Equals(candidate.VerseId, verseId, StringComparison.Ordinal))
     ?? throw new InvalidDataException($"Aetheria Verse '{verseId}' was not advertised by {controlEndpoint}.");
+var authorityRuntimeId = (advertised.AuthorityRuntimeIds ?? Array.Empty<string>())
+    .SingleOrDefault(id => !string.IsNullOrWhiteSpace(id))
+    ?? throw new InvalidDataException($"Aetheria Verse '{verseId}' did not advertise one authoritative runtime.");
+var target = new CultMeshSessionTarget(verseId, authorityRuntimeId);
 Console.WriteLine($"Aetheria advertised routes: {string.Join(", ", advertised.DiscoveryEndpoints)}");
 using var client = new CultMeshClient(new CultMeshClientOptions
 {
@@ -26,7 +30,7 @@ using var client = new CultMeshClient(new CultMeshClientOptions
         new CultMeshQuicRealtimeTransportConnector()
     }
 });
-using var session = await client.ConnectRealtimeAsync(verseId, deadline.Token).ConfigureAwait(false);
+using var session = await client.ConnectRealtimeAsync(target, deadline.Token).ConfigureAwait(false);
 var frame = await session.ReceiveAsync(deadline.Token).ConfigureAwait(false);
 
 if (!string.Equals(frame.BodyId, AetheriaRuntimeDaemonSoaFramePublisher.BodyId, StringComparison.Ordinal) ||

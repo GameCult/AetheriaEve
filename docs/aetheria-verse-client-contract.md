@@ -11,6 +11,12 @@ a provider by stable Verse/provider/surface identity, lease typed documents and
 collections, and submit typed operations. Physical routes are discovery output,
 not application state.
 
+The retained CultMesh session target is the explicit pair `(VerseId,
+ProviderRuntimeId)`. The Eve surface provider ID remains a separate UI-owner
+identity. Aetheria's Hangar may present only the Verse selector to the player;
+the daemon resolves an authoritative runtime advertised by that Verse and opens
+the typed target. Lowerers do not guess, duplicate, or persist that derivation.
+
 The Aetheria daemon publishes the complete Eve/CultUI surface. A lowerer mounts
 that document and resolves its CultMesh state and operation bindings. It does
 not reconstruct menus, inventory panels, Hangar screens, or zone details from

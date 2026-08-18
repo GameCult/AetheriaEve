@@ -134,6 +134,15 @@ foreach ($required in @($progressionDocument, $progressionCoordinator)) {
         throw "The daemon-owned progression Verse boundary is missing: $required"
     }
 }
+$progressionCoordinatorSource = Get-Content -LiteralPath $progressionCoordinator -Raw
+if ($progressionCoordinatorSource -notmatch 'new\s+CultMeshSessionTarget\s*\(\s*source\.SelectedVerseId\s*,\s*providerId\s*\)' -or
+    $progressionCoordinatorSource -notmatch 'AuthorityRuntimeIds') {
+    throw "The Hangar daemon must derive an explicit Verse/provider session target from the selected Odin descriptor."
+}
+if ($progressionCoordinatorSource -match '_remote\.(ReadAsync|SubmitDocumentAsync)\s*<[^>]+>\s*\(\s*source\.SelectedVerseId' -or
+    $progressionCoordinatorSource -match '_remote\.(ReadAsync|SubmitDocumentAsync)\s*\(\s*source\.SelectedVerseId') {
+    throw "Remote Hangar traffic cannot use the Verse selector value as an ambiguous provider identity."
+}
 if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch '"control.select"') -or
     -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'AetheriaRuntimeHangarCommands.SelectVerse')) {
     throw "The Hangar must publish the daemon-owned progression Verse selector as an Eve control.select."

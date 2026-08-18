@@ -179,22 +179,23 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
 
         try
         {
+            var target = RemoteTarget(source);
             var hangar = await _remote.ReadAsync<AetheriaHangarState>(
-                source.SelectedVerseId,
+                target,
                 AetheriaStateNode.HangarKey.ToString(),
                 TimeSpan.FromSeconds(2)).ConfigureAwait(false);
             AetheriaLoadoutTemplate? loadout = null;
             var selected = hangar.Ships?.FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(selected?.LoadoutTemplateKey))
                 loadout = await _remote.ReadAsync<AetheriaLoadoutTemplate>(
-                    source.SelectedVerseId,
+                    target,
                     selected.LoadoutTemplateKey,
                     TimeSpan.FromSeconds(2)).ConfigureAwait(false);
             AetheriaRuntimeCatalogSnapshot? catalog = null;
             try
             {
                 catalog = await _remote.ReadAsync<AetheriaRuntimeCatalogSnapshot>(
-                    source.SelectedVerseId,
+                    target,
                     AetheriaStateNode.RuntimeCatalogKey.ToString(),
                     TimeSpan.FromSeconds(2)).ConfigureAwait(false);
             }
@@ -233,9 +234,10 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             throw new InvalidOperationException("Remote Hangar forwarding requires a selected remote Verse.");
         if (_remote == null)
             throw new InvalidOperationException("No Odin discovery endpoint is configured for the selected Verse.");
+        var target = RemoteTarget(source);
 
         await _remote.SubmitDocumentAsync(
-            source.SelectedVerseId,
+            target,
             AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + request.CommandId,
             request,
             _runtimeId,
@@ -250,7 +252,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             try
             {
                 var receipt = await _remote.ReadAsync<EveCommandReceiptDocument>(
-                    source.SelectedVerseId,
+                    target,
                     receiptKey,
                     TimeSpan.FromMilliseconds(500),
                     cancellationToken).ConfigureAwait(false);
@@ -342,6 +344,20 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         AuthorityRuntimeIds = verse.AuthorityRuntimeIds.ToArray(),
         DiscoveryEndpoints = verse.DiscoveryEndpoints.ToArray()
     };
+
+    private static CultMeshSessionTarget RemoteTarget(AetheriaProgressionSourceDocument source)
+    {
+        var selected = (source.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
+            .FirstOrDefault(option => string.Equals(option.VerseId, source.SelectedVerseId, StringComparison.Ordinal));
+        var providerId = (selected?.AuthorityRuntimeIds ?? Array.Empty<string>())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(providerId))
+            throw new InvalidOperationException($"Verse '{source.SelectedVerseId}' does not advertise an authoritative progression provider.");
+        return new CultMeshSessionTarget(source.SelectedVerseId, providerId);
+    }
 
     private static AetheriaProgressionSourceDocument Clone(AetheriaProgressionSourceDocument source) => new()
     {
