@@ -105,6 +105,9 @@ try {
   assert.ok(witness.commandId);
   assert.ok(["queued", "accepted"].includes(witness.commandStatus));
   assert.equal(witness.receiptSchema, "gamecult.eve.command_receipt.v1");
+  assert.equal(witness.receiptState, "accepted");
+  assert.equal(witness.receiptProviderId, "aetheria");
+  assert.equal(witness.receiptSurfaceId, "aetheria.hangar");
   assert.equal(witness.forgedIdentityStatus, "denied");
 
   await stop(daemon.process);
@@ -129,6 +132,9 @@ try {
   assert.notEqual(replacementCommand.commandId, witness.commandId);
   assert.ok(["queued", "accepted"].includes(replacementCommand.commandStatus));
   assert.equal(replacementCommand.receiptSchema, "gamecult.eve.command_receipt.v1");
+  assert.equal(replacementCommand.receiptState, "accepted");
+  assert.equal(replacementCommand.receiptProviderId, "aetheria");
+  assert.equal(replacementCommand.receiptSurfaceId, "aetheria.hangar");
 
   console.log(JSON.stringify({
     provider: "Aetheria.State.Daemon",
@@ -143,6 +149,7 @@ try {
       id: witness.commandId,
       status: witness.commandStatus,
       receiptSchema: witness.receiptSchema,
+      receiptState: witness.receiptState,
     },
     replacementCommand,
     routeRotationCount: 1,

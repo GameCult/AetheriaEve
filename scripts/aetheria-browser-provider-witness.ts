@@ -1,4 +1,4 @@
-import { parseEveSurfaceDocument } from "@gamecult/eve-contracts";
+import { parseEveCommandReceipt, parseEveSurfaceDocument } from "@gamecult/eve-contracts";
 import { renderEveSurface } from "@gamecult/eve-browser-lowering";
 import {
   CultMeshBrowserClient,
@@ -16,13 +16,12 @@ declare global {
       commandId: string;
       commandStatus: string;
       receiptSchema: string;
+      receiptState: string;
+      receiptProviderId: string;
+      receiptSurfaceId: string;
       forgedIdentityStatus: string;
     };
-    __aetheriaIssueVerseSelection?: () => Promise<{
-      commandId: string;
-      commandStatus: string;
-      receiptSchema: string;
-    }>;
+    __aetheriaIssueVerseSelection?: () => Promise<CommandProof>;
     __aetheriaWitnessError?: string;
   }
 }
@@ -54,7 +53,7 @@ try {
   });
   if (!lease.current) throw new Error("The Aetheria daemon returned no Hangar surface.");
   const surface = parseEveSurfaceDocument(decodeCultNetPayload(lease.current));
-  let commandProof: Promise<{ commandId: string; commandStatus: string; receiptSchema: string }> | undefined;
+  let commandProof: Promise<CommandProof> | undefined;
   let submittedIntent: import("@gamecult/eve-browser-lowering").EveCommandIntent | undefined;
   renderEveSurface(surface, host, {
     activeSurfaceId: "aetheria.hangar",
@@ -117,7 +116,7 @@ async function verifyForgedClientDenied(
 async function submitAndObserveReceipt(
   mesh: CultMeshBrowserClient,
   intent: import("@gamecult/eve-browser-lowering").EveCommandIntent,
-): Promise<{ commandId: string; commandStatus: string; receiptSchema: string }> {
+): Promise<CommandProof> {
   const response = await mesh.invoke({
     serviceId: intent.commandBoundary || "aetheria.daemon.commands",
     operation: intent.command,
@@ -145,12 +144,34 @@ async function submitAndObserveReceipt(
         resolve(record);
       });
     });
+    const decodedReceipt = decodeCultNetPayload(receipt);
+    let parsed: ReturnType<typeof parseEveCommandReceipt>;
+    try {
+      parsed = parseEveCommandReceipt(decodedReceipt);
+    } catch (error) {
+      throw new Error(`${String(error)}\nDecoded receipt: ${JSON.stringify(decodedReceipt)}`);
+    }
+    if (parsed.commandId !== response.messageId) {
+      throw new Error(`Aetheria receipt '${parsed.receiptId}' answered the wrong command '${parsed.commandId}'.`);
+    }
     return {
       commandId: response.messageId,
       commandStatus: response.status,
       receiptSchema: receipt.schemaVersion || receipt.schemaId,
+      receiptState: parsed.state,
+      receiptProviderId: parsed.providerId,
+      receiptSurfaceId: parsed.surfaceId,
     };
   } finally {
     receiptLease.dispose();
   }
+}
+
+interface CommandProof {
+  commandId: string;
+  commandStatus: string;
+  receiptSchema: string;
+  receiptState: string;
+  receiptProviderId: string;
+  receiptSurfaceId: string;
 }

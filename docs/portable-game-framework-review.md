@@ -176,6 +176,27 @@ After this cut the full clean-consumer plus real-network chronology passed with
 10,000 retained-session operations at 0.68 ms p99 and 272 KiB post-GC managed
 growth.
 
+The provider sample now opens one public `CultMeshNode` for its `.cc` cache and
+typed database instead of manually assembling those two halves beside the
+framework. The first getting-started chapter uses the same node boundary. The
+unchanged full verifier passed after this simplification: the clean packed-
+artifact consumer reopened its `.cc` state, and the real Chromium/C# witness
+survived route replacement before completing 10,000 operations at 0.74 ms p99,
+about 4,144 operations/second, and 207 KiB post-GC managed growth.
+
+The product browser witness previously checked only the outer CultNet record's
+declared receipt schema. Once it decoded the payload through Eve's generated
+contract, it exposed that C# was emitting `EveCommandReceiptDocument` as a
+positional MessagePack array even though the portable contract requires a
+keyed object. Eve now owns a compatibility formatter that writes the canonical
+string-keyed receipt and navigation maps, omits absent optional navigation,
+and reads the legacy 13-slot representation for existing `.cc` state. Focused
+wire tests cover canonical shape, optional-field omission, and legacy reads.
+The real Aetheria Chromium witness now decodes and validates both pre- and
+post-restart receipts, correlates each receipt with its command id, and asserts
+the accepted state plus provider and Hangar identities. This closes a false-
+evidence hole rather than adding a browser-side dialect.
+
 The getting-started chapters now keep the same counter application from the
 first `.cc` write through the live Chromium/C# route-replacement proof. The
 former fourth chapter switched without warning to a VoidBot TypeScript
