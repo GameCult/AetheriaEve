@@ -2,6 +2,14 @@
 
 Date: 2026-06-13
 
+> Live correction, 2026-08-18: the legacy root Unity body and its direct
+> `AetheriaRuntimeStateBoot`, client-target sidecar, local Verse replica, and
+> SDK-style `Aetheria.State.Unity` facade have been removed from the product
+> path. The thin `Aetheria.Unity` project only configures the generic Eve Unity
+> plugin. The daemon publishes the whole UI; its Hangar progression coordinator
+> owns Odin discovery and Verse selection. Detailed references below to the old
+> root Unity migration are historical evidence, not current mechanism.
+
 This is the Proprioception and Imagination pass for turning Aetheria from a
 Unity project with ancestral cache/network/UI machinery into a coherent
 GameCult machine: typed CultCache state, CultMesh networking, and Eve CultUI

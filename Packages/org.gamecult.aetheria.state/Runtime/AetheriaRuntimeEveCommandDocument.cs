@@ -39,7 +39,7 @@ namespace GameCult.Aetheria.State.Verse
         MainMenuShowSettings = 26,
         MainMenuQuit = 27,
         MainMenuShowPlayerSettings = 28,
-        MainMenuShowVerseSettings = 29,
+        RemovedMainMenuShowVerseSettings = 29,
         MainMenuShowInputSettings = 30,
         MainMenuBackToMain = 31,
         MainMenuBackToSettings = 32,

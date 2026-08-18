@@ -123,7 +123,6 @@ public static class AetheriaEveCommandBridge
                 case AetheriaRuntimeEveCommandKind.MainMenuShowSettings:
                 case AetheriaRuntimeEveCommandKind.MainMenuQuit:
                 case AetheriaRuntimeEveCommandKind.MainMenuShowPlayerSettings:
-                case AetheriaRuntimeEveCommandKind.MainMenuShowVerseSettings:
                 case AetheriaRuntimeEveCommandKind.MainMenuShowInputSettings:
                 case AetheriaRuntimeEveCommandKind.MainMenuBackToMain:
                 case AetheriaRuntimeEveCommandKind.MainMenuBackToSettings:
@@ -434,8 +433,6 @@ public static class AetheriaEveCommandBridge
                 return AetheriaRuntimeMainMenuCommands.SettingsSurfaceId;
             case AetheriaRuntimeEveCommandKind.MainMenuShowPlayerSettings:
                 return AetheriaRuntimeMainMenuCommands.PlayerSettingsSurfaceId;
-            case AetheriaRuntimeEveCommandKind.MainMenuShowVerseSettings:
-                return AetheriaRuntimeMainMenuCommands.VerseSettingsSurfaceId;
             case AetheriaRuntimeEveCommandKind.MainMenuShowInputSettings:
             case AetheriaRuntimeEveCommandKind.MainMenuOpenRuntimeInputScreen:
                 return AetheriaRuntimeMainMenuCommands.InputSettingsSurfaceId;
@@ -457,7 +454,6 @@ public static class AetheriaEveCommandBridge
             case AetheriaRuntimeMainMenuCommands.SettingsSurfaceId:
             case AetheriaRuntimeMainMenuCommands.InputSettingsSurfaceId:
             case AetheriaRuntimeMainMenuCommands.PlayerSettingsSurfaceId:
-            case AetheriaRuntimeMainMenuCommands.VerseSettingsSurfaceId:
                 return surfaceId;
             default:
                 return AetheriaRuntimeMainMenuCommands.RootSurfaceId;

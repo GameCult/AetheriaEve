@@ -1,5 +1,10 @@
 # Stage 7A Client Surface Inventory
 
+> Historical inventory of the deprecated Unity migration body. Its
+> `AetheriaClient`/`AetheriaRuntimeVerseClient` paths no longer exist in the
+> product package. The live thin-client boundary is generic retained CultMesh
+> discovery plus daemon-published Eve lowering.
+
 Date: 2026-06-24
 
 Stage 7A exists to stop the client migration from turning into Jenga. This is

@@ -7,72 +7,24 @@ namespace GameCult.Aetheria.State.Verse
     internal sealed class AetheriaRuntimeDaemonOperationClient
     {
         public const string DefaultClientId = "aetheria-daemon-client";
-        private readonly Func<AetheriaRuntimeDaemonCommandDocument, AetheriaRuntimeDaemonCommandEnvelope>? _submit;
+        private readonly Func<AetheriaRuntimeDaemonCommandDocument, AetheriaRuntimeDaemonCommandEnvelope> _submit;
 
         internal AetheriaRuntimeDaemonOperationClient(
-            string stateFilePath,
-            string clientId = DefaultClientId,
-            string sessionId = "local")
-        {
-            if (string.IsNullOrWhiteSpace(stateFilePath))
-                throw new ArgumentException("State file path must be non-empty.", nameof(stateFilePath));
-
-            StateFilePath = stateFilePath;
-            ClientId = string.IsNullOrWhiteSpace(clientId) ? DefaultClientId : clientId;
-            SessionId = string.IsNullOrWhiteSpace(sessionId) ? "local" : sessionId;
-        }
-
-        internal AetheriaRuntimeDaemonOperationClient(
-            string stateFilePath,
             string clientId,
             string sessionId,
             Func<AetheriaRuntimeDaemonCommandDocument, AetheriaRuntimeDaemonCommandEnvelope> submit)
-            : this(stateFilePath, clientId, sessionId)
         {
+            ClientId = string.IsNullOrWhiteSpace(clientId) ? DefaultClientId : clientId;
+            SessionId = string.IsNullOrWhiteSpace(sessionId) ? "local" : sessionId;
             _submit = submit ?? throw new ArgumentNullException(nameof(submit));
         }
 
-        public string StateFilePath { get; }
         public string ClientId { get; }
         public string SessionId { get; }
 
         private AetheriaRuntimeDaemonCommandEnvelope Send(AetheriaRuntimeDaemonCommandDocument command)
         {
-            if (_submit != null)
-                return _submit(command);
-
-            if (!TrySend(command, out var envelope, out var error))
-            {
-                throw new InvalidOperationException(
-                    $"Failed to submit Aetheria daemon operation {command.Kind}: {error}");
-            }
-
-            return envelope!;
-        }
-
-        private bool TrySend(
-            AetheriaRuntimeDaemonCommandDocument command,
-            out AetheriaRuntimeDaemonCommandEnvelope? envelope,
-            out string error)
-        {
-            envelope = null;
-            error = "";
-
-            try
-            {
-                using var client = AetheriaClient
-                    .OpenAsync(StateFilePath, ClientId, startServer: false, pullOnOpen: true)
-                    .GetAwaiter()
-                    .GetResult();
-                envelope = client
-                    .SubmitDaemonCommandDocument(command);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                error = ex.ToString();
-                return false;
-            }
+            return _submit(command);
         }
 
         private AetheriaRuntimeDaemonCommandDocument Create(

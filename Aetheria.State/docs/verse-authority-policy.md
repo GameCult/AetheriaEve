@@ -172,16 +172,13 @@ documents. The client shell remains a renderer/input surface. Pilot simulation
 may also be embedded beside its renderer, but its durable output is candidate
 evidence; only the Commander daemon appends finalized state.
 
-## Current Local-Mirror Constraint
+## Client Cache Boundary
 
-The current C# implementation is not a pure remote-client architecture yet.
-Unity can select a remote CultMesh Verse, but gameplay boot still requires that
-Verse to be hydrated into a readable local CultCache replica before the Unity
-shell starts. The Electron Starbridge client likewise uses local daemon
-publications while using CultMesh for typed command submission.
-
-That constraint is acceptable as a migration bridge, but it must not become the
-architecture. The end state is:
+Unity, browser, Electron, and headless clients retain generic CultMesh sessions
+by Verse/provider identity. A runtime may keep a transport cache for reconnect,
+offline diagnostics, or lowering efficiency, but Aetheria code does not choose
+a `.cc` replica as the progression source and does not hydrate gameplay truth
+before mounting a surface. The live path is:
 
 ```text
 CultMesh transport/subscription
@@ -190,8 +187,9 @@ CultMesh transport/subscription
   -> renderer/input surface
 ```
 
-The local cache is an optimization and offline/debugging aid. It is not the
-authority boundary.
+The cache is an optimization and offline/debugging aid owned by the generic
+client runtime. It is not the authority boundary, a Verse selector, or a second
+gameplay world.
 
 ## Rust/WASM Simulation Kernel Migration
 

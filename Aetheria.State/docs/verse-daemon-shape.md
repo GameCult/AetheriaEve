@@ -52,7 +52,12 @@ The bridge layer must point at daemon-owned witnesses instead of becoming a seco
 
 Queues are an implementation detail. Eve commands and daemon commands are typed `gamecult.eve.command.v1` and `gamecult.aetheria.daemon_command.v1` records in the Aetheria state graph; the old `.pending` runtime commit outbox is gone. None of those folders are the public API, daemon identity, or a substitute for CultNet/CultMesh typed records. Anything still named `Queue*`, `CommandLog`, `Inbox`, `mailbox`, `.eve.commands`, `.daemon.commands`, `.cc.pending`, or `PendingCultCacheStore` in Unity-facing daemon/Eve command code should lower to typed command documents and be demoted behind typed operation methods as the CultNet command boundaries come online.
 
-`AetheriaRuntimeVerseClient` is the only shared submission boundary for typed command records. Client-side command lowerers may use typed runtime clients over that same Verse client. Do not add command ports, cached submitters, mailboxes, or queue-like buses between clients and the typed Verse graph. They must not drain those records or mutate state in response; ownership stays with the daemon Verse member.
+Network clients submit through retained generic CultMesh operation handles
+resolved from the selected Verse/provider identity. They never open the
+daemon's `.cc` path. Daemon-internal translation may materialize a typed command
+inbox record, but only the daemon state node drains that transient record and
+commits facts/receipts. Do not add application command ports, cached submitters,
+mailboxes, or queue-like buses between lowerers and CultMesh.
 
 Migration rule: do not expose string command names and payload maps as public Aetheria APIs. Compatibility adapters may decode external Eve requests at the edge, but persisted Aetheria command documents and Unity gameplay calls should use typed command bodies and typed operation methods.
 

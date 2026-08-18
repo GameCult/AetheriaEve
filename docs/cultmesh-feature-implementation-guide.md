@@ -1,5 +1,9 @@
 # Implementing Aetheria Features With CultMesh
 
+> The `AetheriaClient` snippets below are historical Unity-migration examples
+> and no longer compile. New features use generated domain handles over a
+> retained generic CultMesh client. Renderers never open the daemon `.cc` file.
+
 Date: 2026-06-28
 
 This guide describes the target developer experience for adding Aetheria state

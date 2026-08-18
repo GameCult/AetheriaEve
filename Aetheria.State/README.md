@@ -11,9 +11,8 @@ It uses modern `GameCult.Caching`, `GameCult.Caching.MessagePack`, and
 `GameCult.Mesh`. It does not reference the old `Assets/Scripts/ServerShared`
 tree, RethinkDB, JsonKnownTypes, or Newtonsoft.Json.
 
-The first live state files are `GameData/aetheria-world.cc` for daemon-owned
-Verse state and `GameData/aetheria-client.cc` for the client-owned active Verse
-target. `Aetheria.State.Import` generates the daemon-owned world file from
+The live durable state file is `GameData/aetheria-world.cc`, owned by the
+daemon. `Aetheria.State.Import` generates that world file from
 checked-in legacy catalog inputs without embedding machine-local absolute
 paths. A full import emits one self-contained monolithic `.cc` suitable for a
 fresh clone or released package. Runtime-created `.cc.records` directories are
@@ -62,9 +61,6 @@ physics port and committed by that same daemon writer. Combat state remains in
 the native run/zone/entity snapshot graph;
 there is no separate abstract combat save model or optional second writer.
 Unity Eve surfaces construct typed `gamecult.eve.command.v1` command documents.
-`AetheriaRuntimeVerseClient` is a local tool/daemon-adjacent boundary for opening
-an explicit `.cc` state path. It does not discover remote providers, snapshot a
-physical endpoint, maintain a gameplay replica, or compose Eve surfaces.
 Networked Unity, headless, and non-Unity consumers use the generic
 `CultMeshClient` identity/discovery path and lower the daemon-published Eve
 surface. Typed command clients submit to the same Verse operation records;
@@ -333,22 +329,13 @@ summary, trade-catalog, and corporation views. This is a typed CultCache
 provider document and a local mirror of the Eve contract until the shared Eve
 Unity UI Toolkit lowering package exists.
 
-`Aetheria.State.Unity` is the Unity-facing runtime read facade over typed state.
-It resolves the active Verse through the client-owned `aetheria-client.cc`
-target document, then opens the selected typed state source. Today that source
-is still a local `.cc` file transport, so the facade emits immutable catalog
-read models for trade, equipment, behavior, hardpoint, manufacturer,
-corporation, and name-file queries, exposes typed item shape masks for layout
-and fitting consumers, exposes typed interior masks and hardpoints for
-equipment/cargo layout consumers, exposes typed behavior payload read models,
-can read typed player settings for Unity boot, and can read the published Eve
-catalog surface. It does not deserialize legacy runtime projection objects and
-does not write daemon-owned Verse state. Unity can use this as the first
-package boundary once CultLib/Eve runtime packaging is available.
-Unity `MainMenu` now lowers a typed Verse settings shell over that split:
-client-target edits persist locally in `aetheria-client.cc`, while Verse-host
-visibility changes append provider-owned Eve request documents against the
-selected local Verse state file.
+The thin Unity project configures the generic Eve Unity plugin with a
+rendezvous endpoint, provider identity, surface identity, runtime identity, and
+a cache path owned by the plugin. It does not open the daemon's `.cc`, choose a
+physical progression endpoint, or project Aetheria state itself. The Hangar Eve
+surface contains the Verse selector; the daemon's progression coordinator
+discovers the configured Odin catalog, validates selection, and changes the
+Hangar source of truth.
 `Galaxy` now consumes this package-owned runtime catalog for faction selection
 and name generation, so generated sectors use typed corporation v2 and
 `aetheria.name_file.v2` records instead of legacy `Faction`/`NameFile`
@@ -406,13 +393,10 @@ bootstrap exists, mounts the operations surface through the UI Toolkit presenter
 and keeps renderer commands routed through the typed Eve command inbox.
 Use it after import when `GameData/aetheria-world.cc` changes.
 
-`Aetheria.State.Unity.Smoke` opens the materialized state through the runtime
-facade and proves read-only Unity-facing catalog access without the legacy
-catalog reader. Live Unity code uses typed Eve or daemon request documents
-instead of runtime commit outboxes. Runtime and Eve requests are typed `.cc`
-records with embedded schema catalogs; their current record payload codec is
-still temporary package code until Unity consumes generated CultCache
-serializers directly.
+`Aetheria.State.Smoke` proves typed catalog persistence and daemon operation
+records at the state-owner boundary. Unity behavior is verified through the
+thin-client/package gate and released Eve lowering witnesses; there is no
+Unity-specific direct-state facade.
 
 `Aetheria.State.Daemon` opens the CultMesh Verse daemon, publishes daemon-owned
 Verse identity/health/game/editor surfaces, accepts observed Eve command
@@ -439,21 +423,10 @@ advertisement still publishes `gamecult.eve.provider_advertisement.v1` for the
 `aetheria` provider, advertising the catalog, operations, and player-settings
 surfaces plus the typed schemas witnessed by the local `.cc` state file.
 
-Remote Unity clients should not pretend a public Verse is local authority. Use
-`Aetheria.State.Replica` to pull a cache-only local witness from the daemon:
-
-```powershell
-dotnet run --project .\Aetheria.State.Replica\Aetheria.State.Replica.csproj -- sync --endpoint cultnet://host:3075 --game-data-root .\GameData --verse-id aetheria.public
-```
-
-That writes `GameData\Verses\<verse>.cc` as a replica projection of daemon
-truth. The selected remote client target resolves to that replica path. The
-daemon still owns accepted state; the replica is only the local read surface
-Unity lowers from.
-
-The Unity Verse-settings shell can also trigger the same one-shot sync through
-the `Aetheria.State.Replica` bridge when the repo-local tool is available. That
-keeps target selection local while the replica organ owns daemon transport.
+Remote clients discover and retain the provider through generic CultMesh
+identity. Any runtime cache remains transport-owned and non-authoritative; no
+Aetheria client-target sidecar or application-owned gameplay replica selects a
+Verse or supplies Unity boot state.
 
 The old standalone `Aetheria.State.DrainCommands` applicator is deleted. Command
 acceptance is daemon behavior now; bounded operation uses `Aetheria.State.Daemon

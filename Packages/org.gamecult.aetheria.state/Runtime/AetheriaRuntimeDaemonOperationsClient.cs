@@ -20,7 +20,6 @@ public sealed class AetheriaRuntimeDaemonOperationsClient
     public static bool TryCreateSurfaceCommandDocument(
         EveSurfaceCommandRequest request,
         AetheriaRuntimeDaemonFrameDocument? frame,
-        string stateFilePath,
         string clientId,
         string sessionId,
         out AetheriaRuntimeDaemonCommandDocument? command)
@@ -33,7 +32,6 @@ public sealed class AetheriaRuntimeDaemonOperationsClient
         var operations = new AetheriaRuntimeDaemonOperationsClient(submit =>
         {
             var client = new AetheriaRuntimeDaemonOperationClient(
-                string.IsNullOrWhiteSpace(stateFilePath) ? "." : stateFilePath,
                 clientId,
                 sessionId,
                 document =>

@@ -26,11 +26,9 @@ internal sealed class AuthoritySmokeChecks
         UnsupportedAuthorityModesReject();
         AuthorizedCommandsReportsRejectedIds();
         PreRejectedCommandsEnterFrameReceipts();
-        ClientTargetCarriesRuntimeIdentity();
         TwoLocalRuntimeDelegatedPolicyHarness();
         GameDocumentsBuildLocalViewportFromFrame();
         StarbridgeSessionSummaryProjectsScenarioFacts();
-        await AetheriaClientStateDocumentsProjectAndSubmitAsync().ConfigureAwait(false);
         await DaemonOncePublishesStarbridgeSessionFactsAsync().ConfigureAwait(false);
         await SamePolicyDocumentCanBeLoadedByTwoNodesAsync().ConfigureAwait(false);
     }
@@ -48,46 +46,6 @@ internal sealed class AuthoritySmokeChecks
         RequireEqual(AetheriaRuntimeAuthorityModes.AnyTrustedRuntime, decision.Mode, "default policy mode");
         RequireEqual("entity:raven", decision.SubjectKey, "default policy subject");
         RequireEqual(AetheriaRuntimeClaimKinds.Movement, decision.ClaimKind, "default policy claim");
-    }
-
-    private static void ClientTargetCarriesRuntimeIdentity()
-    {
-        var smokeId = Guid.NewGuid().ToString("N");
-        var gameData = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"aetheria-client-target-{smokeId}"));
-        try
-        {
-            var state = AetheriaState.At(gameData);
-            var target = state.ClientTarget.Refresh();
-            RequireEqual(AetheriaRuntimeStateBoundary.DefaultClientRuntimeId, target.RuntimeId, "client target default runtime id");
-
-            target = state.ClientTarget.RequestRuntimeId("raven-test-runtime");
-            RequireEqual("raven-test-runtime", target.RuntimeId, "client target should persist requested runtime id");
-
-            var boot = AetheriaRuntimeStateBoot.Inspect(gameData);
-            RequireEqual("raven-test-runtime", boot.RuntimeId, "boot report should expose client target runtime id");
-
-            var previousRuntimeOverride = Environment.GetEnvironmentVariable(AetheriaRuntimeStateBoundary.RuntimeIdOverrideEnvironmentVariable);
-            try
-            {
-                Environment.SetEnvironmentVariable(AetheriaRuntimeStateBoundary.RuntimeIdOverrideEnvironmentVariable, "raven-env-runtime");
-                boot = AetheriaRuntimeStateBoot.Inspect(gameData);
-                RequireEqual("raven-env-runtime", boot.RuntimeId, "generic runtime id override should win");
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable(AetheriaRuntimeStateBoundary.RuntimeIdOverrideEnvironmentVariable, previousRuntimeOverride);
-            }
-        }
-        finally
-        {
-            try
-            {
-                gameData.Delete(recursive: true);
-            }
-            catch
-            {
-            }
-        }
     }
 
     private static void DelegatedRuntimeAcceptsOnlyListedRuntime()
@@ -556,169 +514,6 @@ internal sealed class AuthoritySmokeChecks
         RequireSurfaceMetric(gameSurface, "aetheria.daemon.game.starbridge.role.0.runtime", "commander-client", "daemon game surface starbridge runtime role");
     }
 
-    private static async Task AetheriaClientStateDocumentsProjectAndSubmitAsync()
-    {
-        var smokeId = Guid.NewGuid().ToString("N");
-        var statePath = Path.Combine(Path.GetTempPath(), $"aetheria-client-state-documents-{smokeId}.cc");
-        var frame = AetheriaRuntimeDaemonFrameDocument.Create(
-            new AetheriaRuntimeRunCheckpointCommit
-            {
-                RunId = "client-state-documents-smoke",
-                CurrentZoneIndex = 0,
-                CurrentEntityKey = EntityKey("client-state-documents-smoke", 0, 0),
-                Zones =
-                [
-                    new AetheriaRuntimeZoneSnapshotCommit
-                    {
-                        ZoneIndex = 0,
-                        Name = "Client State Documents Zone",
-                        Entities =
-                        [
-                            SnapshotEntity(0, "Document Raven", "player", 0, 0, 600, 140, "document-cargo"),
-                            SnapshotEntity(1, "Document Raider", "raider", 100, 0, 120, 80, "raider-cargo")
-                        ]
-                    }
-                ]
-            },
-            "state-documents-daemon",
-            "state-documents-session",
-            7,
-            0.14,
-            0.02);
-        var health = new AetheriaRuntimeDaemonHealthDocument
-        {
-            DaemonId = "state-documents-daemon",
-            VerseId = "aetheria.state-documents-smoke",
-            FrameId = frame.FrameId,
-            Status = "healthy",
-            Transport = "cultcache-witness"
-        };
-        var policy = AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(
-            "aetheria.state-documents-smoke",
-            "state-documents-daemon");
-        var scenario = new AetheriaRuntimeStarbridgeScenarioDocument
-        {
-            ScenarioId = "starbridge.state-documents",
-            DisplayName = "Document Starbridge",
-            StartingBaseKey = EntityKey("client-state-documents-smoke", 0, 0),
-            StationStock =
-            [
-                new AetheriaRuntimeStarbridgeStationStockItem
-                {
-                    ItemKey = "document-cargo",
-                    Quantity = 3,
-                    Quality = 1,
-                    Durability = 1
-                }
-            ],
-            Waves =
-            [
-                new AetheriaRuntimeStarbridgeWaveDefinition
-                {
-                    WaveIndex = 0,
-                    DisplayName = "Document Wave",
-                    AttackerKeys = ["raider"],
-                    BossKey = "document-boss"
-                }
-            ]
-        };
-        var session = new AetheriaRuntimeStarbridgeSessionDocument
-        {
-            SessionId = "state-documents-session",
-            ScenarioId = "starbridge.state-documents",
-            BaseEntityKey = EntityKey("client-state-documents-smoke", 0, 0),
-            Phase = "pre-wave"
-        };
-
-        using (var writer = await AetheriaRuntimeVerseClient
-            .OpenAsync(statePath, "state-documents-writer", startServer: false, pullOnOpen: false)
-            .ConfigureAwait(false))
-        {
-            await writer.Database
-                .PutAsync(AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest, frame)
-                .ConfigureAwait(false);
-            await writer.Database
-                .PutAsync(AetheriaRuntimeVerseRecordKeys.DaemonHealth, health)
-                .ConfigureAwait(false);
-            await writer.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
-                .ReplaceAsync(policy)
-                .ConfigureAwait(false);
-            await writer.MutableDocument<AetheriaRuntimeStarbridgeScenarioDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeScenarioLatest)
-                .ReplaceAsync(scenario)
-                .ConfigureAwait(false);
-            await writer.MutableDocument<AetheriaRuntimeStarbridgeSessionDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeSessionLatest)
-                .ReplaceAsync(session)
-                .ConfigureAwait(false);
-            await writer.FlushAsync().ConfigureAwait(false);
-        }
-
-        using var client = await AetheriaClient
-            .OpenAsync(statePath, "pilot-client", sessionId: "state-documents-session", pullOnOpen: true)
-            .ConfigureAwait(false);
-        var state = client.State;
-        var viewportBounds = new AetheriaRuntimeViewportBounds { MinX = -20, MinY = -20, MaxX = 150, MaxY = 20 };
-        var viewport = await state
-            .GameViewport(viewportBounds)
-            .LatestAsync()
-            .ConfigureAwait(false);
-        Require(viewport.Objects.Any(item => item.DisplayName == "Document Raven"), "managed map document should include controlled object");
-        Require(viewport.Objects.Any(item => item.DisplayName == "Document Raider"), "managed map document should include visible hostile object");
-        var objectsViewport = await state
-            .ObjectsViewport(viewportBounds)
-            .LatestAsync()
-            .ConfigureAwait(false);
-        RequireEqual(AetheriaRuntimeDaemonSchemas.ObjectsViewport, objectsViewport.Schema, "managed objects viewport document schema");
-        Require(objectsViewport.Objects.Any(item => item.DisplayName == "Document Raven"), "managed objects viewport document should include controlled object");
-        Require(objectsViewport.Objects.Any(item => item.DisplayName == "Document Raider"), "managed objects viewport document should include visible hostile object");
-        var gravityViewport = await state
-            .GravityViewport(viewportBounds)
-            .LatestAsync()
-            .ConfigureAwait(false);
-        RequireEqual(AetheriaRuntimeDaemonSchemas.GravityViewport, gravityViewport.Schema, "managed gravity viewport document schema");
-
-        var currentZone = await state.CurrentZone.LatestAsync().ConfigureAwait(false);
-        RequireEqual(AetheriaRuntimeDaemonSchemas.CurrentZone, currentZone.Schema, "managed current-zone document schema");
-        RequireEqual("Client State Documents Zone", currentZone.ZoneName, "managed current-zone document name");
-
-        var sectorMap = await state.SectorMap.LatestAsync().ConfigureAwait(false);
-        RequireEqual(AetheriaRuntimeDaemonSchemas.SectorMap, sectorMap.Schema, "managed sector-map document schema");
-        Require(sectorMap.Zones.Any(zone => zone.ZoneIndex == currentZone.ZoneIndex && zone.Current), "managed sector-map document should include current zone marker");
-
-        var selected = await state.SelectedObject(0).LatestAsync().ConfigureAwait(false);
-        RequireEqual(AetheriaRuntimeDaemonSchemas.SelectedObject, selected.Schema, "managed selected-object document schema");
-        Require(selected.Selected?.DisplayName == "Document Raven", "managed selected-object document should resolve entity");
-
-        var inventory = await state.Inventory(0).LatestAsync().ConfigureAwait(false);
-        RequireEqual(AetheriaRuntimeDaemonSchemas.Inventory, inventory.Schema, "managed inventory document schema");
-        Require(inventory.Cargo.Any(item => item.ItemKey == "document-cargo"), "managed inventory document should expose cargo");
-
-        var starbridgeSummary = await state.StarbridgeSummary.LatestAsync().ConfigureAwait(false);
-        RequireEqual("Document Starbridge", starbridgeSummary.ScenarioName, "managed starbridge summary document should project scenario name");
-        RequireEqual("pre-wave", starbridgeSummary.Phase, "managed starbridge summary document should project session phase");
-        Require(starbridgeSummary.StationStock.Any(item => item.ItemKey == "document-cargo"), "managed starbridge summary document should expose station stock");
-
-        var healthDocument = await state.Health.LatestAsync().ConfigureAwait(false);
-        Require(healthDocument?.Status == "healthy", "managed daemon health document should read local health");
-
-        var authorityPolicy = await state.AuthorityPolicy.LatestAsync().ConfigureAwait(false);
-        RequireEqual("aetheria.trusted-coop.v1", authorityPolicy?.PolicyId, "managed authority policy document id");
-
-        var command = client.SetMoveVector(1, 0, 0.5);
-        RequireEqual(AetheriaRuntimeDaemonCommandKinds.SetMoveVector, command.Kind, "managed client command kind");
-        RequireEqual("pilot-client", command.ClientId, "managed client command client id");
-        RequireEqual(frame.FrameId, command.ObservedFrameId, "managed client command observed frame id");
-
-        using var reader = await AetheriaRuntimeVerseClient
-            .OpenAsync(statePath, "state-documents-reader", startServer: false, pullOnOpen: true)
-            .ConfigureAwait(false);
-        var stored = await reader.Database
-            .GetAsync<AetheriaRuntimeDaemonCommandDocument>(
-                AetheriaRuntimeVerseRecordKeys.DaemonCommand(command.CommandId))
-            .ConfigureAwait(false);
-        Require(stored != null, "managed client command should be stored as typed daemon command document");
-        RequireEqual(AetheriaRuntimeClaimKinds.Movement, stored!.ClaimKind, "managed client command claim kind");
-    }
-
     private static async Task DaemonOncePublishesStarbridgeSessionFactsAsync()
     {
         var smokeId = Guid.NewGuid().ToString("N");
@@ -733,12 +528,17 @@ internal sealed class AuthoritySmokeChecks
             clientCultMeshPort,
             useTerminusFixture: true).ConfigureAwait(false);
 
-        using var client = await AetheriaClient
-            .OpenAsync(statePath, "starbridge-smoke-client", sessionId: "authority-smoke", pullOnOpen: true)
+        await using var observer = await AetheriaStateNode.OpenAsync(
+            statePath,
+            "starbridge-smoke-observer",
+            startServer: false,
+            enableDurableShardLogs: false).ConfigureAwait(false);
+        var summary = await observer.Database
+            .GetAsync<AetheriaRuntimeStarbridgeSessionSummaryDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeSessionSummary)
             .ConfigureAwait(false);
-        var summary = await client.State.StarbridgeSummary.LatestAsync().ConfigureAwait(false);
+        Require(summary != null, "daemon should publish the Starbridge session summary");
 
-        RequireEqual(AetheriaRuntimeDaemonSchemas.StarbridgeSessionSummary, summary.Schema, "daemon starbridge summary schema");
+        RequireEqual(AetheriaRuntimeDaemonSchemas.StarbridgeSessionSummary, summary!.Schema, "daemon starbridge summary schema");
         RequireEqual("starbridge.frontier-fabricator", summary.ScenarioId, "daemon starbridge scenario id");
         RequireEqual("Frontier Fabricator Defense", summary.ScenarioName, "daemon starbridge scenario name");
         RequireEqual("authority-smoke", summary.SessionId, "daemon starbridge session id");

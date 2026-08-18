@@ -32,31 +32,15 @@ second state owner.
 
 ## Local state tools
 
-`AetheriaRuntimeVerseClient` is the explicit local `.cc` boundary. It opens a
-caller-supplied state path with the runtime contract registry for daemon-adjacent
-tools, importers, smokes, and local state inspection. Its `aetheria.local`
-context describes that local file-backed process only.
+Only daemon-owned tools that are explicitly operating on local persistence may
+open an Aetheria `.cc` path. They use `AetheriaStateNode`, the same state owner
+as daemon bootstrap/import/smoke work. That type is not a client facade and is
+not distributed to renderers as a shortcut around CultMesh.
 
-```csharp
-using var client = await AetheriaRuntimeVerseClient.OpenAsync(
-    statePath,
-    runtimeId: "state-inspector");
-
-using var frames = client
-    .WatchRecord<AetheriaRuntimeDaemonFrameDocument>(
-        AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
-    .Subscribe(change =>
-    {
-        var frame = change.Document;
-        if (frame != null)
-            Inspect(frame);
-    });
-```
-
-The local facade exposes typed records and headless domain projections. It does
-not expose remote endpoint, remote refresh, remote shard, or client-side Eve
-surface construction APIs. If a tool needs a remote provider, it uses
-`CultMeshClient` like every other network consumer.
+A tool observing a running local daemon is still a network consumer: it uses
+`CultMeshClient`, the configured Odin, and stable provider identity. Locality
+may let CultMesh select an in-process or mapped transport, but it does not
+change ownership or grant the tool direct-file command authority.
 
 ## Typed domain contract
 

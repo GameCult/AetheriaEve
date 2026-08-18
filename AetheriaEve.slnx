@@ -21,10 +21,7 @@
   <Project Path="Aetheria.State.Daemon/Aetheria.State.Daemon.csproj" />
   <Project Path="Aetheria.State.Freeze/Aetheria.State.Freeze.csproj" />
   <Project Path="Aetheria.State.Import/Aetheria.State.Import.csproj" />
-  <Project Path="Aetheria.State.Replica/Aetheria.State.Replica.csproj" />
   <Project Path="Aetheria.State.Smoke/Aetheria.State.Smoke.csproj" />
-  <Project Path="Aetheria.State.Unity.Smoke/Aetheria.State.Unity.Smoke.csproj" />
-  <Project Path="Aetheria.State.Unity/Aetheria.State.Unity.csproj" />
   <Project Path="Aetheria.State.WireInterop/Aetheria.State.WireInterop.csproj" />
   <Project Path="Aetheria.State/Aetheria.State.csproj" />
 </Solution>

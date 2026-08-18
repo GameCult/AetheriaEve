@@ -24,6 +24,10 @@ $forbidden = @(
     @{ Pattern = '\bAetheriaRuntimeCommittedFactImporter\b'; Reason = 'Peer committed facts cannot mutate gameplay; Pilot output must enter as pre-finality candidate evidence.' }
     @{ Pattern = '\b(CumulativeImportedFactIds|CumulativeRejectedImportedFactIds|DuplicateImportedFactIds)\b'; Reason = 'Daemon frames cannot retain peer-import chronology or imply peer finality.' }
     @{ Pattern = '\bPeerCultMeshEndpoints\b|ReadOptions\(args,\s*"--peer-cultmesh-endpoint"'; Reason = 'Direct peer fact import is retired; Starbridge requires Pilot candidates and Commander selection.' }
+    @{ Pattern = '\b(class|sealed\s+class)\s+(AetheriaRuntimeVerseClient|AetheriaClientState|AetheriaClient)\b'; Reason = 'Application clients must not reopen daemon .cc state or own client-side projection Verses.' }
+    @{ Pattern = '\bAetheriaClient\.OpenAsync\b'; Reason = 'Application clients must connect through retained CultMesh provider identity, not a direct state-file facade.' }
+    @{ Pattern = '\b(AetheriaRuntimeClientTarget|AetheriaRuntimeStateBoot|AetheriaRuntimeVerseDiscovery|AetheriaRuntimeVerseReplicaBridge|AetheriaClientTarget)\b'; Reason = 'Verse selection belongs to the daemon Hangar coordinator; client sidecars, boot selectors, and application replicas must not return.' }
+    @{ Pattern = '\b(MainMenuShowVerseSettings|VerseSettingsSurfaceId)\b'; Reason = 'The player-facing Verse selector exists only in the daemon-published Hangar surface.' }
 )
 
 foreach ($rule in $forbidden) {
@@ -34,30 +38,26 @@ foreach ($rule in $forbidden) {
     }
 }
 
+foreach ($retiredProject in @("Aetheria.State.Replica", "Aetheria.State.Unity", "Aetheria.State.Unity.Smoke")) {
+    if (Test-Path -LiteralPath (Join-Path $Root $retiredProject)) {
+        $liveFiles = Get-ChildItem -LiteralPath (Join-Path $Root $retiredProject) -File -Recurse |
+            Where-Object { $_.FullName -notmatch '[\\/](obj|bin)[\\/]' }
+        if ($liveFiles) {
+            throw "$retiredProject is retired. Unity must use generic Eve/CultMesh identity; local state and replica tools cannot survive as a client architecture."
+        }
+    }
+}
+
 $registry = Join-Path $Root "Aetheria.State\AetheriaDocumentRegistry.cs"
 $canonicalRegistrations = @(Select-String -LiteralPath $registry -Pattern 'typeof\(EveSurfaceDocument\)').Count
 if ($canonicalRegistrations -ne 1) {
     throw "Aetheria must register canonical EveSurfaceDocument exactly once; found $canonicalRegistrations."
 }
 
-$runtimeRegistry = Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeVerseClient.cs"
+$runtimeRegistry = Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeVerseContracts.cs"
 $runtimeRegistrations = @(Select-String -LiteralPath $runtimeRegistry -Pattern 'typeof\(EveSurfaceDocument\)').Count
 if ($runtimeRegistrations -ne 1) {
     throw "The runtime Verse contract registry must list EveSurfaceDocument exactly once; found $runtimeRegistrations."
-}
-
-$runtimeClientSource = Get-Content -LiteralPath $runtimeRegistry -Raw
-$runtimeClientForbidden = @(
-    @{ Pattern = '\bOpenRemoteAsync\b'; Reason = 'The local Aetheria state facade must not open remote providers.' },
-    @{ Pattern = '\bRefreshRemoteAsync\b'; Reason = 'The local Aetheria state facade must not refresh an application-owned remote replica.' },
-    @{ Pattern = '\b(RemoteEndpoint|RemoteShardId|IsRemoteReplica)\b'; Reason = 'Physical remote routing belongs to CultMeshClient identity/discovery.' },
-    @{ Pattern = '\bSnapshotEndpoint\b'; Reason = 'The local Aetheria state facade must not bypass CultMeshClient with endpoint snapshots.' },
-    @{ Pattern = 'AetheriaRuntime(ZoneDetails|InventoryPanel|InventoryDropdown|MainMenu)SurfaceBuilder\.'; Reason = 'Clients must consume daemon-published Eve surfaces, not rebuild them.' }
-)
-foreach ($rule in $runtimeClientForbidden) {
-    if ($runtimeClientSource -match $rule.Pattern) {
-        throw $rule.Reason
-    }
 }
 
 $headlessProjectFiles = Get-ChildItem -LiteralPath $Root -Recurse -File |

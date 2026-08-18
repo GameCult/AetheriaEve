@@ -24,7 +24,8 @@ here.
 - `Aetheria.Unity` is the minimal Unity host for the generic EveUnity lowerer.
 - `Aetheria.Assets.Unity` authors and bundles provider presentation assets. It
   is not a game client and contains no gameplay or product UI code.
-- `Aetheria.Rts.Web` is the Starbridge-oriented Electron lowering target.
+- `Aetheria.Rts.Web` is a deprecated Stage 7 Electron/RTS reference and the
+  home of the focused C#↔TypeScript command-wire witness.
 
 ## Common Work
 
@@ -32,7 +33,7 @@ Typed documents and record keys:
 
 - `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeDaemonDocuments.cs`
 - `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeGameDocuments.cs`
-- `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeVerseClient.cs`
+- `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeVerseContracts.cs`
 - `Aetheria.State/AetheriaDocumentRegistry.cs`
 
 Daemon operations and simulation:
@@ -57,7 +58,9 @@ Provider assets:
 Thin clients:
 
 - `Aetheria.Unity/Assets/AetheriaUnityClient.cs`
-- `Aetheria.Rts.Web/Electron`
+- generic CultMesh/Eve lowerers in the Eve and EveUnity repositories. The
+  checked-in `Aetheria.Rts.Web/Electron` body is migration evidence, not the
+  product client contract.
 
 ## Verification
 
@@ -67,7 +70,7 @@ Run from the repository root:
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-aetheria-daemon.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-aetheria-unity-client.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-aetheria-assets-unity.ps1
-dotnet run --project .\Aetheria.State.Unity.Smoke\Aetheria.State.Unity.Smoke.csproj -- . .\Aetheria.Unity\Build\aetheria-unity.cc
+dotnet run --project .\Aetheria.State.Smoke\Aetheria.State.Smoke.csproj
 ```
 
 The removed `Aetheria.State.Verify` project and Stage 7 legacy parity script are

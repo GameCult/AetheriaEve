@@ -79,8 +79,11 @@ First implementation footholds now exist in CultLib:
 - The sibling Eve surface contract exposes component `EmbeddedDocuments` as first-class CultUI slots. Aetheria builders emit `EveEmbeddedDocumentSlot` directly, so daemon-owned UI can compose nested synced surfaces such as inventory dropdowns without an Aetheria-owned mirror, Unity-only model, facade, or projector.
 - Aetheria and Eve live command templates now carry `CultMeshOperationBindingDescriptor`. Eve command requests carry `CultMeshOperationInvocationDescriptor` plus `CultMeshOperationPayload`, so renderer click/change events preserve operation id, schema, route hint, idempotency, and scalar field reads as shared CultMesh metadata. Legacy `command`, `label`, `transport`, and string payload fields remain compatibility projections and persisted DTO fields, but the live API no longer exposes raw command-string/dictionary constructors; controls point at typed CultMesh operations and renderers build requests from shared CultMesh primitives.
 - `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeDaemonOperationsClient.cs` is now a typed operation handle surface that returns `CultMeshOperationReceipt` from semantic verbs such as `SetMoveVector`, `SetTarget`, `DockNearest`, and inventory transfers. The lower-level daemon command envelope remains an internal transport wrapper, but public client code should receive shared CultMesh receipts, not Aetheria-specific command envelopes.
-- `Packages/org.gamecult.aetheria.state/Runtime/AetheriaUi.cs` applies the same rule to Eve/CultUI commands. Unity UI and Eve presenter code should call `AetheriaClient.Ui` and receive `CultMeshOperationReceipt`; `AetheriaRuntimeEveCommandEnvelope` remains a bridge/document persistence detail for the Verse command boundary, not the shape application code leans on.
-- `AetheriaRuntimeEveCommands` is internal now. It may help smoke tests and internal bridge code manufacture persisted command documents, but it is not the public renderer/client API. Public callers use `AetheriaClient.Ui`, and the shared receipt is the public outcome type.
+- Eve/CultUI lowerers invoke the operation binding published on the provider's
+  surface through their retained generic CultMesh client and receive
+  `CultMeshOperationReceipt`. Aetheria's persisted command document is a
+  daemon-internal translation detail; it is not a renderer API and cannot open
+  state files.
 - `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeDaemonRenderQueries.cs` now exposes daemon render gravity/body query overloads around `CultMath.rect` in Aetheria XY space. `AetheriaRuntimeXzRect` remains only as a Unity legacy adapter.
 - `CultLib/src/GameCult.Caching.MessagePack/DirectoryMessagePackBackingStore.cs` now recovers readable schema-stamped cold records when the hot directory manifest is missing the record's catalog entry. Aetheria hit this with persisted Verse authority policy state; the fix belongs in CultCache because durable Verse state should feel managed and resilient across runtime/schema refreshes, not like hand-maintained manifest bookkeeping.
 - `CultLib/packages/cultcache-ts/src/single-file-messagepack-backing-store.ts` and `CultLib/packages/cultcache-rs/src/lib.rs` now mirror the same schema-stamped recovery for single-file MessagePack snapshots. Their cache registries resolve recovered schema names and normalize envelopes back to registered public document types, so browser/Electron/Rust clients can share durable Verse state without depending on a stale hot catalog.
@@ -191,13 +194,9 @@ Queries are derived-state surfaces, not bespoke HTTP endpoints or local helper l
 
 ### Reactive State Pointers
 
-Current leak:
-
-```csharp
-using var client = await AetheriaClient.OpenAsync(statePath, runtimeId);
-var resolver = client.State.CreateEveSurfaceCultMeshStateRefResolver();
-var selected = resolver(surface.StateRef);
-```
+Current product boundary: a retained generic `CultMeshClient` resolves the
+provider-published state pointer. Aetheria no longer opens a state path or owns
+a surface-specific resolver.
 
 Desired shape:
 

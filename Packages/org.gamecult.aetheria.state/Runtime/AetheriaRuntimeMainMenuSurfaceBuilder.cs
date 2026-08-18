@@ -14,7 +14,6 @@ namespace GameCult.Aetheria.State.Verse
         public const string SettingsSurfaceId = "aetheria.main_menu.settings";
         public const string InputSettingsSurfaceId = "aetheria.main_menu.input_settings";
         public const string PlayerSettingsSurfaceId = "aetheria.main_menu.player_settings";
-        public const string VerseSettingsSurfaceId = "aetheria.main_menu.verse_settings";
 
         public const string ContinueRun = "aetheria.main_menu.root.continue";
         public const string NewGame = "aetheria.main_menu.root.new_game";
@@ -22,7 +21,6 @@ namespace GameCult.Aetheria.State.Verse
         public const string Quit = "aetheria.main_menu.root.quit";
         public const string OpenRuntimeInputScreen = "aetheria.main_menu.input_settings.open_runtime_screen";
         public const string ShowPlayerSettings = "aetheria.main_menu.settings.show_player_settings";
-        public const string ShowVerseSettings = "aetheria.main_menu.settings.show_verse_settings";
         public const string ShowInputSettings = "aetheria.main_menu.settings.show_input_settings";
         public const string BackToMain = "aetheria.main_menu.settings.back_to_main";
         public const string BackToSettings = "aetheria.main_menu.settings.back_to_settings";
@@ -32,69 +30,6 @@ namespace GameCult.Aetheria.State.Verse
     {
         public const string ProviderId = "aetheria";
         public const string ProviderKind = "game.menu";
-
-        public static EveSurfaceDocument BuildRoot(
-            AetheriaRuntimeStateBootReport stateBoot,
-            AetheriaRuntimePlayerSettingsDocument playerSettings,
-            bool canOpenRuntimeInputScreen,
-            bool inGame,
-            string updatedAtUtc,
-            long version = 1)
-        {
-            return BuildRoot(
-                inGame,
-                updatedAtUtc,
-                version);
-        }
-
-        public static EveSurfaceDocument BuildRoot(
-            AetheriaRuntimeStateBootReport stateBoot,
-            AetheriaRuntimeDaemonFrameDocument daemonFrame,
-            AetheriaRuntimeVerseHostSettingsDocument verseHost,
-            AetheriaRuntimePlayerSettingsDocument playerSettings,
-            bool canOpenRuntimeInputScreen,
-            bool inGame,
-            string updatedAtUtc,
-            long version = 1)
-        {
-            return BuildRoot(
-                inGame,
-                updatedAtUtc,
-                version);
-        }
-
-        public static EveSurfaceDocument BuildRoot(
-            AetheriaRuntimeStateBootReport stateBoot,
-            AetheriaRuntimeSectorMapDocument sectorMap,
-            AetheriaRuntimeVerseHostSettingsDocument verseHost,
-            AetheriaRuntimePlayerSettingsDocument playerSettings,
-            bool canOpenRuntimeInputScreen,
-            bool inGame,
-            string updatedAtUtc,
-            long version = 1)
-        {
-            return BuildRoot(
-                inGame,
-                updatedAtUtc,
-                version);
-        }
-
-        public static EveSurfaceDocument BuildInputSettings(
-            AetheriaRuntimeStateBootReport stateBoot,
-            AetheriaRuntimePlayerSettingsDocument playerSettings,
-            bool canOpenRuntimeInputScreen,
-            bool inGame,
-            string updatedAtUtc,
-            long version = 1)
-        {
-            return BuildInputSettings(
-                playerSettings?.BindingOverrides?.Length ?? 0,
-                playerSettings?.ActionBarInputs?.Length ?? 0,
-                canOpenRuntimeInputScreen,
-                inGame,
-                updatedAtUtc,
-                version);
-        }
 
         public static EveSurfaceDocument BuildPlayerSettings(
             AetheriaRuntimePlayerSettingsDocument playerSettings,
@@ -260,17 +195,6 @@ namespace GameCult.Aetheria.State.Verse
                 });
 
             return (builder.Build());
-        }
-
-        public static EveSurfaceDocument BuildVerseSettings(
-            EveSurfaceDocument document,
-            long version = 1)
-        {
-            return WithBackAction(
-                document,
-                AetheriaRuntimeMainMenuCommands.VerseSettingsSurfaceId,
-                AetheriaRuntimeMainMenuCommands.BackToSettings,
-                "Back");
         }
 
         public static EveSurfaceDocument WithBackAction(
@@ -584,14 +508,12 @@ namespace GameCult.Aetheria.State.Verse
         ShowSettings = 3,
         Quit = 4,
         ShowPlayerSettings = 5,
-        ShowVerseSettings = 6,
         ShowInputSettings = 7,
         BackToMain = 8,
         BackToSettings = 9,
         OpenRuntimeInputScreen = 10,
         PlayerSettingsCommand = 11,
-        ClientTargetCommand = 12,
-        VerseHostCommand = 13
+        VerseHostCommand = 12
     }
 
     public readonly struct AetheriaRuntimeMainMenuCommand
@@ -629,8 +551,6 @@ namespace GameCult.Aetheria.State.Verse
                     return TryReadInputSettings(operationId, out command);
                 case AetheriaRuntimeMainMenuCommands.PlayerSettingsSurfaceId:
                     return TryReadPlayerSettings(operationId, out command);
-                case AetheriaRuntimeMainMenuCommands.VerseSettingsSurfaceId:
-                    return TryReadVerseSettings(operationId, out command);
                 default:
                     return false;
             }
@@ -664,9 +584,6 @@ namespace GameCult.Aetheria.State.Verse
             {
                 case AetheriaRuntimeMainMenuCommands.ShowPlayerSettings:
                     command = new AetheriaRuntimeMainMenuCommand(AetheriaRuntimeMainMenuCommandKind.ShowPlayerSettings, commandText);
-                    return true;
-                case AetheriaRuntimeMainMenuCommands.ShowVerseSettings:
-                    command = new AetheriaRuntimeMainMenuCommand(AetheriaRuntimeMainMenuCommandKind.ShowVerseSettings, commandText);
                     return true;
                 case AetheriaRuntimeMainMenuCommands.ShowInputSettings:
                     command = new AetheriaRuntimeMainMenuCommand(AetheriaRuntimeMainMenuCommandKind.ShowInputSettings, commandText);
@@ -714,28 +631,5 @@ namespace GameCult.Aetheria.State.Verse
             return false;
         }
 
-        private static bool TryReadVerseSettings(string commandText, out AetheriaRuntimeMainMenuCommand command)
-        {
-            if (string.Equals(commandText, AetheriaRuntimeMainMenuCommands.BackToSettings, StringComparison.Ordinal))
-            {
-                command = new AetheriaRuntimeMainMenuCommand(AetheriaRuntimeMainMenuCommandKind.BackToSettings, commandText);
-                return true;
-            }
-
-            if (AetheriaRuntimeClientTargetCommands.IsKnown(commandText))
-            {
-                command = new AetheriaRuntimeMainMenuCommand(AetheriaRuntimeMainMenuCommandKind.ClientTargetCommand, commandText);
-                return true;
-            }
-
-            if (AetheriaRuntimeVerseHostCommands.IsKnown(commandText))
-            {
-                command = new AetheriaRuntimeMainMenuCommand(AetheriaRuntimeMainMenuCommandKind.VerseHostCommand, commandText);
-                return true;
-            }
-
-            command = default;
-            return false;
-        }
     }
 }

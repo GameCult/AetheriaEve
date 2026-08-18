@@ -1,5 +1,10 @@
 # CultMesh Ergonomics Staged Migration Plan
 
+> Historical ergonomics ledger. The Aetheria-specific direct-file client and
+> its local projection facade were deleted. Current ergonomics must be generated
+> over generic retained CultMesh clients and provider-owned documents/
+> operations; the deleted facade names below are evidence, not target APIs.
+
 This is the staged plan for getting CultMesh ergonomics from "usable transport and replicated records" to the ideal developer experience: typed state that feels local, reactive UI surfaces that resolve daemon pointers automatically, native slab views for fast clients, and authority semantics that are explicit without making every client hand-roll routing code.
 
 The Rust/WASM rebuild remains valuable, but it is not the MVP path. The near-term goal is to build the perfect machine in C# first, freeze the API shape we actually want, then let any later Rust body implement that shape rather than inherit the current leaks.

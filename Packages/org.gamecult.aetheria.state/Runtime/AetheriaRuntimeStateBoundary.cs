@@ -1,13 +1,10 @@
 using System.IO;
-using System.Linq;
 
 namespace GameCult.Aetheria.State.Verse
 {
     public static class AetheriaRuntimeStateBoundary
     {
         public const string RuntimeStateFileName = "aetheria-world.cc";
-        public const string RuntimeClientTargetFileName = "aetheria-client.cc";
-        public const string RuntimeReplicaDirectoryName = "Verses";
         public const string RuntimeDaemonFrameFileSuffix = ".daemon.frame.cc";
         public const string RuntimeDaemonSoaViewFileSuffix = ".daemon.soa.cc";
         public const string RuntimeDaemonAssetManifestFileSuffix = ".daemon.assets.cc";
@@ -20,18 +17,10 @@ namespace GameCult.Aetheria.State.Verse
         public const string RuntimeDaemonGameTuiSurfaceFileSuffix = ".daemon.game.tui.cc";
         public const string RuntimeDaemonEditorSurfaceFileSuffix = ".daemon.editor.eve.cc";
         public const string RuntimeDaemonEditorTuiSurfaceFileSuffix = ".daemon.editor.tui.cc";
-        public const string DefaultClientRuntimeId = "aetheria-client";
-        public const string RuntimeStatePathOverrideEnvironmentVariable = "AETHERIA_STATE_PATH";
-        public const string RuntimeIdOverrideEnvironmentVariable = "AETHERIA_RUNTIME_ID";
 
         public static string GetStateFilePath(DirectoryInfo gameDataDirectory)
         {
             return Path.Combine(gameDataDirectory.FullName, RuntimeStateFileName);
-        }
-
-        public static string GetClientTargetPath(DirectoryInfo gameDataDirectory)
-        {
-            return Path.Combine(gameDataDirectory.FullName, RuntimeClientTargetFileName);
         }
 
         public static string GetDaemonFramePath(string stateFilePath)
@@ -94,31 +83,5 @@ namespace GameCult.Aetheria.State.Verse
             return stateFilePath + RuntimeDaemonEditorTuiSurfaceFileSuffix;
         }
 
-        public static string GetReplicaStateFilePath(DirectoryInfo gameDataDirectory, string verseId)
-        {
-            var safeVerseId = string.IsNullOrWhiteSpace(verseId)
-                ? "unknown-verse"
-                : new string((verseId ?? "")
-                    .Select(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '_' || ch == '.'
-                        ? ch
-                        : '-')
-                    .ToArray())
-                    .Trim('-');
-
-            if (string.IsNullOrWhiteSpace(safeVerseId))
-                safeVerseId = "unknown-verse";
-
-            return Path.Combine(gameDataDirectory.FullName, RuntimeReplicaDirectoryName, $"{safeVerseId}.cc");
-        }
-
-        public static string ResolveStatePathOverride()
-        {
-            return System.Environment.GetEnvironmentVariable(RuntimeStatePathOverrideEnvironmentVariable) ?? "";
-        }
-
-        public static string ResolveRuntimeIdOverride()
-        {
-            return System.Environment.GetEnvironmentVariable(RuntimeIdOverrideEnvironmentVariable) ?? "";
-        }
     }
 }

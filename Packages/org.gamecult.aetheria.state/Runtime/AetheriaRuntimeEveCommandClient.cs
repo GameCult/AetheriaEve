@@ -6,207 +6,6 @@ using GameCult.Mesh;
 
 namespace GameCult.Aetheria.State.Verse
 {
-    internal static class AetheriaRuntimeEveCommands
-    {
-        public static bool TryCreateKnownSurfaceCommand(
-            string stateFilePath,
-            EveSurfaceCommandRequest request,
-            out AetheriaRuntimeEveCommandEnvelope? envelope)
-        {
-            return AetheriaRuntimeEveCommandClient.TryCreateKnownSurfaceCommand(request, out envelope);
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitPlayerSettingsCommand(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandKind command,
-            AetheriaRuntimePlayerSettingsCommandBody body,
-            string clientId)
-        {
-            return AetheriaRuntimeEveCommandClient.CreatePlayerSettingsCommand(command, body, clientId);
-        }
-
-        public static bool TrySendPlayerSettingsCommand(
-            string stateFilePath,
-            EveSurfaceCommandRequest request,
-            string clientId,
-            out AetheriaRuntimeEveCommandEnvelope? envelope,
-            out string error)
-        {
-            if (request == null) throw new ArgumentNullException(nameof(request));
-            return TrySend(
-                stateFilePath,
-                AetheriaRuntimeEveCommandClient.CreatePlayerSettingsCommand(request, clientId),
-                clientId,
-                out envelope,
-                out error);
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitPlayerSettingsCommand(
-            string stateFilePath,
-            EveSurfaceCommandRequest request)
-        {
-            return AetheriaRuntimeEveCommandClient.CreatePlayerSettingsCommand(request, request?.ClientId ?? "");
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitPlayerSettingsCommand(
-            string stateFilePath,
-            EveSurfaceCommandRequest request,
-            string clientId)
-        {
-            return AetheriaRuntimeEveCommandClient.CreatePlayerSettingsCommand(request, clientId);
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitInputSettingsCommand(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandKind command,
-            AetheriaRuntimeInputSettingsCommandBody body,
-            string clientId)
-        {
-            return AetheriaRuntimeEveCommandClient.CreateInputSettingsCommand(command, body, clientId);
-        }
-
-        public static bool TrySendInputSettingsCommand(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandKind command,
-            AetheriaRuntimeInputSettingsCommandBody body,
-            string clientId,
-            out AetheriaRuntimeEveCommandEnvelope? envelope,
-            out string error)
-        {
-            return TrySend(
-                stateFilePath,
-                AetheriaRuntimeEveCommandClient.CreateInputSettingsCommand(command, body, clientId),
-                clientId,
-                out envelope,
-                out error);
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitCatalogCommand(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandKind command,
-            string clientId)
-        {
-            return AetheriaRuntimeEveCommandClient.CreateCatalogCommand(command, clientId);
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitOperationsCommand(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandKind command,
-            string clientId)
-        {
-            return AetheriaRuntimeEveCommandClient.CreateOperationsCommand(command, clientId);
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitVerseHostCommand(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandKind command,
-            string clientId)
-        {
-            return AetheriaRuntimeEveCommandClient.CreateVerseHostCommand(command, clientId);
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitTradeValuePolicyCommand(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandKind command,
-            AetheriaRuntimeTradeValuePolicyCommandBody body,
-            string clientId)
-        {
-            return AetheriaRuntimeEveCommandClient.CreateTradeValuePolicyCommand(command, body, clientId);
-        }
-
-        public static bool TrySendVerseHostCommand(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandKind command,
-            string clientId,
-            out AetheriaRuntimeEveCommandEnvelope? envelope,
-            out string error)
-        {
-            return TrySend(
-                stateFilePath,
-                AetheriaRuntimeEveCommandClient.CreateVerseHostCommand(command, clientId),
-                clientId,
-                out envelope,
-                out error);
-        }
-
-        public static AetheriaRuntimeEveCommandEnvelope SubmitLoadoutTemplateCommand(
-            string stateFilePath,
-            AetheriaRuntimeLoadoutTemplateCommit loadoutTemplate,
-            string clientId)
-        {
-            return AetheriaRuntimeEveCommandClient.CreateLoadoutTemplateCommand(loadoutTemplate, clientId);
-        }
-
-        public static bool TrySendLoadoutTemplateCommand(
-            string stateFilePath,
-            AetheriaRuntimeLoadoutTemplateCommit loadoutTemplate,
-            string clientId,
-            out AetheriaRuntimeEveCommandEnvelope? envelope,
-            out string error)
-        {
-            return TrySend(
-                stateFilePath,
-                AetheriaRuntimeEveCommandClient.CreateLoadoutTemplateCommand(loadoutTemplate, clientId),
-                clientId,
-                out envelope,
-                out error);
-        }
-
-        public static bool TrySendKnownSurfaceCommand(
-            string stateFilePath,
-            EveSurfaceCommandRequest request,
-            string clientId,
-            out AetheriaRuntimeEveCommandEnvelope? envelope,
-            out string error)
-        {
-            if (!AetheriaRuntimeEveCommandClient.TryCreateKnownSurfaceCommand(request, out var commandEnvelope))
-            {
-                envelope = null;
-                error = $"Unknown Aetheria Eve surface command: {request?.ProviderId}/{request?.SurfaceId}/{request?.Command}";
-                return false;
-            }
-
-            return TrySend(
-                stateFilePath,
-                commandEnvelope!,
-                clientId,
-                out envelope,
-                out error);
-        }
-
-        private static bool TrySend(
-            string stateFilePath,
-            AetheriaRuntimeEveCommandEnvelope commandEnvelope,
-            string clientId,
-            out AetheriaRuntimeEveCommandEnvelope? envelope,
-            out string error)
-        {
-            envelope = null;
-            error = "";
-
-            try
-            {
-                using var client = AetheriaClient
-                    .OpenAsync(
-                        stateFilePath,
-                        string.IsNullOrWhiteSpace(clientId) ? "aetheria-eve-client" : clientId,
-                        "local",
-                        startServer: false,
-                        pullOnOpen: true)
-                    .GetAwaiter()
-                    .GetResult();
-                envelope = client
-                    .SubmitEveCommandDocument(AetheriaRuntimeEveCommandClient.ToDocument(commandEnvelope));
-                return true;
-            }
-            catch (Exception ex)
-            {
-                error = ex.ToString();
-                return false;
-            }
-        }
-    }
-
     public static class AetheriaRuntimeEveCommandClient
     {
         public const string CommandSchema = AetheriaRuntimeEveCommandDocument.SchemaId;
@@ -249,7 +48,6 @@ namespace GameCult.Aetheria.State.Verse
                 case AetheriaRuntimeMainMenuCommands.SettingsSurfaceId:
                 case AetheriaRuntimeMainMenuCommands.InputSettingsSurfaceId:
                 case AetheriaRuntimeMainMenuCommands.PlayerSettingsSurfaceId:
-                case AetheriaRuntimeMainMenuCommands.VerseSettingsSurfaceId:
                     envelope = CreateMainMenuCommand(CommandKindForSurface(request), request, clientId);
                     return envelope.Kind != AetheriaRuntimeEveCommandKind.Unknown;
             }
@@ -622,14 +420,6 @@ namespace GameCult.Aetheria.State.Verse
                     return command == AetheriaRuntimeMainMenuCommands.BackToSettings
                         ? AetheriaRuntimeEveCommandKind.MainMenuBackToSettings
                         : PlayerSettingsKind(command);
-                case AetheriaRuntimeMainMenuCommands.VerseSettingsSurfaceId:
-                    return command == AetheriaRuntimeMainMenuCommands.BackToSettings
-                        ? AetheriaRuntimeEveCommandKind.MainMenuBackToSettings
-                        : command == AetheriaRuntimeVerseHostCommands.Refresh
-                            ? AetheriaRuntimeEveCommandKind.VerseHostRefresh
-                            : command == AetheriaRuntimeVerseHostCommands.CycleVisibility
-                                ? AetheriaRuntimeEveCommandKind.CycleVerseHostVisibility
-                                : AetheriaRuntimeEveCommandKind.Unknown;
                 default:
                     return AetheriaRuntimeEveCommandKind.Unknown;
             }
@@ -695,8 +485,6 @@ namespace GameCult.Aetheria.State.Verse
                     return AetheriaRuntimeMainMenuCommands.Quit;
                 case AetheriaRuntimeEveCommandKind.MainMenuShowPlayerSettings:
                     return AetheriaRuntimeMainMenuCommands.ShowPlayerSettings;
-                case AetheriaRuntimeEveCommandKind.MainMenuShowVerseSettings:
-                    return AetheriaRuntimeMainMenuCommands.ShowVerseSettings;
                 case AetheriaRuntimeEveCommandKind.MainMenuShowInputSettings:
                     return AetheriaRuntimeMainMenuCommands.ShowInputSettings;
                 case AetheriaRuntimeEveCommandKind.MainMenuBackToMain:
@@ -727,8 +515,6 @@ namespace GameCult.Aetheria.State.Verse
         {
             if (command == AetheriaRuntimeMainMenuCommands.ShowPlayerSettings)
                 return AetheriaRuntimeEveCommandKind.MainMenuShowPlayerSettings;
-            if (command == AetheriaRuntimeMainMenuCommands.ShowVerseSettings)
-                return AetheriaRuntimeEveCommandKind.MainMenuShowVerseSettings;
             if (command == AetheriaRuntimeMainMenuCommands.ShowInputSettings)
                 return AetheriaRuntimeEveCommandKind.MainMenuShowInputSettings;
             if (command == AetheriaRuntimeMainMenuCommands.BackToMain)

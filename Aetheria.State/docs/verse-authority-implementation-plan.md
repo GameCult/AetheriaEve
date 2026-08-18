@@ -1,5 +1,11 @@
 # Verse Authority Implementation Plan
 
+> Current client correction: the application-owned `AetheriaRuntimeVerseClient`
+> and `AetheriaClient` direct-file/projection facades are deleted. Historical
+> stages below retain those names as migration evidence. All new client work
+> uses retained generic CultMesh discovery/leases/operations and consumes
+> daemon-published typed projections and Eve surfaces.
+
 This is the staged build map for the Aetheria co-op Verse architecture. It is
 written to prevent Jenga: every stage has one owner, one allowed state flow,
 one demolition target, and one verifier. If a stage cannot pass its verifier,

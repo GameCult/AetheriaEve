@@ -1543,7 +1543,6 @@ static bool TryGetScopedEveSurfaceRequest(
         var value when value == AetheriaRuntimeVerseRecordKeys.MainMenuSettingsSurface.ToString() => "main-menu-settings",
         var value when value == AetheriaRuntimeVerseRecordKeys.MainMenuInputSettingsSurface.ToString() => "main-menu-input-settings",
         var value when value == AetheriaRuntimeVerseRecordKeys.MainMenuPlayerSettingsSurface.ToString() => "main-menu-player-settings",
-        var value when value == AetheriaRuntimeVerseRecordKeys.MainMenuVerseSettingsSurface.ToString() => "main-menu-verse-settings",
         var value when value == AetheriaRuntimeVerseRecordKeys.InventoryPanelSurface.ToString() => "inventory-panel",
         var value when value == AetheriaRuntimeVerseRecordKeys.InventoryDropdownSurface.ToString() => "inventory-dropdown",
         var value when value == AetheriaRuntimeVerseRecordKeys.MapMenuSurface.ToString() => "map-menu",
@@ -1565,7 +1564,6 @@ static Task<EveSurfaceDocument?> ReadEveSurfacePublicationAsync(AetheriaStateNod
         "main-menu-settings" => AetheriaRuntimeVerseRecordKeys.MainMenuSettingsSurface,
         "main-menu-input-settings" => AetheriaRuntimeVerseRecordKeys.MainMenuInputSettingsSurface,
         "main-menu-player-settings" => AetheriaRuntimeVerseRecordKeys.MainMenuPlayerSettingsSurface,
-        "main-menu-verse-settings" => AetheriaRuntimeVerseRecordKeys.MainMenuVerseSettingsSurface,
         "inventory-panel" => AetheriaRuntimeVerseRecordKeys.InventoryPanelSurface,
         "inventory-dropdown" => AetheriaRuntimeVerseRecordKeys.InventoryDropdownSurface,
         "map-menu" => AetheriaRuntimeVerseRecordKeys.MapMenuSurface,
@@ -2395,7 +2393,6 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
         if (AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
                 request,
                 currentFrame,
-                node.StatePath,
                 request.ClientId,
                 currentFrame?.SessionId ?? options.SessionId,
                 out var command) && command != null)

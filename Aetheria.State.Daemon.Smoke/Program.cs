@@ -1739,7 +1739,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             DateTimeOffset.UtcNow,
             "behavior-input-smoke");
         var switchTranslated = AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
-                switchRequest, frame, ".", "behavior-input-smoke", "behavior-input", out var switchCommand);
+                switchRequest, frame, "behavior-input-smoke", "behavior-input", out var switchCommand);
         Require(switchTranslated &&
                 switchCommand?.Kind == AetheriaRuntimeDaemonCommandKinds.SetBehaviorActive &&
                 switchCommand.EquipmentIndex == 0 && switchCommand.BehaviorIndex == 1 &&
@@ -1764,7 +1764,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             DateTimeOffset.UtcNow,
             "behavior-input-smoke");
         Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
-                thermostatRequest, frame, ".", "behavior-input-smoke", "behavior-input", out var thermostatCommand) &&
+                thermostatRequest, frame, "behavior-input-smoke", "behavior-input", out var thermostatCommand) &&
                 thermostatCommand?.Kind == AetheriaRuntimeDaemonCommandKinds.SetThermotoggleTargetTemperature,
             "the generic Eve scalar lever must translate into the typed thermostat command");
         var thermostatResult = AetheriaRuntimeDaemonOperations.Execute(
@@ -1896,7 +1896,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 DateTimeOffset.UtcNow,
                 "weapon-input-smoke");
             Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
-                    request, frame, ".", "weapon-input-smoke", "weapon-input", out var command) &&
+                    request, frame, "weapon-input-smoke", "weapon-input", out var command) &&
                     command?.Kind == AetheriaRuntimeDaemonCommandKinds.SetWeaponGroupActive,
                 $"generic weapon input value {active} must translate into the typed held-fire command");
             return command!;
@@ -2010,7 +2010,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 DateTimeOffset.UtcNow,
                 "native-input-smoke");
             Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
-                    request, frame, ".", "native-input-smoke", "native-input", out var command),
+                    request, frame, "native-input-smoke", "native-input", out var command),
                 $"advertised action {action.ActionId} must translate through the generic Eve command path");
             return command!;
         }
@@ -2062,7 +2062,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             DateTimeOffset.UtcNow,
             "native-input-smoke");
         Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
-                reticleRequest, frame, ".", "native-input-smoke", "native-input", out var reticleCommand) &&
+                reticleRequest, frame, "native-input-smoke", "native-input", out var reticleCommand) &&
                 reticleCommand?.Kind == AetheriaRuntimeDaemonCommandKinds.TargetReticle,
             "the generic Eve view-direction action must translate into the typed reticle command");
         var reticleResult = AetheriaRuntimeDaemonOperations.Execute(
@@ -2086,7 +2086,6 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
                 ExplicitTarget(run.EntityRecordKey(0, near.EntityIndex)),
                 frame,
-                ".",
                 "native-input-smoke",
                 "native-input",
                 out var explicitTarget) &&
@@ -2102,7 +2101,6 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
                 ExplicitTarget(run.EntityRecordKey(0, hidden.EntityIndex)),
                 frame,
-                ".",
                 "native-input-smoke",
                 "native-input",
                 out var hiddenTarget),
@@ -2205,7 +2203,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             DateTimeOffset.UtcNow,
             "generic-smoke");
         Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
-                request, frame, ".", "generic-smoke", "surface", out var translated) &&
+                request, frame, "generic-smoke", "surface", out var translated) &&
                 translated?.CargoTransfer.OriginCargoIndex == 0 &&
                 translated.CargoTransfer.DestinationEntityKey == stationKey &&
                 translated.CargoTransfer.HasDestinationPosition,
@@ -9532,7 +9530,6 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
                     request,
                     frame,
-                    ".",
                     "loadout-restart-smoke",
                     "refit",
                     out var equipCommand) && equipCommand != null,

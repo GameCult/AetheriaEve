@@ -239,13 +239,14 @@ await using (var node = await AetheriaStateNode.OpenAsync(statePath, "aetheria-s
     await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
         .ReplaceAsync(daemonFrame);
     await node.FlushAsync();
-    using var daemonCommandClient = await AetheriaClient.OpenAsync(
-        statePath,
+    var sensorPing = AetheriaRuntimeDaemonCommandDocument.Create(
+        AetheriaRuntimeDaemonCommandKinds.SensorPing,
         "aetheria-state-smoke-command-client",
         "smoke-session",
-        startServer: false,
-        pullOnOpen: true);
-    daemonCommandClient.Control.SensorPing();
+        daemonFrame.FrameId,
+        daemonFrame.Run.CurrentEntityKey);
+    await node.SubmitDaemonCommandAsync(sensorPing);
+    await node.FlushAsync();
 
     await using (var commandVerifyNode = await AetheriaStateNode.OpenAsync(
                      statePath,
@@ -258,7 +259,7 @@ await using (var node = await AetheriaStateNode.OpenAsync(statePath, "aetheria-s
                 command.Kind != AetheriaRuntimeDaemonCommandKinds.SensorPing ||
                 command.ClientId != "aetheria-state-smoke-command-client"))
         {
-            throw new InvalidOperationException("AetheriaClient control submission did not appear as a typed daemon state record.");
+            throw new InvalidOperationException("Typed daemon submission did not appear as a daemon state record.");
         }
     }
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonGameSurface)
@@ -717,50 +718,17 @@ await using (var node = await AetheriaStateNode.OpenAsync(statePath, "aetheria-s
             await node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey).ReadAsync(),
             now));
 
-    using var eveCommandClient = await AetheriaClient.OpenAsync(
-        statePath,
-        "aetheria-state-smoke-eve-command-client",
-        startServer: false,
-        pullOnOpen: true);
-    await eveCommandClient.Ui.InputSettingsAsync(
-        AetheriaRuntimeEveCommandKind.SetBindingOverride,
-        new AetheriaRuntimeInputSettingsCommandBody
-        {
-            ActionName = "Thrust",
-            BindingIndex = 0,
-            InputSystemPath = "<Keyboard>/w",
-            Enabled = true
-        },
-        "aetheria-state-smoke-eve-command-client");
-    await using (var commandVerifyNode = await AetheriaStateNode.OpenAsync(
-                     statePath,
-                     "aetheria-state-smoke-eve-command-check"))
-    {
-        if (commandVerifyNode.Documents<AetheriaRuntimeEveCommandDocument>()
-            .Select(AetheriaRuntimeEveCommandClient.NormalizeDocument)
-            .OrderBy(command => command.IssuedAtUtc ?? "", StringComparer.Ordinal)
-            .ThenBy(command => command.CommandId ?? "", StringComparer.Ordinal)
-            .All(command =>
-                command.Kind != AetheriaRuntimeEveCommandKind.SetBindingOverride ||
-                command.ClientId != "aetheria-state-smoke-eve-command-client"))
-        {
-            throw new InvalidOperationException("AetheriaClient UI submission did not appear as a typed Eve state record.");
-        }
-    }
     await node.SubmitEveCommandAsync(AetheriaRuntimeEveCommandClient.ToDocument(
-        AetheriaRuntimeEveCommands.SubmitCatalogCommand(
-            statePath,
+        AetheriaRuntimeEveCommandClient.CreateCatalogCommand(
             AetheriaRuntimeEveCommandKind.CatalogRefresh,
             "aetheria-state-smoke")));
     await node.SubmitEveCommandAsync(AetheriaRuntimeEveCommandClient.ToDocument(
-        AetheriaRuntimeEveCommands.SubmitPlayerSettingsCommand(
-            statePath,
+        AetheriaRuntimeEveCommandClient.CreatePlayerSettingsCommand(
             AetheriaRuntimeEveCommandKind.IncrementSignificantDigits,
             new AetheriaRuntimePlayerSettingsCommandBody(),
             "aetheria-state-smoke")));
     await node.SubmitEveCommandAsync(AetheriaRuntimeEveCommandClient.ToDocument(
-        AetheriaRuntimeEveCommands.SubmitPlayerSettingsCommand(
-            statePath,
+        AetheriaRuntimeEveCommandClient.CreatePlayerSettingsCommand(
             AetheriaRuntimeEveCommandKind.ToggleShowAsteroidsInMinimap,
             new AetheriaRuntimePlayerSettingsCommandBody(),
             "aetheria-state-smoke")));

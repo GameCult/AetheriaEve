@@ -1809,7 +1809,6 @@ namespace GameCult.Aetheria.State.Verse
                 case AetheriaRuntimeMainMenuCommands.SettingsSurfaceId:
                 case AetheriaRuntimeMainMenuCommands.InputSettingsSurfaceId:
                 case AetheriaRuntimeMainMenuCommands.PlayerSettingsSurfaceId:
-                case AetheriaRuntimeMainMenuCommands.VerseSettingsSurfaceId:
                     return surfaceId;
                 default:
                     return AetheriaRuntimeMainMenuCommands.RootSurfaceId;

@@ -85,12 +85,12 @@ These files define the deprecated reference surface. They should be treated as A
 | Daemon sim | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeDaemonSimulation.cs` | Gameplay intents, hostile AI, combat meaning, heat, and projection of mandatory Ymir world results. |
 | Ymir world adapter | `Aetheria.State.Daemon/AetheriaYmirWorldPhysics.cs` | Projects daemon state into Ymir. Positive daemon gravity-depth magnitudes become positive attracting radial strengths; the adapter returns body, contact, position, and velocity facts for the daemon to commit without owning sign policy. |
 | Game viewport documents | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeGameViewportDocuments.cs` | Existing map, object, gravity, selected object, docking, refit, sector, and inventory projections. |
-| Client facade | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaClient.cs` | C# client observation and typed operation ergonomics. |
-| Verse client | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeVerseClient.cs` | Current lower-level typed document reads/watches and command submission. |
+| Verse contracts | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeVerseContracts.cs` | Shared record identities and schema registry. It is not a client or state-file opener. |
+| Network client | sibling CultLib `CultMeshClient` plus generated Aetheria domain handles | Stable provider discovery, retained typed observations, and operation submission for C#, Unity, browser, Electron, TUI, and headless consumers. |
 | Operation builders | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeDaemonOperationClient.cs` and `AetheriaRuntimeDaemonOperationsClient.cs` | Existing typed operation vocabulary. |
 | Eve bridge | `Aetheria.State/AetheriaEveCommandBridge.cs` | Existing Eve command acceptance behavior for settings, catalog, policies, and surfaces. |
 | Unity consumption | `Assets/Scripts/Gameplay/AetheriaDaemonObserver.cs` | Current Unity daemon observation, SoA remapping, and render native view handoff. |
-| TS consumption | `Aetheria.Rts.Web/Electron/aetheria-cultmesh.ts`, `Aetheria.Rts.Web/Electron/aetheria-rts-local-documents.ts` | Current Electron command sending, CultMesh document catalog/query reads, and typed daemon document decoding. |
+| TS migration evidence | `Aetheria.Rts.Web/Electron` | Deprecated Stage 7 shell. The focused command codec has a live binary wire witness; the broader handwritten query/projection body is not a current client contract. |
 | Ymir C# contracts | `Assets/Scripts/ServerShared/YmirPhysicsContracts.cs` | Current body/world/query DTOs plus reference implementation for step, overlap, and cast queries. |
 | Ymir Unity bridge | `Assets/Scripts/Gameplay/Physics/AetheriaYmirPhysicsBridge.cs` | Current Unity presentation adapter that maps daemon SoA bodies into typed Ymir query worlds. |
 | Ymir query tests | `Assets/Scripts/Tests/YmirPhysicsQueryTests.cs` | Current expectations for integration, radial fields, contacts, overlap sphere/circle, and cast sphere/circle; useful semantics should survive, DTO/endpoint shape should not. |
@@ -402,13 +402,9 @@ let hits = verse
     .await?;
 ```
 
-Current Eve surface state-ref resolution:
-
-```csharp
-using var client = await AetheriaClient.OpenAsync(statePath, runtimeId);
-var resolver = client.State.CreateEveSurfaceCultMeshStateRefResolver();
-var label = resolver("aetheria.daemon/frame/currentEntity/name");
-```
+Current Eve surface state-ref resolution belongs to a retained generic
+CultMesh client. Aetheria publishes the typed pointer and operation binding; it
+does not open a state path or construct a client-owned resolver.
 
 Desired CultUI state pointer sugar:
 

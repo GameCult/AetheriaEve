@@ -1,5 +1,13 @@
 # Stage 7 Thin Client Staged Implementation Plan
 
+> Historical migration ledger. The direct-file `AetheriaRuntimeVerseClient`,
+> `AetheriaClient`, and client-owned projection graph described below were
+> removed on 2026-08-18. Current product clients discover the daemon by stable
+> Verse/provider identity, retain a generic CultMesh session, lower the
+> daemon-published Eve surface, and invoke typed operations. References below
+> to those deleted facades describe the retired Unity migration body and are
+> not implementation instructions.
+
 This is the build map for turning Unity and Electron into thin CultMesh clients
 without building Jenga. The broader Verse authority plan explains why the
 architecture exists; this document explains the exact order to build it in.

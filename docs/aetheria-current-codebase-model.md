@@ -17,7 +17,9 @@ lowerer.
 
 - `Aetheria.State` owns the CultCache/CultNet typed state node, document
   registry, Eve surface state, provider advertisement projection, command
-  acceptance, and durable Aetheria state documents.
+  acceptance, and durable Aetheria state documents. The older client-target,
+  direct `.cc` facade, and application-owned replica code described later in
+  this historical snapshot have since been deleted.
 - `Aetheria.State.Daemon` is the local Verse member. It opens an
   `AetheriaStateNode`, starts the CultMesh server, publishes discovery, accepts
   typed Eve commands, reads typed daemon commands, ticks the authoritative run
