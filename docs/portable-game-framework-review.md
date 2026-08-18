@@ -59,10 +59,14 @@ without pretending a content-derived hash is the public contract name.
 The Eve browser lowerer now treats `control.select` as a native interactive
 select rather than an inert unknown component. The executable browser witness
 boots the real daemon against an isolated imported catalog, discovers and
-leases `aetheria.hangar`, lowers it in headless Chromium, changes the Verse
-selector, submits the resulting typed Eve intent through CultMesh, and observes
-the daemon-issued command receipt. It also forges a different client identity
-and requires the daemon to deny it before materializing a canonical command.
+leases `aetheria.hangar` through the canonical Odin Verse catalog, lowers it in
+headless Chromium, changes the Verse selector, submits the resulting typed Eve
+intent through CultMesh, and observes the daemon-issued command receipt. It
+also forges a different client identity and requires the daemon to deny it
+before materializing a canonical command. The witness then restarts the daemon
+on another physical WebSocket endpoint, updates Odin at the same rendezvous
+identity, and requires the retained browser lease to reconnect, resubscribe,
+and obtain a second receipt without learning the replacement endpoint.
 
 Run it from this repository with:
 
@@ -71,10 +75,11 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-aetheria-browser-provide
 ```
 
 This is a source-tree product witness: it deliberately names sibling CultLib
-and Eve roots. It proves the real provider/browser boundary, not released-
-artifact onboarding, deployed Odin discovery, or route replacement. Anonymous
-browser transport is confined to loopback development; a remotely reachable
-Verse still requires an authenticated WebSocket host policy.
+and Eve roots and uses the executable local Odin fixture. It proves the real
+provider/browser boundary and provider route replacement, not released-
+artifact onboarding or the deployed Odin service. Anonymous provider transport
+is confined to loopback development; the Odin fixture uses its authenticated
+host adapter, and a remotely reachable provider still requires one too.
 
 ## Target authority map
 
@@ -176,7 +181,7 @@ test rather than achieved properties.
 | --- | --- | --- | --- |
 | P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. The executable CultLib scaling gate proves 1, 100, and 1,000 idle documents schedule zero work and editing one percent schedules only that one percent. C# delay ownership is clock-injected; browser animation-frame disposal is now cancellation-correct. | Add measured allocations, clone/serialization counts, payload bytes, and update latency against representative 16 KiB documents; the deterministic scheduling gate does not impersonate those measurements. |
 | P0 | Browser lowerer instance isolation | Eve browser lowering now carries surface/options/styles/component indexes per host, patches only bound component subtrees, and coalesces synchronous binding bursts. A two-host DOM test proves command/asset/skin isolation plus focus, selection, scroll, and root preservation. | Add the browser host witness to CI and the released-artifact consumer smoke. |
-| P0 | Conformance witnesses | The static pack resolves repository witnesses and checks schema IDs against typed source. The actual Aetheria browser witness boots the product daemon, leases and lowers the Hangar in Chromium, submits the native Verse select command, observes its daemon receipt, and proves a forged client identity is denied. CultLib's generic witness separately proves provider route rotation through a local Odin fixture. | Extend the actual Aetheria witness through deployed/configured Odin route replacement and a retained native consumer; neither static fixture agreement nor the generic sample may satisfy those product proofs. |
+| P0 | Conformance witnesses | The static pack resolves repository witnesses and checks schema IDs against typed source. The actual Aetheria browser witness boots the product daemon, discovers and leases the Hangar through a local Odin fixture, lowers it in Chromium, submits the native Verse select command, observes its daemon receipt, rejects a forged client identity, then follows the restarted daemon to a new route and obtains a second receipt through the retained lease. | Repeat the same product chronology through deployed Odin and a retained native consumer; static fixture agreement and the local Odin fixture cannot satisfy those infrastructure/native-runtime proofs. |
 | P0 | Stable identity path | Eve Unity discovers and reconnects through `CultMeshClient`; Aetheria's local `.cc` facade no longer accepts physical endpoints or constructs client-owned Eve surfaces. `CultMeshBrowserOdinRendezvous` now gives browsers the same identity-first Verse-catalog boundary and survives a physical provider move. | Generate Aetheria domain handles over the generic client and prove the actual daemon through local and configured Odin routes without restoring an application-owned replica. |
 | P1 | Contract ownership | Eve `0.3.0` owns the renderer-neutral C# surface contract. A clean Unity consumer passed 136/136 tests against the released CultLib `1.0.45`, Eve surface, and EveUnity packages; Aetheria's daemon project now references Eve rather than EveUnity. | Keep the clean-consumer witness in CI and reject any renderer repository reference from headless daemon projects. |
 | P1 | Executable onboarding | The artifact-only `samples/eve-two-runtime` verifier proves clean package consumption. The separate `samples/eve-browser-network` witness runs a C# provider, local Odin fixture, real Chromium Eve lowerer, and C# observer; it rotates the provider route and proves rediscovery, resubscription, receipts, and durable state. | Run the fixture on Windows/Linux from released artifacts, add retained C# lease reconnection, and keep the local Odin fixture distinct from deployed-Odin evidence. |
@@ -185,8 +190,8 @@ test rather than achieved properties.
 | P1 | Starbridge finality | The daemon no longer accepts peer committed facts, and the removed CLI lane is rejected explicitly. The authority smoke now enters through canonical Terminus bootstrap instead of treating a rendered frame as durable run state. | Build the typed Pilot candidate, Commander selection/replay, and single-final-log protocol; prove mismatch, late candidate, restart, and non-jurisdiction negatives. |
 
 The generic and product live-network boundaries now have executable witnesses.
-The Aetheria witness proves the real daemon through one loopback browser route;
-the remaining product proof is to expose the same receipt/state to a retained
-native consumer and survive configured Odin route replacement without an
-application-owned endpoint loop. The generic sample remains framework evidence,
-not a substitute for that product route-rotation witness.
+The Aetheria witness proves the real daemon, retained browser lease, commands,
+receipts, and one Odin-mediated physical route replacement. The remaining
+product proof is to expose the same receipt/state to a retained native consumer
+and repeat the chronology against deployed Odin. The generic sample remains
+framework evidence, not a substitute for those product/infrastructure gates.

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createServer } from "node:http";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -17,7 +18,11 @@ const daemonProject = join(repoRoot, "Aetheria.State.Daemon", "Aetheria.State.Da
 const daemonDll = join(repoRoot, "Aetheria.State.Daemon", "bin", "Debug", "net10.0", "Aetheria.State.Daemon.dll");
 const importProject = join(repoRoot, "Aetheria.State.Import", "Aetheria.State.Import.csproj");
 const importDll = join(repoRoot, "Aetheria.State.Import", "bin", "Debug", "net10.0", "Aetheria.State.Import.dll");
+const odinProject = join(cultLibRoot, "samples", "eve-browser-network", "EveBrowserNetworkSample.csproj");
+const odinDll = join(cultLibRoot, "bin", "EveBrowserNetworkSample", "Debug", "net10.0", "EveBrowserNetworkSample.dll");
+const odinToken = "aetheria-browser-witness";
 let daemon;
+let odin;
 let httpServer;
 let browser;
 
@@ -58,19 +63,21 @@ try {
     "--verbosity",
     "quiet",
   ]);
+  await run("dotnet", [
+    "build",
+    odinProject,
+    "-m:1",
+    "/p:UseSharedCompilation=false",
+    "--verbosity",
+    "quiet",
+  ]);
   await run("dotnet", [importDll, repoRoot, statePath]);
-  daemon = monitored(spawn("dotnet", [
-    daemonDll,
-    "--root", repoRoot,
-    "--state", statePath,
-    "--client-cultmesh-port", "0",
-    "--client-cultmesh-websocket-port", "0",
-    "--client-cultmesh-content-port", "0",
-    "--client-cultmesh-quic-port", "0",
-    "--no-odin-announcements",
-  ], { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] }));
+  daemon = startDaemon();
   const endpoint = await daemon.waitFor("Aetheria client browser CultMesh endpoint: ", 120_000);
   await daemon.waitFor("Aetheria daemon ready; waiting for a client to load or generate a world.", 30_000);
+  const odinPort = await freePort();
+  odin = startOdin(odinPort, endpoint);
+  const odinEndpoint = await odin.waitFor("ODIN_READY ", 30_000);
   httpServer = await serve(bundlePath);
   const httpAddress = httpServer.address();
   if (!httpAddress || typeof httpAddress === "string") throw new Error("Browser witness HTTP server has no TCP address.");
@@ -78,7 +85,9 @@ try {
   const executablePath = process.env.CHROME_PATH || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
   browser = await chromium.launch({ executablePath, headless: true });
   const page = await browser.newPage();
-  await page.goto(`http://127.0.0.1:${httpAddress.port}/?endpoint=${encodeURIComponent(endpoint)}`);
+  await page.goto(
+    `http://127.0.0.1:${httpAddress.port}/?endpoint=${encodeURIComponent(odinEndpoint)}&token=${encodeURIComponent(odinToken)}`,
+  );
   await page.waitForFunction(() => window.__aetheriaWitness || window.__aetheriaWitnessError);
   const error = await page.evaluate(() => window.__aetheriaWitnessError);
   assert.equal(error, undefined, daemon.diagnostics());
@@ -95,9 +104,34 @@ try {
   assert.equal(witness.receiptSchema, "gamecult.eve.command_receipt.v1");
   assert.equal(witness.forgedIdentityStatus, "denied");
 
+  await stop(daemon.process);
+  daemon = startDaemon();
+  const replacementEndpoint = await daemon.waitFor("Aetheria client browser CultMesh endpoint: ", 120_000);
+  await daemon.waitFor("Aetheria daemon ready; waiting for a client to load or generate a world.", 30_000);
+  assert.notEqual(replacementEndpoint, endpoint);
+  await stop(odin.process);
+  odin = startOdin(odinPort, replacementEndpoint);
+  assert.equal(await odin.waitFor("ODIN_READY ", 30_000), odinEndpoint);
+  await page.waitForFunction(
+    () => window.__aetheriaWitness?.connectionStates.includes("reconnecting") &&
+      window.__aetheriaWitness.connectionStates.at(-1) === "connected",
+    undefined,
+    { timeout: 60_000 },
+  );
+  const replacementCommand = await page.evaluate(async () => {
+    if (!window.__aetheriaIssueVerseSelection) throw new Error("Route witness command hook is missing.");
+    return await window.__aetheriaIssueVerseSelection();
+  });
+  assert.ok(replacementCommand.commandId);
+  assert.notEqual(replacementCommand.commandId, witness.commandId);
+  assert.ok(["queued", "accepted"].includes(replacementCommand.commandStatus));
+  assert.equal(replacementCommand.receiptSchema, "gamecult.eve.command_receipt.v1");
+
   console.log(JSON.stringify({
     provider: "Aetheria.State.Daemon",
     endpoint,
+    replacementEndpoint,
+    odinEndpoint,
     surface: "aetheria.hangar",
     loweredBy: "Chromium Eve browser lowerer",
     verseOptions: witness.verseOptions,
@@ -107,11 +141,14 @@ try {
       status: witness.commandStatus,
       receiptSchema: witness.receiptSchema,
     },
+    replacementCommand,
+    routeRotationCount: 1,
     forgedIdentityStatus: witness.forgedIdentityStatus,
   }));
 } finally {
   if (browser) await browser.close().catch(() => undefined);
   if (daemon) await stop(daemon.process);
+  if (odin) await stop(odin.process);
   if (httpServer) await new Promise(resolvePromise => httpServer.close(resolvePromise));
   await rm(workRoot, { recursive: true, force: true });
 }
@@ -121,7 +158,7 @@ function argumentRoot(name, fallback) {
   return resolve(index >= 0 ? process.argv[index + 1] : fallback);
 }
 
-function monitored(process) {
+function monitored(process, label = "process") {
   let output = "";
   let error = "";
   const waiters = [];
@@ -132,7 +169,7 @@ function monitored(process) {
   process.on("exit", code => {
     for (const waiter of waiters.splice(0)) {
       clearTimeout(waiter.timer);
-      waiter.reject(new Error(`Aetheria daemon exited ${code}\n${output}\n${error}`));
+      waiter.reject(new Error(`${label} exited ${code}\n${output}\n${error}`));
     }
   });
   function settle() {
@@ -165,6 +202,34 @@ function monitored(process) {
   };
 }
 
+function startDaemon() {
+  return monitored(spawn("dotnet", [
+    daemonDll,
+    "--root", repoRoot,
+    "--state", statePath,
+    "--client-cultmesh-port", "0",
+    "--client-cultmesh-websocket-port", "0",
+    "--client-cultmesh-content-port", "0",
+    "--client-cultmesh-quic-port", "0",
+    "--no-odin-announcements",
+  ], { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] }), "Aetheria daemon");
+}
+
+function startOdin(port, providerEndpoint) {
+  return monitored(spawn("dotnet", [
+    odinDll,
+    "odin",
+    "--port", String(port),
+    "--provider-endpoint", providerEndpoint,
+    "--token", odinToken,
+    "--verse-id", "aetheria.local",
+    "--verse-name", "Aetheria local product witness",
+    "--authority-runtime-id", "aetheria-daemon",
+    "--transport-version", "cultmesh.v0",
+    "--rules-hash", "aetheria-runtime-world-v1",
+  ], { cwd: cultLibRoot, stdio: ["ignore", "pipe", "pipe"] }), "Odin fixture");
+}
+
 function run(command, arguments_) {
   return new Promise((resolvePromise, reject) => {
     const process = spawn(command, arguments_, { cwd: repoRoot, stdio: "inherit" });
@@ -177,7 +242,7 @@ function run(command, arguments_) {
 
 function serve(bundle) {
   return new Promise((resolvePromise, reject) => {
-    const server = createServer(async (request, response) => {
+    const server = createHttpServer(async (request, response) => {
       if (request.url?.startsWith("/witness.js")) {
         response.writeHead(200, { "content-type": "text/javascript" });
         response.end(await readFile(bundle));
@@ -189,6 +254,18 @@ function serve(bundle) {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => resolvePromise(server));
   });
+}
+
+async function freePort() {
+  const server = createNetServer();
+  await new Promise((resolvePromise, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolvePromise);
+  });
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  await new Promise(resolvePromise => server.close(resolvePromise));
+  return port;
 }
 
 async function stop(process) {

@@ -18,12 +18,20 @@ declare global {
       receiptSchema: string;
       forgedIdentityStatus: string;
     };
+    __aetheriaIssueVerseSelection?: () => Promise<{
+      commandId: string;
+      commandStatus: string;
+      receiptSchema: string;
+    }>;
     __aetheriaWitnessError?: string;
   }
 }
 
-const endpoint = new URLSearchParams(location.search).get("endpoint");
+const parameters = new URLSearchParams(location.search);
+const endpoint = parameters.get("endpoint");
 if (!endpoint) throw new Error("The Aetheria browser witness requires an endpoint.");
+const token = parameters.get("token");
+if (token) document.cookie = `cultnet_session=${encodeURIComponent(token)}; Path=/; SameSite=Strict`;
 const host = document.querySelector<HTMLElement>("#surface");
 if (!host) throw new Error("The Aetheria browser witness host is missing.");
 
@@ -62,10 +70,16 @@ try {
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   const verseSelect = host.querySelector<HTMLSelectElement>("select");
   if (!verseSelect) throw new Error("The Hangar Verse selector did not lower as an interactive select.");
-  verseSelect.value = "local";
-  verseSelect.dispatchEvent(new Event("change", { bubbles: true }));
-  if (!commandProof) throw new Error("Changing the Hangar Verse selector emitted no Eve command.");
-  const command = await commandProof;
+  const issueVerseSelection = async () => {
+    commandProof = undefined;
+    verseSelect.value = "local";
+    verseSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    const submitted = commandProof;
+    if (!submitted) throw new Error("Changing the Hangar Verse selector emitted no Eve command.");
+    return await submitted;
+  };
+  window.__aetheriaIssueVerseSelection = issueVerseSelection;
+  const command = await issueVerseSelection();
   if (!submittedIntent) throw new Error("The Hangar Verse selector command lost its typed intent.");
   const forgedIdentityStatus = await verifyForgedClientDenied(mesh, submittedIntent);
 
