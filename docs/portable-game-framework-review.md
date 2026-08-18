@@ -48,6 +48,34 @@ conversion bridge, duplicate registration, and multiple Hangar writers. The
 state build, daemon build, typed-state smoke, daemon/Ymir smoke, and authority
 smoke build pass after the cut.
 
+### Repaired on 2026-08-18
+
+The actual Aetheria daemon now exposes its CultMesh schema/session endpoint to
+browser clients over an anonymous loopback-only WebSocket route. Raw document
+records carry both the CultCache content hash and the stable portable schema
+name/version, so C#, TypeScript, and browser consumers agree on identity
+without pretending a content-derived hash is the public contract name.
+
+The Eve browser lowerer now treats `control.select` as a native interactive
+select rather than an inert unknown component. The executable browser witness
+boots the real daemon against an isolated imported catalog, discovers and
+leases `aetheria.hangar`, lowers it in headless Chromium, changes the Verse
+selector, submits the resulting typed Eve intent through CultMesh, and observes
+the daemon-issued command receipt. It also forges a different client identity
+and requires the daemon to deny it before materializing a canonical command.
+
+Run it from this repository with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/verify-aetheria-browser-provider.ps1
+```
+
+This is a source-tree product witness: it deliberately names sibling CultLib
+and Eve roots. It proves the real provider/browser boundary, not released-
+artifact onboarding, deployed Odin discovery, or route replacement. Anonymous
+browser transport is confined to loopback development; a remotely reachable
+Verse still requires an authenticated WebSocket host policy.
+
 ## Target authority map
 
 Owner:
@@ -148,7 +176,7 @@ test rather than achieved properties.
 | --- | --- | --- | --- |
 | P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. The executable CultLib scaling gate proves 1, 100, and 1,000 idle documents schedule zero work and editing one percent schedules only that one percent. C# delay ownership is clock-injected; browser animation-frame disposal is now cancellation-correct. | Add measured allocations, clone/serialization counts, payload bytes, and update latency against representative 16 KiB documents; the deterministic scheduling gate does not impersonate those measurements. |
 | P0 | Browser lowerer instance isolation | Eve browser lowering now carries surface/options/styles/component indexes per host, patches only bound component subtrees, and coalesces synchronous binding bursts. A two-host DOM test proves command/asset/skin isolation plus focus, selection, scroll, and root preservation. | Add the browser host witness to CI and the released-artifact consumer smoke. |
-| P0 | Conformance witnesses | The static pack now resolves repository witnesses, checks Aetheria schema IDs against typed `CultDocument` source, rejects obsolete daemon IDs and absolute workspaces, and labels its evidence boundary. CultLib's executable browser sample separately proves canonical Verse-catalog discovery, provider route rotation, retained Chromium leases, commands, receipts, and persistence through a local Odin fixture. | Run that generic witness against the actual Aetheria provider advertisement/surfaces/operations; neither static fixture agreement nor the sample provider may satisfy the product proof. |
+| P0 | Conformance witnesses | The static pack resolves repository witnesses and checks schema IDs against typed source. The actual Aetheria browser witness boots the product daemon, leases and lowers the Hangar in Chromium, submits the native Verse select command, observes its daemon receipt, and proves a forged client identity is denied. CultLib's generic witness separately proves provider route rotation through a local Odin fixture. | Extend the actual Aetheria witness through deployed/configured Odin route replacement and a retained native consumer; neither static fixture agreement nor the generic sample may satisfy those product proofs. |
 | P0 | Stable identity path | Eve Unity discovers and reconnects through `CultMeshClient`; Aetheria's local `.cc` facade no longer accepts physical endpoints or constructs client-owned Eve surfaces. `CultMeshBrowserOdinRendezvous` now gives browsers the same identity-first Verse-catalog boundary and survives a physical provider move. | Generate Aetheria domain handles over the generic client and prove the actual daemon through local and configured Odin routes without restoring an application-owned replica. |
 | P1 | Contract ownership | Eve `0.3.0` owns the renderer-neutral C# surface contract. A clean Unity consumer passed 136/136 tests against the released CultLib `1.0.45`, Eve surface, and EveUnity packages; Aetheria's daemon project now references Eve rather than EveUnity. | Keep the clean-consumer witness in CI and reject any renderer repository reference from headless daemon projects. |
 | P1 | Executable onboarding | The artifact-only `samples/eve-two-runtime` verifier proves clean package consumption. The separate `samples/eve-browser-network` witness runs a C# provider, local Odin fixture, real Chromium Eve lowerer, and C# observer; it rotates the provider route and proves rediscovery, resubscription, receipts, and durable state. | Run the fixture on Windows/Linux from released artifacts, add retained C# lease reconnection, and keep the local Odin fixture distinct from deployed-Odin evidence. |
@@ -156,9 +184,9 @@ test rather than achieved properties.
 | P1 | Long-session state growth | Peer-import chronology is deleted. Indexed committed-command facts and receipts own history; handled Eve invocations and processed daemon commands leave their transient inboxes; hot-frame chronology fields are compatibility tombstones. A 10,000-command smoke holds final serialized frame size within 64 bytes of the first, while the live progression smoke requires each handled Eve request to disappear after its receipt. | Define retention/segmentation for the durable fact and receipt journal, then benchmark total `.cc` growth and restart cost. The hot checkpoint and ingress queues are bounded; the audit store is not yet. |
 | P1 | Starbridge finality | The daemon no longer accepts peer committed facts, and the removed CLI lane is rejected explicitly. The authority smoke now enters through canonical Terminus bootstrap instead of treating a rendered frame as durable run state. | Build the typed Pilot candidate, Commander selection/replay, and single-final-log protocol; prove mismatch, late candidate, restart, and non-jurisdiction negatives. |
 
-The generic live-network boundary now has an executable witness. The active
-Aetheria proof is narrower and harder: the real Aetheria daemon must publish its
-provider identity and Eve surface, accept one typed operation, expose the same
-receipt/state to browser and native consumers, and survive route replacement
-without application-owned endpoint loops. The sample provider is framework
-evidence, not a substitute for that product witness.
+The generic and product live-network boundaries now have executable witnesses.
+The Aetheria witness proves the real daemon through one loopback browser route;
+the remaining product proof is to expose the same receipt/state to a retained
+native consumer and survive configured Odin route replacement without an
+application-owned endpoint loop. The generic sample remains framework evidence,
+not a substitute for that product route-rotation witness.

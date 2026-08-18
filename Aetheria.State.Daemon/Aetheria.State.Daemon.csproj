@@ -14,7 +14,12 @@
     <ProjectReference Include="$(EveRoot)\packages\org.gamecult.eve.surface\GameCult.Eve.Surface.csproj"
                       AdditionalProperties="CultLibRoot=$(CultLibRoot)" />
     <ProjectReference Include="$(CultLibRoot)\src\GameCult.Mesh.Quic\GameCult.Mesh.Quic.csproj" />
+    <ProjectReference Include="$(CultLibRoot)\src\GameCult.Networking.WebSockets\GameCult.Networking.WebSockets.csproj" />
     <ProjectReference Include="$(YmirRoot)\src\Ymir.Core\Ymir.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <Import Project="..\Aetheria.State\Aetheria.State.Dependencies.targets" />
