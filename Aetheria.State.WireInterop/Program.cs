@@ -43,7 +43,7 @@ if (args.Length == 2 && args[0] is "verify-csharp" or "verify-typescript")
         Require(command.ScalarValue == 0.875, "TypeScript scalar");
         Require(command.AuthorRuntimeId == "wire-typescript", "TypeScript author runtime");
         Require(command.SubjectKey == "entity:wire-typescript", "TypeScript authority subject");
-        Require(command.ClaimKind == AetheriaRuntimeAuthorityClaimKinds.Movement, "TypeScript authority claim kind");
+        Require(command.ClaimKind == AetheriaRuntimeClaimKinds.Movement, "TypeScript authority claim kind");
     }
 
     Console.WriteLine(Convert.ToBase64String(MessagePackSerializer.Serialize(command)));

@@ -48,6 +48,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: GameCult/CultMath
+          ref: codex/min-max-rect
           path: CultMath
 
       - name: Set up Node.js
