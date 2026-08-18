@@ -5,8 +5,6 @@ namespace Aetheria.State;
 
 public static class AetheriaHangar
 {
-    private static readonly SemaphoreSlim AdmissionGate = new(1, 1);
-
     public static async Task<AetheriaDeploymentReceipt> AdmitAsync(
         AetheriaStateNode node,
         AetheriaDeploymentRequest request,
@@ -15,7 +13,7 @@ public static class AetheriaHangar
         if (node == null) throw new ArgumentNullException(nameof(node));
         if (request == null) throw new ArgumentNullException(nameof(request));
 
-        await AdmissionGate.WaitAsync().ConfigureAwait(false);
+        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
         try
         {
             var pointer = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey);
@@ -37,7 +35,7 @@ public static class AetheriaHangar
         }
         finally
         {
-            AdmissionGate.Release();
+            AetheriaHangarMutationGate.Gate.Release();
         }
     }
 
@@ -100,7 +98,7 @@ public static class AetheriaHangar
         bool hasDestinationPosition = false,
         string rotation = "None")
     {
-        await AdmissionGate.WaitAsync().ConfigureAwait(false);
+        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
         try
         {
             var pointer = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey);
@@ -171,7 +169,7 @@ public static class AetheriaHangar
         }
         finally
         {
-            AdmissionGate.Release();
+            AetheriaHangarMutationGate.Gate.Release();
         }
     }
 
@@ -182,7 +180,7 @@ public static class AetheriaHangar
         long expectedRevision,
         string now)
     {
-        await AdmissionGate.WaitAsync().ConfigureAwait(false);
+        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
         try
         {
             var pointer = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey);
@@ -230,7 +228,7 @@ public static class AetheriaHangar
         }
         finally
         {
-            AdmissionGate.Release();
+            AetheriaHangarMutationGate.Gate.Release();
         }
     }
 
@@ -282,7 +280,8 @@ public static class AetheriaHangar
         string.Equals(prior.Mode, request.Mode, StringComparison.Ordinal) &&
         string.Equals(prior.ShipId, request.ShipId, StringComparison.Ordinal) &&
         string.Equals(prior.LoadoutTemplateKey, request.LoadoutTemplateKey, StringComparison.Ordinal) &&
-        string.Equals(prior.ModePolicyId, request.ModePolicyId, StringComparison.Ordinal);
+        string.Equals(prior.ModePolicyId, request.ModePolicyId, StringComparison.Ordinal) &&
+        prior.RequestedHangarRevision == request.ExpectedHangarRevision;
 
     private static AetheriaDeploymentReceipt Receipt(
         AetheriaHangarState hangar,
@@ -310,7 +309,8 @@ public static class AetheriaHangar
             Loadout = accepted ? Clone(loadout!.RootEntity) : new AetheriaRuntimeEntityLoadoutCommit(),
             CommittedAtUtc = now,
             RunId = runId,
-            RunRecordKey = accepted ? $"global:aetheria.run_state.{runId}.v1" : ""
+            RunRecordKey = accepted ? $"global:aetheria.run_state.{runId}.v1" : "",
+            RequestedHangarRevision = request.ExpectedHangarRevision
         };
     }
 
@@ -452,6 +452,11 @@ public static class AetheriaHangar
         clone.CreatedAtUtc = source.CreatedAtUtc;
         return clone;
     }
+}
+
+public static class AetheriaHangarMutationGate
+{
+    public static SemaphoreSlim Gate { get; } = new(1, 1);
 }
 
 public sealed class AetheriaHangarMutationResult

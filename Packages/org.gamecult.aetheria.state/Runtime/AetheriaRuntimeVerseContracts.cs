@@ -47,6 +47,12 @@ namespace GameCult.Aetheria.State.Verse
         public static CultRecordKey HangarDraft { get; } = new("global:gamecult.aetheria.hangar_draft.v1");
         public static CultRecordKey ProgressionSource { get; } = new(AetheriaProgressionSourceDocument.DocumentKey);
 
+        public static CultRecordKey HangarCommandEnvelope(string commandId) =>
+            new($"hangar:command-envelopes:{StableToken(commandId)}:gamecult.aetheria.hangar_command_envelope.v1");
+
+        public static CultRecordKey ProgressionCommandRoute(string commandId) =>
+            new($"hangar:command-routes:{StableToken(commandId)}:gamecult.aetheria.progression_command_route.v1");
+
         public static CultRecordKey DaemonCommand(string commandId) =>
             new($"daemon:commands:{StableToken(commandId)}:gamecult.aetheria.daemon_command.v1");
 
@@ -105,6 +111,8 @@ namespace GameCult.Aetheria.State.Verse
             typeof(AetheriaRuntimePlayerSettingsDocument),
             typeof(AetheriaRuntimeVerseHostSettingsDocument),
             typeof(AetheriaProgressionSourceDocument),
+            typeof(AetheriaHangarCommandEnvelopeDocument),
+            typeof(AetheriaProgressionCommandRouteDocument),
             typeof(AetheriaHangarState),
             typeof(AetheriaHangarDraftState),
             typeof(EveSurfaceDocument),

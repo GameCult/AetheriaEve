@@ -114,21 +114,28 @@ selection uses the local moddable `.cc` Hangar; remote selection reads and
 invokes the selected Verse's authoritative Hangar. A separate typed Hangar
 draft owns the current ship, mode, and view selection; button payloads and
 renderers do not. The immutable Deployment receipt owns the exact run identity
-and record key; Hangar state, receipt, loadout snapshot, and generated run share
-one durable commit, while `ActiveRunKey` is derived navigation state. An accepted launch or
+and record key; Hangar state, receipt, loadout snapshot, generated run, and
+`GameSession` share one staged Hangar commit. CultCache publishes immutable
+record pages through one atomic manifest generation swap, while `ActiveRunKey`
+is derived navigation state. The session owns live run identity; a cached frame
+is input only when its run ID matches. An accepted launch or
 continue receipt carries a renderer-neutral navigation target: stable Verse,
 provider, surface, kind, and discovered rendezvous routes. Eve lowerers prepare
-the target through the complete endpoint list, stage it, and replace the mounted
-provider only after the generic host mounts successfully. Failed preparation or
-mount rolls back to the previous provider and remounts its surface. Renderer-local preferences, Unity
+the target through the complete endpoint list and lower it under an inactive
+root while the previous host remains mounted. Provider and presentation commit
+together only after candidate lowering succeeds; failure discards the candidate
+without remounting the old surface. Renderer-local preferences, Unity
 sidecars, and hard-coded remote endpoints cannot select progression truth.
 
 The public document plane accepts typed Eve command intents only; transport
 session identity is checked before an intent enters the daemon-owned command
 inbox. Generic raw document puts cannot mutate gameplay or progression. Remote
-route grants are verified against configured Odin roots before public listeners
-open. This proves provider-route identity, not player identity: production
-remote progression remains closed until its Verse binds an authenticated
+command forwarding durably pins the first selected Verse, authority runtime,
+payload hash, source revision, and Odin route set; retries do not follow later
+dropdown changes. Route grants are verified against configured Odin roots.
+This proves provider-route identity, not player identity: the Aetheria daemon
+currently refuses non-loopback publication, and production remote progression
+remains closed until its Verse binds an authenticated
 principal to per-principal Hangar and draft records. A client-chosen runtime ID
 must never be promoted into that account authority.
 

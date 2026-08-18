@@ -21,17 +21,8 @@ namespace GameCult.Aetheria.State.Verse
 
     public static class AetheriaModePolicies
     {
-        public const string TerminusLocal = "aetheria.mode.terminus.local.v1";
-        public const string StarbridgeMixed = "aetheria.mode.starbridge.mixed.v1";
-        public const string ArenaServer = "aetheria.mode.arena.server.v1";
-
-        public static string ForMode(string? mode)
-        {
-            if (string.Equals(mode, AetheriaGameModes.Terminus, StringComparison.Ordinal)) return TerminusLocal;
-            if (string.Equals(mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)) return StarbridgeMixed;
-            if (string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal)) return ArenaServer;
-            return "";
-        }
+        // Authority policy ids remain empty until mode activation installs and proves the policy.
+        public static string ForMode(string? mode) => "";
     }
 
     public static class AetheriaHangarShipStatuses
@@ -136,5 +127,6 @@ namespace GameCult.Aetheria.State.Verse
         [Key(11)] public string CommittedAtUtc { get; set; } = "";
         [Key(12)] public string RunId { get; set; } = "";
         [Key(13)] public string RunRecordKey { get; set; } = "";
+        [Key(14)] public long RequestedHangarRevision { get; set; }
     }
 }

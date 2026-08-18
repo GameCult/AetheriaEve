@@ -16,6 +16,7 @@ using System.Net.Sockets;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -178,6 +179,10 @@ while (!stopped.Task.IsCompleted)
 
     latestFrame = await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
         .ReadAsync().ConfigureAwait(false);
+    var activatedGameSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+        .ReadAsync().ConfigureAwait(false);
+    if (!FrameBelongsToSession(latestFrame, activatedGameSession))
+        latestFrame = null;
     using var worldPhysics = new AetheriaYmirWorldPhysics();
     await EnsureGameSessionAsync(node, options, startedAtUtc, latestFrame).ConfigureAwait(false);
     TraceStartup("game-session");
@@ -384,12 +389,18 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
         ? currentFrame.FixedDeltaSeconds
         : options.FixedDeltaSeconds;
     var nextFrameId = (currentFrame?.FrameId ?? -1) + 1;
-    var sessionId = string.IsNullOrWhiteSpace(currentFrame?.SessionId)
+    var sessionId = string.IsNullOrWhiteSpace(ingressState.SessionId)
         ? options.SessionId
-        : currentFrame.SessionId;
-    var run = HasPlayableRun(currentFrame?.Run)
-        ? currentFrame!.Run
-        : await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings).ConfigureAwait(false) ?? new AetheriaRuntimeRunCheckpointCommit();
+        : ingressState.SessionId;
+    var run = HasPlayableRun(currentFrame?.Run) &&
+              string.Equals(currentFrame!.Run.RunId, ingressState.RunId, StringComparison.Ordinal)
+        ? currentFrame.Run
+        : await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, ingressState.RunRecordKey).ConfigureAwait(false)
+          ?? throw new InvalidDataException(
+              $"Active game session '{ingressState.RunId}' has no canonical run at '{ingressState.RunRecordKey}'.");
+    if (!string.Equals(run.RunId, ingressState.RunId, StringComparison.Ordinal))
+        throw new InvalidDataException(
+            $"Active game session run '{ingressState.RunId}' does not match canonical run '{run.RunId}'.");
     ApplyDaemonRenderSettings(run, options.RenderSettings);
 
     var loadoutTemplates = ingressState.LoadoutTemplates;
@@ -646,6 +657,9 @@ static async Task RefreshGameSessionInputsAsync(
     var gameSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
         .ReadAsync().ConfigureAwait(false);
     ingressState.GameMode = gameSession?.Mode ?? "";
+    ingressState.SessionId = gameSession?.SessionId ?? "";
+    ingressState.RunId = gameSession?.RunId ?? "";
+    ingressState.RunRecordKey = gameSession?.RunRecordKey ?? "";
     ingressState.RequestedSimulationRate = gameSession?.SimulationRate ?? 0;
     ingressState.SimulationRate = gameSession?.EffectiveSimulationRate ?? gameSession?.SimulationRate ?? 0;
 }
@@ -770,6 +784,12 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
     var clientBindAddress = ParseBindAddress(options.ClientCultMeshHost);
     var remotePublication = !IPAddress.IsLoopback(clientBindAddress) ||
         !IsLoopbackHost(options.ClientCultMeshAdvertiseHost);
+    if (remotePublication)
+    {
+        throw new InvalidOperationException(
+            "Production remote Aetheria publication is disabled until an authenticated player principal " +
+            "is bound to CultMesh session identity and per-principal Hangar record keys.");
+    }
     if (remotePublication &&
         (options.ClientCultMeshWebSocketPort <= 0 ||
          options.ClientCultMeshQuicPort <= 0 ||
@@ -1400,6 +1420,7 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
             if (!string.Equals(request.ClientId, sourceRuntimeId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Eve command client identity does not match the established CultMesh session.");
 
+            await EnsureHangarCommandEnvelopeAsync(node, request, DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
             await node.Database.PutAsync(new CultRecordKey(expectedRecordKey), request).ConfigureAwait(false);
         }
         catch (Exception error)
@@ -2582,6 +2603,21 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
     foreach (var storedRequest in pendingRequests)
     {
         var request = storedRequest.Request;
+        string payloadHash;
+        try
+        {
+            payloadHash = await EnsureHangarCommandEnvelopeAsync(
+                node,
+                request,
+                DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException error)
+        {
+            Console.Error.WriteLine($"Rejected Hangar command envelope '{request.CommandId}': {error.Message}");
+            await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
+            deletedAny = true;
+            continue;
+        }
         var alreadyReceipted = node.Cache.Get<EveCommandReceiptDocument>(
             AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId)) != null;
         var alreadySubmitted = node.Cache.Get<AetheriaRuntimeDaemonCommandDocument>(
@@ -2597,7 +2633,7 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
         {
             try
             {
-                activatedSession |= await AcceptHangarInvocationAsync(node, options, request).ConfigureAwait(false);
+                activatedSession |= await AcceptHangarInvocationAsync(node, options, request, payloadHash).ConfigureAwait(false);
             }
             catch (TimeoutException error)
             {
@@ -2651,7 +2687,8 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
 static async Task<bool> AcceptHangarInvocationAsync(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
-    EveSurfaceCommandRequest request)
+    EveSurfaceCommandRequest request,
+    string payloadHash)
 {
     var now = DateTimeOffset.UtcNow.ToString("O");
     var command = request.Command ?? "";
@@ -2662,6 +2699,9 @@ static async Task<bool> AcceptHangarInvocationAsync(
     try
     {
         using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
+        var pinnedRoute = await node.MutableDocument<AetheriaProgressionCommandRouteDocument>(
+                AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId))
+            .ReadAsync().ConfigureAwait(false);
         var progressionSource = await node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
             .ReadAsync().ConfigureAwait(false)
             ?? await progressionVerses.EnsureAndRefreshAsync(now).ConfigureAwait(false);
@@ -2671,9 +2711,15 @@ static async Task<bool> AcceptHangarInvocationAsync(
             await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
             accepted = true;
         }
-        else if (!progressionSource.UsesLocalProgression)
+        else if (pinnedRoute != null || !progressionSource.UsesLocalProgression)
         {
-            var remoteReceipt = await progressionVerses.ForwardHangarInvocationAsync(request).ConfigureAwait(false);
+            pinnedRoute ??= await progressionVerses.ResolveOrPinForwardingRouteAsync(
+                request,
+                payloadHash,
+                now).ConfigureAwait(false);
+            if (!string.Equals(pinnedRoute.PayloadHash, payloadHash, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different payload.");
+            var remoteReceipt = await progressionVerses.ForwardHangarInvocationAsync(request, pinnedRoute).ConfigureAwait(false);
             await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), remoteReceipt)
                 .ConfigureAwait(false);
             await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
@@ -2765,13 +2811,13 @@ static async Task<bool> AcceptHangarInvocationAsync(
                     node,
                     await node.RuntimeCatalogForGenerationAsync().ConfigureAwait(false),
                     request.CommandId,
+                    options.SessionId,
                     expectedRevision,
                     now).ConfigureAwait(false);
                 accepted = receipt.Accepted;
                 diagnostic = receipt.Diagnostic;
                 if (accepted)
                 {
-                    await ActivateSessionAsync(node, options, receipt.Mode, receipt.RunRecordKey, request.CommandId, now).ConfigureAwait(false);
                     await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
                     activatesSession = true;
                     navigation = new EveSurfaceNavigationTarget(
@@ -2807,7 +2853,7 @@ static async Task<bool> AcceptHangarInvocationAsync(
                 break;
         }
     }
-    catch (Exception error) when (error is not TimeoutException)
+    catch (Exception error) when (error is not TimeoutException and not IOException)
     {
         accepted = false;
         diagnostic = error.Message;
@@ -2848,6 +2894,7 @@ static async Task ActivateSessionAsync(
             Mode = mode,
             SessionId = options.SessionId,
             RunId = run.RunId,
+            RunRecordKey = runRecordKey,
             ControlledEntityKey = run.CurrentEntityKey,
             EntrySurfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
             SimulationRate = 1,
@@ -2875,6 +2922,61 @@ static string SurfaceForMode(string mode) =>
     string.Equals(mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
         ? AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId
         : AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId;
+
+static async Task<string> EnsureHangarCommandEnvelopeAsync(
+    AetheriaStateNode node,
+    EveSurfaceCommandRequest request,
+    string now)
+{
+    var payloadHash = HangarCommandPayloadHash(request);
+    var key = AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId);
+    var existing = await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(key)
+        .ReadAsync().ConfigureAwait(false);
+    if (existing != null)
+    {
+        if (!string.Equals(existing.PayloadHash, payloadHash, StringComparison.Ordinal) ||
+            !string.Equals(existing.ClientId, request.ClientId, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different immutable envelope.");
+        return payloadHash;
+    }
+
+    await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(key)
+        .ReplaceAsync(new AetheriaHangarCommandEnvelopeDocument
+        {
+            CommandId = request.CommandId,
+            PayloadHash = payloadHash,
+            ClientId = request.ClientId,
+            CreatedAtUtc = now ?? ""
+        }).ConfigureAwait(false);
+    await node.FlushAsync().ConfigureAwait(false);
+    return payloadHash;
+}
+
+static string HangarCommandPayloadHash(EveSurfaceCommandRequest request)
+{
+    var canonical = new StringBuilder();
+    Append(request.Schema);
+    Append(request.ProviderId);
+    Append(request.SurfaceId);
+    Append(request.Command);
+    Append(request.ClientId);
+    Append(request.CommandBoundary);
+    Append(request.ReceiptSchema);
+    foreach (var field in request.PayloadFields.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+    {
+        Append(field.Key);
+        Append(field.Value);
+    }
+    return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))).ToLowerInvariant();
+
+    void Append(string? value)
+    {
+        value ??= "";
+        canonical.Append(value.Length.ToString(CultureInfo.InvariantCulture));
+        canonical.Append(':');
+        canonical.Append(value);
+    }
+}
 
 static string Payload(EveSurfaceCommandRequest request, string key) =>
     request.PayloadFields.TryGetValue(key, out var value) ? value ?? "" : "";
@@ -3523,19 +3625,35 @@ static async Task EnsureGameSessionAsync(
     string now,
     AetheriaRuntimeDaemonFrameDocument? latestFrame)
 {
-    var run = !options.UseTerminusFixture && HasPlayableRun(latestFrame?.Run)
-        ? latestFrame!.Run
-        : await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings).ConfigureAwait(false)
-          ?? throw new InvalidDataException("Aetheria game session requires an authoritative frame or active bootstrap run.");
+    var existing = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+        .ReadAsync().ConfigureAwait(false);
+    var runRecordKey = existing?.RunRecordKey ?? "";
+    var run = !string.IsNullOrWhiteSpace(runRecordKey)
+        ? await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, runRecordKey).ConfigureAwait(false)
+        : null;
+    if (!HasPlayableRun(run) && FrameBelongsToSession(latestFrame, existing))
+        run = latestFrame!.Run;
+    if (!HasPlayableRun(run))
+    {
+        if (existing != null &&
+            (!string.IsNullOrWhiteSpace(existing.RunId) || !string.IsNullOrWhiteSpace(existing.RunRecordKey)))
+            throw new InvalidDataException(
+                $"Active game session '{existing.RunId}' has no canonical run at '{existing.RunRecordKey}'.");
+        var settings = await node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
+            .ReadAsync().ConfigureAwait(false);
+        runRecordKey = settings?.ActiveRunKey ?? "";
+        run = await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, runRecordKey).ConfigureAwait(false);
+    }
+    if (run == null)
+        throw new InvalidDataException("Aetheria game session requires a canonical active run.");
     var expectedMode = string.IsNullOrWhiteSpace(run.GameMode)
         ? run.IsTutorial ? AetheriaGameSessionState.AetheriaMode : AetheriaGameSessionState.TerminusMode
         : run.GameMode;
     var initialSimulationRate = options.UseTerminusFixture ? 0 : 1;
-    var existing = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
-        .ReadAsync().ConfigureAwait(false);
     if (existing != null &&
         string.Equals(existing.Mode, expectedMode, StringComparison.Ordinal) &&
         string.Equals(existing.RunId, run.RunId, StringComparison.Ordinal) &&
+        string.Equals(existing.RunRecordKey, runRecordKey, StringComparison.Ordinal) &&
         string.Equals(existing.ControlledEntityKey, run.CurrentEntityKey, StringComparison.Ordinal) &&
         Math.Abs(existing.SimulationRate - initialSimulationRate) < 0.000001 &&
         Math.Abs((existing.EffectiveSimulationRate ?? existing.SimulationRate) - initialSimulationRate) < 0.000001)
@@ -3547,6 +3665,7 @@ static async Task EnsureGameSessionAsync(
             Mode = expectedMode,
             SessionId = options.SessionId,
             RunId = run.RunId,
+            RunRecordKey = runRecordKey,
             ControlledEntityKey = run.CurrentEntityKey,
             EntrySurfaceId = AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
             SimulationRate = initialSimulationRate,
@@ -3555,6 +3674,14 @@ static async Task EnsureGameSessionAsync(
         }).ConfigureAwait(false);
     await node.FlushAsync().ConfigureAwait(false);
 }
+
+static bool FrameBelongsToSession(
+    AetheriaRuntimeDaemonFrameDocument? frame,
+    AetheriaGameSessionState? session) =>
+    HasPlayableRun(frame?.Run) &&
+    session != null &&
+    !string.IsNullOrWhiteSpace(session.RunId) &&
+    string.Equals(frame!.Run.RunId, session.RunId, StringComparison.Ordinal);
 
 static async Task EnsureVerseAuthorityPolicyAsync(
     AetheriaStateNode node,
@@ -4337,6 +4464,9 @@ internal sealed class AetheriaDaemonIngressState
 {
     public bool ControlPlaneInitialized { get; set; }
     public string GameMode { get; set; } = "";
+    public string SessionId { get; set; } = "";
+    public string RunId { get; set; } = "";
+    public string RunRecordKey { get; set; } = "";
     public double RequestedSimulationRate { get; set; }
     public double SimulationRate { get; set; }
     public double SimulationStepAccumulator { get; set; }

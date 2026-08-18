@@ -252,12 +252,24 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         }
     }
 
-    public async Task<EveCommandReceiptDocument> ForwardHangarInvocationAsync(
+    public async Task<AetheriaProgressionCommandRouteDocument> ResolveOrPinForwardingRouteAsync(
         EveSurfaceCommandRequest request,
+        string payloadHash,
+        string now,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (request == null) throw new ArgumentNullException(nameof(request));
+        var routeKey = AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId);
+        var existing = await _node.MutableDocument<AetheriaProgressionCommandRouteDocument>(routeKey)
+            .ReadAsync().ConfigureAwait(false);
+        if (existing != null)
+        {
+            if (!string.Equals(existing.PayloadHash, payloadHash, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different payload.");
+            return existing;
+        }
+
         var source = await _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
             .ReadAsync().ConfigureAwait(false);
         if (source == null || source.UsesLocalProgression)
@@ -265,7 +277,35 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         if (_remote == null)
             throw new InvalidOperationException("No Odin discovery endpoint is configured for the selected Verse.");
         var remote = await ResolveRemoteProgressionAsync(source, cancellationToken).ConfigureAwait(false);
-        var target = remote.Target;
+        var route = new AetheriaProgressionCommandRouteDocument
+        {
+            CommandId = request.CommandId,
+            PayloadHash = payloadHash,
+            VerseId = remote.Target.VerseId,
+            AuthorityRuntimeId = remote.Target.AuthorityRuntimeId,
+            ProgressionSourceRevision = source.Revision,
+            OdinDiscoveryEndpoints = (source.OdinDiscoveryEndpoints ?? Array.Empty<string>()).ToArray(),
+            CreatedAtUtc = now ?? ""
+        };
+        await _node.MutableDocument<AetheriaProgressionCommandRouteDocument>(routeKey)
+            .ReplaceAsync(route).ConfigureAwait(false);
+        await _node.FlushAsync().ConfigureAwait(false);
+        return route;
+    }
+
+    public async Task<EveCommandReceiptDocument> ForwardHangarInvocationAsync(
+        EveSurfaceCommandRequest request,
+        AetheriaProgressionCommandRouteDocument route,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (request == null) throw new ArgumentNullException(nameof(request));
+        if (route == null) throw new ArgumentNullException(nameof(route));
+        if (!string.Equals(route.CommandId, request.CommandId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Pinned progression route does not belong to the Hangar command.");
+        if (_remote == null)
+            throw new InvalidOperationException("No Odin discovery endpoint is configured for the pinned Verse.");
+        var target = new CultMeshSessionTarget(route.VerseId, route.AuthorityRuntimeId);
         var forwardedRequest = new EveSurfaceCommandRequest(
             request.Schema,
             request.ProviderId,
@@ -297,14 +337,14 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     receiptKey,
                     TimeSpan.FromMilliseconds(500),
                     cancellationToken).ConfigureAwait(false);
-                return AddNavigationRoute(receipt, source);
+                return AddNavigationRoute(receipt, route.OdinDiscoveryEndpoints);
             }
             catch (Exception error) when (IsRemoteAvailabilityFailure(error))
             {
                 await Task.Delay(50, cancellationToken).ConfigureAwait(false);
             }
         }
-        throw new TimeoutException($"Verse '{source.SelectedVerseId}' did not publish a Hangar receipt for '{request.CommandId}'.");
+        throw new TimeoutException($"Verse '{route.VerseId}' did not publish a Hangar receipt for '{request.CommandId}'.");
     }
 
     public void Dispose()
@@ -498,11 +538,12 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
 
     private static EveCommandReceiptDocument AddNavigationRoute(
         EveCommandReceiptDocument receipt,
-        AetheriaProgressionSourceDocument source)
+        IReadOnlyList<string> routeEndpoints)
     {
         if (receipt.Navigation == null || receipt.Navigation.RendezvousEndpoints.Length > 0)
             return receipt;
-        var endpoints = source.OdinDiscoveryEndpoints ?? Array.Empty<string>();
+        var endpoints = routeEndpoints?.Where(endpoint => !string.IsNullOrWhiteSpace(endpoint)).ToArray()
+            ?? Array.Empty<string>();
         if (endpoints.Length == 0)
             return receipt;
         return new EveCommandReceiptDocument(

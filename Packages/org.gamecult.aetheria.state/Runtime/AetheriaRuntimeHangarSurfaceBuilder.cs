@@ -161,7 +161,12 @@ namespace GameCult.Aetheria.State.Verse
                             {
                                 Metric("aetheria.hangar.fit.hull", "Hull", selected?.HullItemKey ?? "-"),
                                 Metric("aetheria.hangar.fit.template", "Template", selected?.LoadoutTemplateKey ?? "-"),
-                                Metric("aetheria.hangar.fit.policy", "Authority", AetheriaModePolicies.ForMode(mode)),
+                                Metric(
+                                    "aetheria.hangar.fit.policy",
+                                    "Authority",
+                                    string.IsNullOrWhiteSpace(AetheriaModePolicies.ForMode(mode))
+                                        ? "Not installed"
+                                        : AetheriaModePolicies.ForMode(mode)),
                                 Button("aetheria.hangar.fit.edit", loadoutView ? "DONE" : "EDIT LOADOUT",
                                     loadoutView ? AetheriaRuntimeHangarCommands.ShowOverview : AetheriaRuntimeHangarCommands.EditLoadout,
                                     ("targetSurfaceId", AetheriaRuntimeHangarCommands.SurfaceId))

@@ -53,4 +53,27 @@ namespace GameCult.Aetheria.State.Verse
         [Key(6)] public string[] AuthorityRuntimeIds { get; set; } = Array.Empty<string>();
         [Key(7)] public string[] DiscoveryEndpoints { get; set; } = Array.Empty<string>();
     }
+
+    [CultDocument("gamecult.aetheria.hangar_command_envelope", "gamecult.aetheria.hangar_command_envelope.v1")]
+    [MessagePackObject]
+    public sealed class AetheriaHangarCommandEnvelopeDocument
+    {
+        [Key(0)] public string CommandId { get; set; } = "";
+        [Key(1)] public string PayloadHash { get; set; } = "";
+        [Key(2)] public string ClientId { get; set; } = "";
+        [Key(3)] public string CreatedAtUtc { get; set; } = "";
+    }
+
+    [CultDocument("gamecult.aetheria.progression_command_route", "gamecult.aetheria.progression_command_route.v1")]
+    [MessagePackObject]
+    public sealed class AetheriaProgressionCommandRouteDocument
+    {
+        [Key(0)] public string CommandId { get; set; } = "";
+        [Key(1)] public string PayloadHash { get; set; } = "";
+        [Key(2)] public string VerseId { get; set; } = "";
+        [Key(3)] public string AuthorityRuntimeId { get; set; } = "";
+        [Key(4)] public long ProgressionSourceRevision { get; set; }
+        [Key(5)] public string[] OdinDiscoveryEndpoints { get; set; } = Array.Empty<string>();
+        [Key(6)] public string CreatedAtUtc { get; set; } = "";
+    }
 }

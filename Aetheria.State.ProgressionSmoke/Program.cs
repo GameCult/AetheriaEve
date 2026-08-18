@@ -199,13 +199,37 @@ try
                 string.Equals(gameSurface.Surface.Id, AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId, StringComparison.Ordinal),
                 "Navigating into Terminus must publish the Pilot Eve surface through the live demand subscription.");
             using var gameplayStateClient = Client(remoteEndpoint);
-            await ReadUntilAsync(
+            var deployedHangar = await ReadUntilAsync(
+                gameplayStateClient,
+                remoteTarget,
+                AetheriaStateNode.HangarKey.ToString(),
+                (AetheriaHangarState hangar) =>
+                    (hangar.Deployments ?? []).Any(deployment => deployment.RequestId == launchReceipt.CommandId),
+                TimeSpan.FromSeconds(10));
+            var deployment = deployedHangar.Deployments.Single(value => value.RequestId == launchReceipt.CommandId);
+            var gameSession = await ReadUntilAsync(
                 gameplayStateClient,
                 remoteTarget,
                 AetheriaStateNode.GameSessionStateKey.ToString(),
                 (AetheriaGameSessionState session) =>
-                    session.Mode == AetheriaGameSessionState.TerminusMode && session.SimulationRate > 0,
+                    session.Mode == AetheriaGameSessionState.TerminusMode &&
+                    session.RunId == deployment.RunId &&
+                    session.RunRecordKey == deployment.RunRecordKey &&
+                    session.SimulationRate > 0,
                 TimeSpan.FromSeconds(10));
+            var liveFrame = await ReadUntilAsync(
+                gameplayStateClient,
+                remoteTarget,
+                AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
+                (AetheriaRuntimeDaemonFrameDocument frame) =>
+                    frame.Run?.RunId == deployment.RunId && frame.Run.GameMode == AetheriaGameModes.Terminus,
+                TimeSpan.FromSeconds(10));
+            var livePlayerLoadout = liveFrame.Run.CreateLoadoutTemplate(liveFrame.Run.CurrentEntityKey).RootEntity;
+            Require(gameSession.RunId == liveFrame.Run.RunId &&
+                    livePlayerLoadout.Equipment.Select(item => item.Item.ItemKey).SequenceEqual(
+                        deployment.Loadout.Equipment.Select(item => item.Item.ItemKey),
+                        StringComparer.Ordinal),
+                "Accepted launch must make the receipt-owned run and configured loadout the first live daemon frame, not preserve a stale published run.");
         }
 
         var continueSurface = await ReadUntilAsync(
@@ -224,6 +248,56 @@ try
             new Dictionary<string, string>(resume.Props, StringComparer.Ordinal));
         Require(continueReceipt.State == "accepted" && continueReceipt.Navigation?.VerseId == remoteVerse,
             "Remote Terminus continue must return the selected Verse Pilot navigation target.");
+
+        var pinnedLaunchRoute = await client.ReadAsync<AetheriaProgressionCommandRouteDocument>(
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(launchReceipt.CommandId).ToString());
+        Require(pinnedLaunchRoute != null &&
+                pinnedLaunchRoute.VerseId == remoteVerse &&
+                pinnedLaunchRoute.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
+            "The first remote launch attempt must durably pin its Verse and authority target.");
+
+        await SubmitAsync(
+            client,
+            localTarget,
+            continueSurface,
+            AetheriaRuntimeHangarCommands.SelectVerse,
+            new Dictionary<string, string> { ["value"] = AetheriaProgressionSources.Local });
+        await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaStateNode.ProgressionSourceKey.ToString(),
+            (AetheriaProgressionSourceDocument source) => source.UsesLocalProgression,
+            TimeSpan.FromSeconds(10));
+        var routeAfterSelectionChange = await client.ReadAsync<AetheriaProgressionCommandRouteDocument>(
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(launchReceipt.CommandId).ToString());
+        Require(routeAfterSelectionChange != null &&
+                routeAfterSelectionChange.VerseId == pinnedLaunchRoute!.VerseId &&
+                routeAfterSelectionChange.AuthorityRuntimeId == pinnedLaunchRoute.AuthorityRuntimeId &&
+                routeAfterSelectionChange.PayloadHash == pinnedLaunchRoute.PayloadHash,
+            "Changing the Verse dropdown must not retarget an existing command envelope.");
+
+        var localSurface = await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
+            (EveSurfaceDocument surface) =>
+                Find(surface.Surface.Root, "aetheria.hangar.verse").Props["value"] == AetheriaProgressionSources.Local,
+            TimeSpan.FromSeconds(10));
+        await SubmitAsync(
+            client,
+            localTarget,
+            localSurface,
+            AetheriaRuntimeHangarCommands.SelectVerse,
+            new Dictionary<string, string> { ["value"] = remoteVerse });
+        await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaStateNode.ProgressionSourceKey.ToString(),
+            (AetheriaProgressionSourceDocument source) =>
+                source.SelectedVerseId == remoteVerse && source.Status == AetheriaProgressionSourceStatuses.Ready,
+            TimeSpan.FromSeconds(10));
     }
 
     Stop(local);
@@ -248,7 +322,7 @@ try
             "Daemon restart must preserve the selected progression Verse by stable identity.");
     }
 
-    Console.WriteLine("Aetheria Hangar Verse discovery, raw-write rejection, remote spatial refit, Terminus launch/continue navigation, and restart smoke passed.");
+    Console.WriteLine("Aetheria Hangar Verse discovery, raw-write rejection, pinned forwarding, remote spatial refit, Terminus launch/continue navigation, and restart smoke passed.");
 }
 catch
 {

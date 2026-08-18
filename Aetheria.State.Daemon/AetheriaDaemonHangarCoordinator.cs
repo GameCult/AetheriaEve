@@ -5,7 +5,6 @@ using GameCult.Caching;
 
 public static class AetheriaDaemonHangarCoordinator
 {
-    private static readonly SemaphoreSlim DraftGate = new(1, 1);
     public const string LocalPlayerKey = "player:local";
     public const string StarterShipId = "ship:local:vanguard";
     public const string StarterLoadoutName = "Vanguard One";
@@ -93,14 +92,14 @@ public static class AetheriaDaemonHangarCoordinator
         AetheriaHangarState hangar,
         string now)
     {
-        await DraftGate.WaitAsync().ConfigureAwait(false);
+        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
         try
         {
             return await EnsureDraftCoreAsync(node, hangar, now).ConfigureAwait(false);
         }
         finally
         {
-            DraftGate.Release();
+            AetheriaHangarMutationGate.Gate.Release();
         }
     }
 
@@ -176,10 +175,11 @@ public static class AetheriaDaemonHangarCoordinator
         AetheriaStateNode node,
         AetheriaRuntimeCatalogSnapshot catalog,
         string requestId,
+        string sessionId,
         long expectedRevision,
         string now)
     {
-        await DraftGate.WaitAsync().ConfigureAwait(false);
+        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
         try
         {
             var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
@@ -216,12 +216,29 @@ public static class AetheriaDaemonHangarCoordinator
                 flush: false).ConfigureAwait(false);
             await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
                 .ReplaceAsync(admission.Hangar).ConfigureAwait(false);
+            var run = await node.MutableDocument<AetheriaRunState>(new CultRecordKey(receipt.RunRecordKey))
+                .ReadAsync().ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Generated deployment run is missing before atomic activation.");
+            await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                .ReplaceAsync(new AetheriaGameSessionState
+                {
+                    Mode = receipt.Mode,
+                    SessionId = sessionId,
+                    RunId = receipt.RunId,
+                    RunRecordKey = receipt.RunRecordKey,
+                    ControlledEntityKey = run.CurrentEntityKey,
+                    EntrySurfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
+                    SimulationRate = 1,
+                    EffectiveSimulationRate = 1,
+                    LastStartCommandId = requestId,
+                    UpdatedAtUtc = now
+                }).ConfigureAwait(false);
             await node.FlushAsync().ConfigureAwait(false);
             return receipt;
         }
         finally
         {
-            DraftGate.Release();
+            AetheriaHangarMutationGate.Gate.Release();
         }
     }
 
@@ -283,7 +300,7 @@ public static class AetheriaDaemonHangarCoordinator
         string now,
         Action<AetheriaHangarDraftState, AetheriaHangarState> mutate)
     {
-        await DraftGate.WaitAsync().ConfigureAwait(false);
+        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
         try
         {
             var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
@@ -308,7 +325,7 @@ public static class AetheriaDaemonHangarCoordinator
         }
         finally
         {
-            DraftGate.Release();
+            AetheriaHangarMutationGate.Gate.Release();
         }
     }
 

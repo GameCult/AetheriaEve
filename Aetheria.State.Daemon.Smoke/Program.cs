@@ -259,7 +259,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     "Edit Loadout must publish a distinct configuration view with a typed route back to the Hangar overview");
 
                 var receipt = AetheriaDaemonHangarCoordinator.LaunchAsync(
-                        node, runtimeCatalog, "launch-configured", hangar.Revision, "2026-08-08T00:00:02Z")
+                        node, runtimeCatalog, "launch-configured", "smoke-session", hangar.Revision, "2026-08-08T00:00:02Z")
                     .GetAwaiter().GetResult();
                 Require(receipt.Accepted && receipt.ShipId == selectedShipId && receipt.Mode == AetheriaGameModes.Terminus,
                     "a valid configured Hangar deployment must consume the selected ship and mode");
@@ -290,12 +290,28 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         ShipId = ship.ShipId,
                         LoadoutTemplateKey = ship.LoadoutTemplateKey,
                         ExpectedHangarRevision = deployedHangar.Revision,
-                        ModePolicyId = AetheriaModePolicies.ArenaServer
+        ModePolicyId = AetheriaModePolicies.ForMode(AetheriaGameModes.Arena)
                     },
                     template,
                     "2026-08-08T00:00:03Z");
                 Require(!reusedRequest.Accepted && reusedRequest.Diagnostic.Contains("different payload", StringComparison.Ordinal),
                     "a deployment request id cannot be replayed with different mode, ship, or loadout semantics");
+                var revisedReplay = AetheriaHangar.Admit(
+                    deployedHangar,
+                    new AetheriaDeploymentRequest
+                    {
+                        RequestId = receipt.RequestId,
+                        PlayerKey = receipt.PlayerKey,
+                        Mode = receipt.Mode,
+                        ShipId = receipt.ShipId,
+                        LoadoutTemplateKey = receipt.LoadoutTemplateKey,
+                        ExpectedHangarRevision = receipt.RequestedHangarRevision + 1,
+                        ModePolicyId = receipt.ModePolicyId
+                    },
+                    template,
+                    "2026-08-08T00:00:03Z");
+                Require(!revisedReplay.Accepted && revisedReplay.Diagnostic.Contains("different payload", StringComparison.Ordinal),
+                    "deployment idempotency must include the requested Hangar revision");
 
                 AetheriaDaemonHangarCoordinator.SelectShipAsync(node, ship.ShipId, "2026-08-08T00:00:04Z")
                     .GetAwaiter().GetResult();
@@ -304,7 +320,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 deployedHangar = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
                     .ReadAsync().GetAwaiter().GetResult()!;
                 var secondReceipt = AetheriaDaemonHangarCoordinator.LaunchAsync(
-                        node, runtimeCatalog, "launch-second", deployedHangar.Revision, "2026-08-08T00:00:05Z")
+                        node, runtimeCatalog, "launch-second", "smoke-session", deployedHangar.Revision, "2026-08-08T00:00:05Z")
                     .GetAwaiter().GetResult();
                 Require(secondReceipt.Accepted && secondReceipt.RunRecordKey != receipt.RunRecordKey,
                     "each accepted deployment must own a distinct resumable run record");
@@ -361,6 +377,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         node,
                         runtimeCatalog,
                         $"launch-{mode}",
+                        $"smoke-session-{mode}",
                         hangar.Revision,
                         "2026-08-18T00:00:02Z")
                     .GetAwaiter().GetResult();

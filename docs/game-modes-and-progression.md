@@ -194,27 +194,37 @@ remove, selection, launch, and continue operations to that Verse's authority.
 Launch consumes the daemon-owned draft and instantiates its selected committed
 loadout into a newly identified Terminus, Starbridge, or Arena session. The
 accepted Deployment receipt owns that run identity and exact run-record key;
-Hangar mutation, receipt, immutable loadout snapshot, and generated run become
-durable in one flush. `ActiveRunKey` is only a derived convenience pointer.
+Hangar mutation, receipt, immutable loadout snapshot, generated run, and active
+`GameSession` enter one staged batch under the single Hangar mutation gate.
+CultCache directory storage writes immutable generation pages and exposes the
+batch with one atomic manifest swap; a failed write reopens entirely before or
+after the deployment, never between them. `ActiveRunKey` is only a derived convenience pointer.
 Continue resolves the receipt-owned run instead of guessing through that global
-pointer, and reopens only a deployment matching both selected ship and mode. The three modes
+pointer, and reopens only a deployment matching both selected ship and mode.
+The active `GameSession` owns live run identity. A prior daemon frame is reusable
+only when its run ID matches that session; it cannot resurrect the previous run
+after a new launch. The three modes
 already share this minimal headless deployment boundary. Their deeper rules,
 network admission, and settlement remain mode-owned work.
 The accepted Eve receipt carries the selected Verse, its Odin-discovered
 rendezvous route, and `aetheria.pilot` as a renderer-neutral navigation target.
 EveUnity prepares the destination beside the mounted Hangar, tries every
-receipt-carried Odin endpoint, stages the provider, and commits the swap only
-after the generic host mounts it. Preparation or mount failure rolls the
-provider back and remounts the prior surface. A failed route therefore cannot
-strand the client without a usable Hangar. Aetheria's Unity
+receipt-carried Odin endpoint, and lowers it under a separate inactive scene
+root. The old host, runtime, scene root, and presentation remain mounted until
+the candidate is ready; only then are provider and presentation committed.
+Preparation or mount failure discards the candidate without remounting or
+reconstructing the prior surface. A failed route therefore cannot strand the
+client without a usable Hangar. Aetheria's Unity
 shell has no Verse, Hangar, or navigation policy code.
 
 The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and
 binds `ClientId` to the runtime identity established for that transport session;
 it cannot apply arbitrary raw document puts to Hangar, draft, run, or policy
-state. A forwarded remote command remains pending across timeout and retries the
-same idempotent request until the selected Verse returns its canonical receipt;
+state. The first forwarding attempt durably pins command ID and payload hash to
+one Verse, authority runtime, progression-source revision, and Odin endpoint
+set. A later dropdown change affects only later commands. The pending command
+retries that same target until its canonical receipt arrives;
 the forwarding daemon cannot manufacture a denial after the remote authority
 may have committed. Remote providers validate every Odin-issued route grant
 against the configured root, provider key, endpoint, generation, protection,
@@ -225,7 +235,11 @@ machine. Session runtime identity is not an authenticated player/account
 principal. Consequently Local is the proven progression mode, while a
 production GameCult Verse still requires authenticated account binding and
 per-principal Hangar/draft record ownership before it may expose player
-progression. Settlement, currencies/unlocks, richer fitting
+progression. Non-loopback daemon publication currently fails closed at startup
+until that principal boundary exists. Mode deployments likewise leave
+`ModePolicyId` empty and display authority as not installed: selecting Arena or
+Starbridge does not falsely claim that their authority protocols are active.
+Settlement, currencies/unlocks, richer fitting
 interaction, and complete Starbridge/Arena admission policy still need to enter
 the same Hangar boundary. The old main-menu
 `New Game` writer is no longer a product run-creation authority. Explicit

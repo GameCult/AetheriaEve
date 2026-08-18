@@ -14,17 +14,24 @@ Date: 2026-06-13
 > accepts registered typed Eve command intents only and binds their client ID to
 > the established transport session; arbitrary document puts cannot write
 > Hangar, draft, run, or policy state. The Hangar admission owner plans against a
-> clone, generates the run, then durably commits Hangar state, immutable
-> Deployment/loadout snapshot, receipt-owned run ID/record key, and run state in
-> one flush. `ActiveRunKey` is derived. Forwarded remote operations remain
-> pending across uncertain timeout and retry by idempotency key. A remote
+> clone, generates the run, then submits Hangar state, immutable
+> Deployment/loadout snapshot, receipt-owned run ID/record key, run state, and
+> `GameSession` through one Hangar mutation gate. CultCache v3 writes immutable
+> record pages and exposes the batch through one atomic manifest generation
+> swap. `ActiveRunKey` is derived, and stale daemon frames cannot replace the
+> session-owned run identity. Forwarded remote operations persist an immutable
+> command envelope and Verse/authority/route target before uncertain timeout;
+> later Verse selection cannot retarget the retry. A remote
 > provider validates its Odin route grant before opening public listeners.
-> EveUnity stages navigation and commits it only after generic mounting;
-> preparation or mount failure restores the prior provider and surface.
+> EveUnity lowers navigation under a separate inactive root and commits only
+> after generic mounting; failure discards the candidate while the prior host,
+> runtime, root, and surface remain mounted.
 > Provider-route authentication is implemented, but remote player/account
 > authentication and per-principal Hangar/draft keys are not. Local is the only
-> progression path currently proven end to end; no production remote Verse may
-> treat a client-supplied runtime ID as an account principal.
+> progression path currently proven end to end; the daemon refuses non-loopback
+> publication until that boundary exists. Mode-policy receipt identities also
+> remain empty until Arena server authority and Starbridge Pilot correction are
+> installed and proven; mode labels alone are not authority evidence.
 
 This is the Proprioception and Imagination pass for turning Aetheria from a
 Unity project with ancestral cache/network/UI machinery into a coherent

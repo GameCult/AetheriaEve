@@ -350,7 +350,7 @@ await using (var node = await AetheriaStateNode.OpenAsync(statePath, "aetheria-s
         ShipId = "ship:smoke:aether-runner",
         LoadoutTemplateKey = loadoutKey.ToString(),
         ExpectedHangarRevision = 7,
-        ModePolicyId = AetheriaModePolicies.TerminusLocal
+        ModePolicyId = AetheriaModePolicies.ForMode(AetheriaGameModes.Terminus)
     };
     var deployment = await AetheriaHangar.AdmitAsync(node, deploymentRequest, now);
     var duplicateDeployment = await AetheriaHangar.AdmitAsync(node, deploymentRequest, now);
@@ -361,8 +361,8 @@ await using (var node = await AetheriaStateNode.OpenAsync(statePath, "aetheria-s
 
     foreach (var (mode, shipId, revision, policy) in new[]
              {
-                 (AetheriaGameModes.Starbridge, "ship:smoke:starbridge", 8L, AetheriaModePolicies.StarbridgeMixed),
-                 (AetheriaGameModes.Arena, "ship:smoke:arena", 9L, AetheriaModePolicies.ArenaServer)
+        (AetheriaGameModes.Starbridge, "ship:smoke:starbridge", 8L, AetheriaModePolicies.ForMode(AetheriaGameModes.Starbridge)),
+        (AetheriaGameModes.Arena, "ship:smoke:arena", 9L, AetheriaModePolicies.ForMode(AetheriaGameModes.Arena))
              })
     {
         var modeDeployment = await AetheriaHangar.AdmitAsync(node, new AetheriaDeploymentRequest
@@ -390,7 +390,7 @@ await using (var node = await AetheriaStateNode.OpenAsync(statePath, "aetheria-s
             ShipId = "ship:smoke:aether-runner",
             LoadoutTemplateKey = loadoutKey.ToString(),
             ExpectedHangarRevision = 7,
-            ModePolicyId = AetheriaModePolicies.ArenaServer
+        ModePolicyId = AetheriaModePolicies.ForMode(AetheriaGameModes.Arena)
         },
         await node.MutableDocument<AetheriaLoadoutTemplate>(loadoutKey).ReadAsync(),
         now);
