@@ -63,6 +63,29 @@ presentation prefabs, and repoints daemon and launcher defaults. Once the new
 repository passes its independent proofs, `GameCult/Aetheria` returns to the
 stable legacy Unity tree.
 
+## Preservation evidence
+
+The restoration did not discard the modern daemon work or overwrite the
+working legacy UI:
+
+- `GameCult/Aetheria` commit `7006a6b0` restores the stable legacy tree. Its
+  first parent, `56a156ee`, remains the complete pre-restoration modern tree.
+- Filtered `GameCult/AetheriaEve` commit `7d0ed63` is the corresponding modern
+  extraction. Across the selected state, daemon, minimal Unity, package, docs,
+  scripts, conformance, and tool paths, all 327 shared blobs are byte-identical
+  to `56a156ee`.
+- Thirty-three extraction-time omissions were subsequently restored or
+  superseded in AetheriaEve. The remaining omitted Stage 7 Unity parity script
+  depended on the deprecated client and is intentionally retired.
+- The modern files no longer present in AetheriaEve are deliberate authority
+  cuts: client-owned state/replica/Verse discovery facades, the peer committed-
+  fact importer, and their obsolete verifier. Their history remains reachable;
+  they are not live dependencies.
+- `Assets/Scripts/UI/Menu/InventoryPanel.cs` at restored Aetheria commit
+  `7006a6b0` has the same Git blob as legacy `master`. The working drag/drop,
+  ghost, occupancy, thermal, and trade-era implementation therefore remains an
+  intact reference in the historical Unity project.
+
 ## Verification
 
 - `scripts/verify-aetheria-daemon.ps1` proves the daemon dependency graph and
