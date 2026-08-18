@@ -9,6 +9,8 @@ using GameCult.Mesh;
 using MessagePack;
 using System.Globalization;
 
+try
+{
 var checks = new AetheriaDaemonYmirSmokeChecks();
 if (args.Contains("--gravity", StringComparer.Ordinal))
 {
@@ -95,6 +97,12 @@ else
     checks.Run();
     Console.WriteLine("Daemon Ymir physical payload smoke passed.");
 }
+}
+catch (Exception error)
+{
+    Console.Error.WriteLine($"Aetheria daemon smoke failed cleanly: {error}");
+    Environment.ExitCode = 1;
+}
 
 internal sealed class AetheriaDaemonYmirSmokeChecks
 {
@@ -108,6 +116,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
     {
         RunCheck(HangarLaunchUsesConfiguredLoadoutAndContinuesSavedRun);
         RunCheck(EveryAdvertisedModeUsesTheSharedDeploymentBoundary);
+        RunCheck(ConcurrentHangarCommandIdsAdmitOneImmutablePayload);
     }
 
     public void RunCommandScale() => RunCheck(FrameSizeDoesNotGrowWithCommandChronology);
@@ -348,6 +357,54 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 Require(canContinue && settings?.ActiveRunKey == runKey && run != null,
                     "Continue must reopen the saved Terminus checkpoint without creating another run");
             }
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void ConcurrentHangarCommandIdsAdmitOneImmutablePayload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"aetheria-command-journal-{Guid.NewGuid():N}");
+        var statePath = Path.Combine(root, "aetheria.cc");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var node = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
+            var commandId = "hangar-command-race";
+            EveSurfaceCommandRequest Request(string shipId) => new(
+                AetheriaRuntimeProviderIdentity.ProviderId,
+                AetheriaRuntimeHangarCommands.SurfaceId,
+                new CultMeshOperationInvocationDescriptor(
+                    AetheriaRuntimeHangarCommands.SelectShip,
+                    idempotencyKey: commandId),
+                CultMesh.OperationPayload(("shipId", shipId)),
+                DateTimeOffset.Parse("2026-08-19T00:00:00Z", CultureInfo.InvariantCulture),
+                "pilot:journal-smoke");
+
+            var recordKey = AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + commandId;
+            var first = AetheriaHangarCommandJournal.AdmitAsync(
+                node, new CultRecordKey(recordKey), Request("ship:first"), "2026-08-19T00:00:00Z");
+            var second = AetheriaHangarCommandJournal.AdmitAsync(
+                node, new CultRecordKey(recordKey), Request("ship:second"), "2026-08-19T00:00:00Z");
+            try
+            {
+                Task.WhenAll(first, second).GetAwaiter().GetResult();
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            Require(new[] { first, second }.Count(task => task.IsCompletedSuccessfully) == 1,
+                "one immutable Hangar command id must admit exactly one concurrently submitted payload");
+            var pending = node.MutableDocument<EveSurfaceCommandRequest>(new CultRecordKey(recordKey))
+                .ReadAsync().GetAwaiter().GetResult()!;
+            var envelope = node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(
+                    AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(commandId))
+                .ReadAsync().GetAwaiter().GetResult()!;
+            Require(string.Equals(envelope.PayloadHash, AetheriaHangarCommandJournal.PayloadHash(pending), StringComparison.Ordinal),
+                "the durable Hangar command envelope and executable request must describe the same winning payload");
         }
         finally
         {

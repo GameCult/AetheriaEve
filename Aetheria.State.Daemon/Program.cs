@@ -393,7 +393,9 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
         ? options.SessionId
         : ingressState.SessionId;
     var run = HasPlayableRun(currentFrame?.Run) &&
-              string.Equals(currentFrame!.Run.RunId, ingressState.RunId, StringComparison.Ordinal)
+              string.Equals(currentFrame!.RunRecordKey, ingressState.RunRecordKey, StringComparison.Ordinal) &&
+              string.Equals(currentFrame.Run.RunId, ingressState.RunId, StringComparison.Ordinal) &&
+              string.Equals(currentFrame.GameMode, ingressState.GameMode, StringComparison.Ordinal)
         ? currentFrame.Run
         : await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, ingressState.RunRecordKey).ConfigureAwait(false)
           ?? throw new InvalidDataException(
@@ -486,6 +488,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     if (terminus && result.AttentionInterruption != null)
         await PauseTerminusForAttentionAsync(node, ingressState).ConfigureAwait(false);
     result.Frame.GameMode = ingressState.GameMode;
+    result.Frame.RunRecordKey = ingressState.RunRecordKey;
     result.Frame.RequestedSimulationRate = ingressState.RequestedSimulationRate;
     result.Frame.EffectiveSimulationRate = ingressState.SimulationRate;
     result.Frame.SimulationStepsExecuted = result.SimulationStepsExecuted;
@@ -1420,8 +1423,11 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
             if (!string.Equals(request.ClientId, sourceRuntimeId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Eve command client identity does not match the established CultMesh session.");
 
-            await EnsureHangarCommandEnvelopeAsync(node, request, DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
-            await node.Database.PutAsync(new CultRecordKey(expectedRecordKey), request).ConfigureAwait(false);
+            await AetheriaHangarCommandJournal.AdmitAsync(
+                node,
+                new CultRecordKey(expectedRecordKey),
+                request,
+                DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
         }
         catch (Exception error)
         {
@@ -2606,7 +2612,7 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
         string payloadHash;
         try
         {
-            payloadHash = await EnsureHangarCommandEnvelopeAsync(
+            payloadHash = await AetheriaHangarCommandJournal.ValidateAsync(
                 node,
                 request,
                 DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
@@ -2922,61 +2928,6 @@ static string SurfaceForMode(string mode) =>
     string.Equals(mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
         ? AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId
         : AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId;
-
-static async Task<string> EnsureHangarCommandEnvelopeAsync(
-    AetheriaStateNode node,
-    EveSurfaceCommandRequest request,
-    string now)
-{
-    var payloadHash = HangarCommandPayloadHash(request);
-    var key = AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId);
-    var existing = await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(key)
-        .ReadAsync().ConfigureAwait(false);
-    if (existing != null)
-    {
-        if (!string.Equals(existing.PayloadHash, payloadHash, StringComparison.Ordinal) ||
-            !string.Equals(existing.ClientId, request.ClientId, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different immutable envelope.");
-        return payloadHash;
-    }
-
-    await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(key)
-        .ReplaceAsync(new AetheriaHangarCommandEnvelopeDocument
-        {
-            CommandId = request.CommandId,
-            PayloadHash = payloadHash,
-            ClientId = request.ClientId,
-            CreatedAtUtc = now ?? ""
-        }).ConfigureAwait(false);
-    await node.FlushAsync().ConfigureAwait(false);
-    return payloadHash;
-}
-
-static string HangarCommandPayloadHash(EveSurfaceCommandRequest request)
-{
-    var canonical = new StringBuilder();
-    Append(request.Schema);
-    Append(request.ProviderId);
-    Append(request.SurfaceId);
-    Append(request.Command);
-    Append(request.ClientId);
-    Append(request.CommandBoundary);
-    Append(request.ReceiptSchema);
-    foreach (var field in request.PayloadFields.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-    {
-        Append(field.Key);
-        Append(field.Value);
-    }
-    return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))).ToLowerInvariant();
-
-    void Append(string? value)
-    {
-        value ??= "";
-        canonical.Append(value.Length.ToString(CultureInfo.InvariantCulture));
-        canonical.Append(':');
-        canonical.Append(value);
-    }
-}
 
 static string Payload(EveSurfaceCommandRequest request, string key) =>
     request.PayloadFields.TryGetValue(key, out var value) ? value ?? "" : "";
@@ -3681,7 +3632,10 @@ static bool FrameBelongsToSession(
     HasPlayableRun(frame?.Run) &&
     session != null &&
     !string.IsNullOrWhiteSpace(session.RunId) &&
-    string.Equals(frame!.Run.RunId, session.RunId, StringComparison.Ordinal);
+    !string.IsNullOrWhiteSpace(session.RunRecordKey) &&
+    string.Equals(frame!.RunRecordKey, session.RunRecordKey, StringComparison.Ordinal) &&
+    string.Equals(frame.Run.RunId, session.RunId, StringComparison.Ordinal) &&
+    string.Equals(frame.GameMode, session.Mode, StringComparison.Ordinal);
 
 static async Task EnsureVerseAuthorityPolicyAsync(
     AetheriaStateNode node,
@@ -4833,4 +4787,124 @@ internal sealed class AetheriaDaemonHostOptions
                 "--odin-root-p256 must be '<key-id>:<base64-x>:<base64-y>' using standard padded Base64 coordinates.");
         return new CultMeshEcdsaP256PublicKey(parts[0], parts[1], parts[2]);
     }
+}
+
+public static class AetheriaHangarCommandJournal
+{
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+
+    public static async Task<string> AdmitAsync(
+        AetheriaStateNode node,
+        CultRecordKey requestRecordKey,
+        EveSurfaceCommandRequest request,
+        string now)
+    {
+        await Gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var payloadHash = PayloadHash(request);
+            var envelopeKey = AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId);
+            var envelope = await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
+                .ReadAsync().ConfigureAwait(false);
+            ValidateEnvelope(envelope, request, payloadHash);
+
+            var pending = await node.MutableDocument<EveSurfaceCommandRequest>(requestRecordKey)
+                .ReadAsync().ConfigureAwait(false);
+            if (pending != null && !string.Equals(PayloadHash(pending), payloadHash, StringComparison.Ordinal))
+                throw Collision(request.CommandId);
+
+            if (envelope == null)
+            {
+                await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
+                    .ReplaceAsync(NewEnvelope(request, payloadHash, now)).ConfigureAwait(false);
+            }
+            if (pending == null)
+                await node.Database.PutAsync(requestRecordKey, request).ConfigureAwait(false);
+            await node.FlushAsync().ConfigureAwait(false);
+            return payloadHash;
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    public static async Task<string> ValidateAsync(
+        AetheriaStateNode node,
+        EveSurfaceCommandRequest request,
+        string now)
+    {
+        await Gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var payloadHash = PayloadHash(request);
+            var envelopeKey = AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId);
+            var envelope = await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
+                .ReadAsync().ConfigureAwait(false);
+            ValidateEnvelope(envelope, request, payloadHash);
+            if (envelope == null)
+            {
+                await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
+                    .ReplaceAsync(NewEnvelope(request, payloadHash, now)).ConfigureAwait(false);
+                await node.FlushAsync().ConfigureAwait(false);
+            }
+            return payloadHash;
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    public static string PayloadHash(EveSurfaceCommandRequest request)
+    {
+        var canonical = new StringBuilder();
+        Append(request.Schema);
+        Append(request.ProviderId);
+        Append(request.SurfaceId);
+        Append(request.Command);
+        Append(request.ClientId);
+        Append(request.CommandBoundary);
+        Append(request.ReceiptSchema);
+        foreach (var field in request.PayloadFields.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            Append(field.Key);
+            Append(field.Value);
+        }
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))).ToLowerInvariant();
+
+        void Append(string? value)
+        {
+            value ??= "";
+            canonical.Append(value.Length.ToString(CultureInfo.InvariantCulture));
+            canonical.Append(':');
+            canonical.Append(value);
+        }
+    }
+
+    private static AetheriaHangarCommandEnvelopeDocument NewEnvelope(
+        EveSurfaceCommandRequest request,
+        string payloadHash,
+        string now) =>
+        new()
+        {
+            CommandId = request.CommandId,
+            PayloadHash = payloadHash,
+            ClientId = request.ClientId,
+            CreatedAtUtc = now ?? ""
+        };
+
+    private static void ValidateEnvelope(
+        AetheriaHangarCommandEnvelopeDocument? envelope,
+        EveSurfaceCommandRequest request,
+        string payloadHash)
+    {
+        if (envelope != null &&
+            (!string.Equals(envelope.PayloadHash, payloadHash, StringComparison.Ordinal) ||
+             !string.Equals(envelope.ClientId, request.ClientId, StringComparison.Ordinal)))
+            throw Collision(request.CommandId);
+    }
+
+    private static InvalidOperationException Collision(string commandId) =>
+        new($"Hangar command id '{commandId}' was reused with a different immutable envelope.");
 }

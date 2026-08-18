@@ -47,14 +47,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "Aetheria daemon dependency restore failed with exit code $LASTEXITCODE."
 }
 
-& dotnet run --project $project @properties --no-restore
+& dotnet build $project @properties --no-restore
 if ($LASTEXITCODE -ne 0) {
-    throw "Aetheria daemon smoke failed with exit code $LASTEXITCODE."
+    throw "Aetheria daemon smoke build failed with exit code $LASTEXITCODE."
 }
+$smokeAssembly = Join-Path $repoRoot "Aetheria.State.Daemon.Smoke\bin\Debug\net10.0\Aetheria.State.Daemon.Smoke.dll"
+& dotnet $smokeAssembly
+if ($LASTEXITCODE -ne 0) { throw "Aetheria daemon smoke failed with exit code $LASTEXITCODE." }
 
-& dotnet run --project $progressionProject @properties
+& dotnet build $progressionProject @properties
 if ($LASTEXITCODE -ne 0) {
-    throw "Aetheria progression Verse smoke failed with exit code $LASTEXITCODE."
+    throw "Aetheria progression Verse smoke build failed with exit code $LASTEXITCODE."
 }
+$progressionAssembly = Join-Path $repoRoot "Aetheria.State.ProgressionSmoke\bin\Debug\net10.0\Aetheria.State.ProgressionSmoke.dll"
+& dotnet $progressionAssembly
+if ($LASTEXITCODE -ne 0) { throw "Aetheria progression Verse smoke failed with exit code $LASTEXITCODE." }
 
 Write-Host "Aetheria daemon dependency-root and simulation verification passed."

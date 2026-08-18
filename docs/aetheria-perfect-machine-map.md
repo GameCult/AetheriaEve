@@ -16,7 +16,7 @@ Date: 2026-06-13
 > Hangar, draft, run, or policy state. The Hangar admission owner plans against a
 > clone, generates the run, then submits Hangar state, immutable
 > Deployment/loadout snapshot, receipt-owned run ID/record key, run state, and
-> `GameSession` through one Hangar mutation gate. CultCache v3 writes immutable
+> `GameSession` through one Hangar mutation gate. CultCache v4 writes content-addressed
 > record pages and exposes the batch through one atomic manifest generation
 > swap. `ActiveRunKey` is derived, and stale daemon frames cannot replace the
 > session-owned run identity. Forwarded remote operations persist an immutable

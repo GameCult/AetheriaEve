@@ -554,6 +554,9 @@ namespace GameCult.Aetheria.State.Verse
         [Key(28)]
         public string AttentionCauseKind { get; set; } = "";
 
+        [Key(29)]
+        public string RunRecordKey { get; set; } = "";
+
         public static AetheriaRuntimeDaemonFrameDocument Create(
             AetheriaRuntimeRunCheckpointCommit run,
             string daemonId,

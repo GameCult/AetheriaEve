@@ -9,6 +9,8 @@ using GameCult.Networking;
 using GameCult.Eve.Surface;
 using EveProviderAdvertisementState = GameCult.Eve.Surface.EveProviderAdvertisementDocument;
 
+try
+{
 var root = args.Length > 0 ? args[0] : Directory.GetCurrentDirectory();
 var stateDirectory = Path.Combine(Path.GetTempPath(), "aetheria-state-smoke", Guid.NewGuid().ToString("N"));
 var statePath = Path.Combine(stateDirectory, "aetheria-world.cc");
@@ -1158,6 +1160,12 @@ if (!advertisedActionIds.Contains("weapon-group.0.fire") ||
 await ProveDirectSoaPublicationPipeline();
 
 Console.WriteLine($"Aetheria typed state smoke passed: {statePath}");
+}
+catch (Exception error)
+{
+    Console.Error.WriteLine($"Aetheria typed state smoke failed cleanly: {error}");
+    Environment.ExitCode = 1;
+}
 
 static async Task ProveDirectSoaPublicationPipeline()
 {

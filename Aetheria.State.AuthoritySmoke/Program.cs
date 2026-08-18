@@ -8,9 +8,17 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-var checks = new AuthoritySmokeChecks();
-await checks.RunAsync();
-Console.WriteLine("Authority smoke passed.");
+try
+{
+    var checks = new AuthoritySmokeChecks();
+    await checks.RunAsync();
+    Console.WriteLine("Authority smoke passed.");
+}
+catch (Exception error)
+{
+    Console.Error.WriteLine($"Authority smoke failed cleanly: {error}");
+    Environment.ExitCode = 1;
+}
 
 internal sealed class AuthoritySmokeChecks
 {
@@ -792,13 +800,6 @@ internal sealed class AuthoritySmokeChecks
         bool useTerminusFixture = false)
     {
         var repoRoot = Directory.GetCurrentDirectory();
-        var executablePath = Path.Combine(
-            repoRoot,
-            "Aetheria.State.Daemon",
-            "bin",
-            "Debug",
-            "net10.0",
-            "Aetheria.State.Daemon.exe");
         var dllPath = Path.Combine(
             repoRoot,
             "Aetheria.State.Daemon",
@@ -806,17 +807,8 @@ internal sealed class AuthoritySmokeChecks
             "Debug",
             "net10.0",
             "Aetheria.State.Daemon.dll");
-        var projectPath = Path.Combine(
-            repoRoot,
-            "Aetheria.State.Daemon",
-            "Aetheria.State.Daemon.csproj");
-        var executableExists = File.Exists(executablePath);
-        var dllExists = File.Exists(dllPath);
-        var commandPrefix = executableExists
-            ? Quote(executablePath)
-            : dllExists
-                ? "dotnet " + Quote(dllPath)
-                : "dotnet run --project " + Quote(projectPath) + " --";
+        if (!File.Exists(dllPath))
+            throw new FileNotFoundException("Build the Aetheria daemon before the authority smoke.", dllPath);
         var arguments = string.Join(
             " ",
             "--state",
@@ -833,21 +825,12 @@ internal sealed class AuthoritySmokeChecks
             "50",
             useTerminusFixture ? "--terminus-scenario standard" : "",
             once ? "--once" : "");
-        var startInfo = executableExists
-            ? new ProcessStartInfo(executablePath, arguments)
-            : dllExists
-                ? new ProcessStartInfo("dotnet", Quote(dllPath) + " " + arguments)
-                : new ProcessStartInfo("dotnet", "run --project " + Quote(projectPath) + " -- " + arguments);
+        var startInfo = new ProcessStartInfo("dotnet", Quote(dllPath) + " " + arguments);
         startInfo.WorkingDirectory = repoRoot;
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = true;
-
-        if (string.IsNullOrWhiteSpace(commandPrefix))
-        {
-            throw new InvalidOperationException("Cannot resolve daemon command.");
-        }
 
         var process = Process.Start(startInfo) ??
             throw new InvalidOperationException("Failed to start Aetheria daemon child process.");

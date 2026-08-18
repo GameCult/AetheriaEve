@@ -8,6 +8,8 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 
+try
+{
 var root = Directory.GetCurrentDirectory();
 var seed = Path.Combine(root, "Aetheria.Unity", "Build", "aetheria-unity.cc");
 if (!File.Exists(seed) || !Directory.Exists(seed + ".records"))
@@ -338,6 +340,12 @@ finally
         try { Directory.Delete(smokeRoot, recursive: true); } catch { }
     }
 }
+}
+catch (Exception error)
+{
+    Console.Error.WriteLine($"Aetheria progression smoke failed cleanly: {error}");
+    Environment.ExitCode = 1;
+}
 
 static string ProcessState(Process? process)
 {
@@ -555,10 +563,11 @@ static Process StartDaemon(
     int port,
     params string[] extra)
 {
-    var daemon = Path.Combine(root, "Aetheria.State.Daemon", "bin", "Debug", "net10.0", "Aetheria.State.Daemon.exe");
+    var daemon = Path.Combine(root, "Aetheria.State.Daemon", "bin", "Debug", "net10.0", "Aetheria.State.Daemon.dll");
     if (!File.Exists(daemon)) throw new FileNotFoundException("Build the Aetheria daemon before the progression smoke.", daemon);
     var arguments = new List<string>
     {
+        Quote(daemon),
         "--root", Quote(root),
         "--state", Quote(state),
         "--daemon-id", daemonId,
@@ -576,7 +585,7 @@ static Process StartDaemon(
     if (Directory.Exists(assetBundleRoot))
         arguments.AddRange(new[] { "--asset-bundle-root", Quote(assetBundleRoot) });
     arguments.AddRange(extra.Select((value, index) => index % 2 == 1 ? Quote(value) : value));
-    var start = new ProcessStartInfo(daemon, string.Join(" ", arguments))
+    var start = new ProcessStartInfo("dotnet", string.Join(" ", arguments))
     {
         WorkingDirectory = root,
         RedirectStandardOutput = true,
