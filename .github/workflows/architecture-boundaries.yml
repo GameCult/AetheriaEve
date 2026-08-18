@@ -21,6 +21,34 @@ jobs:
     steps:
       - name: Check out AetheriaEve
         uses: actions/checkout@v4
+        with:
+          path: AetheriaEve
+
+      - name: Check out CultLib
+        uses: actions/checkout@v4
+        with:
+          repository: GameCult/CultLib
+          ref: codex/cultmesh-explicit-document-writes
+          path: CultLib
+
+      - name: Check out Eve
+        uses: actions/checkout@v4
+        with:
+          repository: GameCult/Eve
+          ref: codex/eve-browser-host-isolation
+          path: Eve
+
+      - name: Check out EvePlugins
+        uses: actions/checkout@v4
+        with:
+          repository: GameCult/EvePlugins
+          path: EvePlugins
+
+      - name: Check out CultMath
+        uses: actions/checkout@v4
+        with:
+          repository: GameCult/CultMath
+          path: CultMath
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -29,7 +57,17 @@ jobs:
 
       - name: Reject duplicate or client-owned authority paths
         shell: pwsh
+        working-directory: AetheriaEve
         run: ./scripts/verify-portable-game-framework.ps1
 
       - name: Verify the static Eve contract pack
+        working-directory: AetheriaEve
         run: node scripts/verify-eve-conformance-pack.mjs
+
+      - name: Install isolated wire-witness dependencies
+        working-directory: AetheriaEve/Aetheria.Rts.Web/wire
+        run: npm ci
+
+      - name: Verify C# and TypeScript MessagePack interoperability
+        working-directory: AetheriaEve/Aetheria.Rts.Web
+        run: node scripts/verify-rts-wire-interop.mjs

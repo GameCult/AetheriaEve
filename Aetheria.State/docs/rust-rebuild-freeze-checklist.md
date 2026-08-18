@@ -10,7 +10,7 @@ This checklist turns the current C# daemon and client integrations into a measur
 | Runtime snapshot schema catalog | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeSnapshotDocuments.cs` | Generated schema manifest for run, zone, entity, body, inventory, loadout, cargo, equipment, and stat grids. |
 | Authority schema catalog | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeVerseAuthorityPolicy.cs` | Generated schema manifest plus policy-mode behavior table. |
 | Ymir C# reference sample | `Assets/Scripts/ServerShared/YmirPhysicsContracts.cs` | Current DTO and query behavior evidence for Rust Ymir design. Preserve only semantics we still want. |
-| Current TS generated contract | `Aetheria.Rts.Web/scripts/generate-rts-bindings.mjs` and `Aetheria.Rts.Web/Electron/aetheria-rts-generated-bindings.ts` | Evidence that schema extraction exists today; replace it with shared CultMesh/CultLib generation for typed handles, operations, queries, state pointers, native views, authority, and migration manifests. |
+| Current TS command wire witness | `Aetheria.Rts.Web/scripts/generate-aetheria-command-codec.mjs`, `verify-rts-wire-interop.mjs`, and `Aetheria.State.WireInterop` | Live evidence for the daemon-command schema, enum, MessagePack slots/tombstone, and a binary C#↔TypeScript round trip. The older full RTS generator is a deprecated reference: it discards property types, emits maintained templates, and no longer matches the promoted Eve/CultMesh query body. Replace both with shared CultMesh/CultLib schema generation. |
 | Shared CultMesh/CultLib primitive target | `Aetheria.State/docs/cultmesh-cross-runtime-primitives.md` | Design bar and acceptance vocabulary for hoisting typed documents, operations, queries, state pointers, native views, authority, geometry, locality routing, schema evolution, and surface bindings out of Aetheria glue. |
 | Initial daemon fixture exporter | `Aetheria.State.Freeze/Program.cs` | Runs the C# daemon once, reads current daemon publications, emits normalized JSON plus MessagePack bytes for frame, public docs, SoA descriptor, projection fixtures, authority decisions, Ymir query probes, and seeded pilot/interaction/refit command-batch fixtures. |
 | Current client verifier gates | `Aetheria.Rts.Web/scripts/verify-stage7b-rts-client.ps1`, `verify-stage7c-local-runtime.ps1`, `verify-stage7c-electron-shell.ps1`, `Aetheria.State/scripts/verify-stage7d-unity-parity.ps1` | Current smoke gates while C# is still live. They prove today still runs; they do not define the future daemon or client API surface. |
@@ -79,6 +79,7 @@ dotnet run --project .\Aetheria.State.Verify\Aetheria.State.Verify.csproj
 .\Aetheria.State\scripts\verify-stage7d-unity-parity.ps1
 cd .\Aetheria.Rts.Web
 npm run check:rts-bindings
+npm run verify:wire-interop
 npm run build
 npm run verify:stage7b
 npm run verify:stage7c
@@ -88,7 +89,7 @@ npm run verify:stage7c:electron
 ## Immediate Build Work
 
 1. Expand `Aetheria.State.Freeze` beyond baseline plus pilot/interaction/refit/authority/Ymir probes into post-tick, richer authority, and richer Ymir fixture families.
-2. Expand `generate-rts-bindings.mjs` or replace it with shared CultMesh/CultLib schema and binding generation for Rust, TS, Unity/C#, browser/WASM, and Eve/CultUI, including legacy migration manifests.
+2. Replace the focused command codec and deprecated `generate-rts-bindings.mjs` reference with shared CultMesh/CultLib schema and binding generation for Rust, TS, Unity/C#, browser/WASM, and Eve/CultUI, including legacy migration manifests.
 3. Expand the initial CultMath-shaped Ymir fixture cases with explicit rect, circle, sphere, broadphase, sparse-cluster, and viewport-intersection schemas.
 4. Begin the shared primitive implementation from `cultmesh-cross-runtime-primitives.md` before the Rust daemon hardens around one-off Aetheria adapters.
 5. Create an initial Rust workspace with `ymir_math`, `ymir_physics`, `aetheria_schema`, and `aetheria_world`.

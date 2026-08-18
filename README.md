@@ -22,7 +22,9 @@ Each mode demonstrates a distinct CultMesh authority configuration.
 - `Aetheria.Unity` — minimal Unity host for the released EveUnity packages.
 - `Aetheria.Assets.Unity` — provider-owned Unity asset authoring and bundle
   builder. It packages presentation assets; it is not a game client.
-- `Aetheria.Rts.Web` — Starbridge-oriented Electron lowering target.
+- `Aetheria.Rts.Web` — deprecated Stage 7 Electron/RTS reference plus the
+  C#↔TypeScript command-wire witness. Product Electron clients lower the same
+  daemon-published Eve surface as every other renderer.
 - `Aetheria.State.*Smoke` and `Aetheria.State.AuthoritySmoke` — state, daemon,
   authority, and client proofs.
 

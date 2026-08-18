@@ -131,6 +131,8 @@ Aetheria.State.Verify/obj/
 Aetheria.Rts.Web/bin/
 Aetheria.Rts.Web/obj/
 Aetheria.Rts.Web/electron-dist/
+Aetheria.Rts.Web/wire-dist/
+Aetheria.Rts.Web/wire/node_modules/
 Aetheria.Rts.Web/logs/
 Aetheria.Rts.Web/node_modules/
 Aetheria.Rts.Web/runtime/
@@ -143,6 +145,8 @@ Aetheria.State.AuthoritySmoke/*.log
 Aetheria.State.AuthoritySmoke/*.log.err
 Aetheria.State.Freeze/bin/
 Aetheria.State.Freeze/obj/
+Aetheria.State.WireInterop/bin/
+Aetheria.State.WireInterop/obj/
 Aetheria.State.Daemon/*.log
 Aetheria.State.Daemon.Smoke/*.log
 Aetheria.State.Daemon.Smoke/*.log.err

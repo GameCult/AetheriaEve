@@ -146,6 +146,23 @@ artifacts; it is not a published-npm proof. Publishing and versioning those
 packages is a release-authority decision, not something this repair loop can
 paper over with another source-path fallback.
 
+The former RTS binding check was also false evidence. Its 1,600-line generator
+extracts MessagePack slot names but discards C# property types, emits most
+TypeScript declarations from maintained templates, and had already stopped
+running after the render-splats contract moved to Eve fields. The checked-in
+client also targets a removed CultMesh query-source API, so the deprecated
+Stage 7 Electron body is not a current portable-client proof.
+
+The live command boundary now has a focused generated codec instead. Schema
+id, enum values, slot numbers, the retired key-20 tombstone, and the 32-slot
+array extent come from `AetheriaRuntimeDaemonDocuments.cs`. An executable
+binary witness makes C# emit a canonical MessagePack command for TypeScript to
+decode and return, then makes TypeScript emit a movement command for C# to
+deserialize, validate, canonicalize, and return. Both directions pass locally.
+The witness uses an isolated two-package npm consumer and runs in the Windows/
+Linux architecture matrix; it does not compile or pardon the obsolete RTS
+query/Electron shell.
+
 ## Target authority map
 
 Owner:
@@ -249,6 +266,7 @@ test rather than achieved properties.
 | P0 | Conformance witnesses | The static pack resolves repository witnesses and checks schema IDs against typed source. The actual Aetheria browser witness boots the product daemon, discovers and leases the Hangar through a local Odin fixture, lowers it in Chromium, submits the native Verse select command, observes its daemon receipt, rejects a forged client identity, then follows the restarted daemon to a new route and obtains a second receipt through the retained lease. | Repeat the same product chronology through deployed Odin and a retained native consumer; static fixture agreement and the local Odin fixture cannot satisfy those infrastructure/native-runtime proofs. |
 | P0 | Stable identity path | Eve Unity discovers and reconnects through `CultMeshClient`; Aetheria's local `.cc` facade no longer accepts physical endpoints or constructs client-owned Eve surfaces. `CultMeshBrowserOdinRendezvous` now gives browsers the same identity-first Verse-catalog boundary and survives a physical provider move. | Generate Aetheria domain handles over the generic client and prove the actual daemon through local and configured Odin routes without restoring an application-owned replica. |
 | P1 | Contract ownership | Eve `0.3.0` owns the renderer-neutral C# surface contract. A clean Unity consumer passed 136/136 tests against the released CultLib `1.0.45`, Eve surface, and EveUnity packages; Aetheria's daemon project now references Eve rather than EveUnity. Eve contract and browser packages now build/test on Windows and Linux. | Put the released clean-Unity consumer in CI and reject any renderer repository reference from headless daemon projects. Source package matrices are necessary but do not prove the released Unity graph. |
+| P1 | Cross-runtime schema generation | The old RTS generator is quarantined as legacy evidence: it discards C# property types, emits handwritten TS declarations, and no longer generates against the live render-splats/CultMesh query contract. A focused codec now derives the daemon-command schema, enum, slots, tombstone, and array extent from C# and passes an actual C#↔TypeScript MessagePack round trip in both directions. | Move this proof into shared CultMesh schema/IDL generation and cover every promoted document and operation. One command codec proves the wire boundary it names; it does not make the handwritten RTS document catalog generated. |
 | P1 | Executable onboarding | One documented command runs the empty-consumer packed-artifact checkpoint and the real Chromium/C# network checkpoint on Windows and Linux CI. The C# provider uses Eve's canonical surface type. Chromium invokes before provider route replacement; the retained C# client invokes afterward through the generic identity-owned operation API. Both clients rediscover, resubscribe, and converge on the same durable state and receipt ids without application transport loops. The relevant npm package names remain unpublished (`E404`), so no published-registry claim is made. | Choose and execute package publication/version ownership, then rerun the unchanged command from released artifacts; keep the local Odin fixture distinct from deployed-Odin evidence. |
 | P1 | Client resource lifetime | `CultMeshClient` exposes disposable document and collection leases, reference-counts dynamic resources, and reports active resource counts. Retained sessions multiplex logical subscribers through one physical callback per message type. The 100,000-distinct-key gate leaves zero resources and exactly two transport callbacks. A separate real-WebSocket gate completes 10,000 correlated operations on the retained post-reconnect C# session at 2.28 ms local p99 and 348 KiB post-GC managed growth while reporting private memory separately. Both gates run on Windows/Linux CI. | Add real-transport dynamic document/collection lease churn and sustained realtime-body delivery. Operation waiters are now measured, but transport subscription churn and long-running QUIC/native consumers remain separate risks. |
 | P1 | Long-session state growth | Peer-import chronology is deleted. Indexed committed-command facts and receipts own history; handled Eve invocations and processed daemon commands leave their transient inboxes; hot-frame chronology fields are compatibility tombstones. A 10,000-command smoke holds final serialized frame size within 64 bytes of the first, while the live progression smoke requires each handled Eve request to disappear after its receipt. | Define retention/segmentation for the durable fact and receipt journal, then benchmark total `.cc` growth and restart cost. The hot checkpoint and ingress queues are bounded; the audit store is not yet. |
