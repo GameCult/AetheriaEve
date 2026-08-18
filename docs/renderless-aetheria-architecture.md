@@ -113,12 +113,24 @@ stable Verse descriptors discovered from configured Odin endpoints. Local
 selection uses the local moddable `.cc` Hangar; remote selection reads and
 invokes the selected Verse's authoritative Hangar. A separate typed Hangar
 draft owns the current ship, mode, and view selection; button payloads and
-renderers do not. An accepted launch or
+renderers do not. The immutable Deployment receipt owns the exact run identity
+and record key; Hangar state, receipt, loadout snapshot, and generated run share
+one durable commit, while `ActiveRunKey` is derived navigation state. An accepted launch or
 continue receipt carries a renderer-neutral navigation target: stable Verse,
 provider, surface, kind, and discovered rendezvous routes. Eve lowerers prepare
-the target through the complete endpoint list and replace the mounted provider
-only after preparation succeeds. Renderer-local preferences, Unity
+the target through the complete endpoint list, stage it, and replace the mounted
+provider only after the generic host mounts successfully. Failed preparation or
+mount rolls back to the previous provider and remounts its surface. Renderer-local preferences, Unity
 sidecars, and hard-coded remote endpoints cannot select progression truth.
+
+The public document plane accepts typed Eve command intents only; transport
+session identity is checked before an intent enters the daemon-owned command
+inbox. Generic raw document puts cannot mutate gameplay or progression. Remote
+route grants are verified against configured Odin roots before public listeners
+open. This proves provider-route identity, not player identity: production
+remote progression remains closed until its Verse binds an authenticated
+principal to per-principal Hangar and draft records. A client-chosen runtime ID
+must never be promoted into that account authority.
 
 Deletion line:
 Before adding new client behavior, delete or demote any path that lets a client

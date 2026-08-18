@@ -25,8 +25,9 @@ public static class AetheriaHangar
                 ? null
                 : await node.MutableDocument<AetheriaLoadoutTemplate>(new(request.LoadoutTemplateKey))
                     .ReadAsync().ConfigureAwait(false);
-            var updated = Clone(hangar);
-            var receipt = Admit(updated, request, loadout, now);
+            var plan = Plan(hangar, request, loadout, now);
+            var updated = plan.Hangar;
+            var receipt = plan.Receipt;
             if (!receipt.Accepted)
                 return receipt;
 
@@ -38,6 +39,16 @@ public static class AetheriaHangar
         {
             AdmissionGate.Release();
         }
+    }
+
+    public static (AetheriaHangarState Hangar, AetheriaDeploymentReceipt Receipt) Plan(
+        AetheriaHangarState hangar,
+        AetheriaDeploymentRequest request,
+        AetheriaLoadoutTemplate? loadout,
+        string now)
+    {
+        var updated = Clone(hangar);
+        return (updated, Admit(updated, request, loadout, now));
     }
 
     public static AetheriaDeploymentReceipt Admit(
@@ -52,7 +63,12 @@ public static class AetheriaHangar
         var prior = (hangar.Deployments ?? []).FirstOrDefault(value =>
             string.Equals(value.RequestId, request.RequestId, StringComparison.Ordinal));
         if (prior != null)
-            return prior;
+        {
+            return SameRequest(prior, request)
+                ? prior
+                : Receipt(hangar, request, loadout, now, false,
+                    "deployment request id was already used with a different payload", hangar.Revision);
+        }
 
         var rejection = Validate(hangar, request, loadout);
         if (rejection != null)
@@ -261,6 +277,13 @@ public static class AetheriaHangar
         return null;
     }
 
+    private static bool SameRequest(AetheriaDeploymentReceipt prior, AetheriaDeploymentRequest request) =>
+        string.Equals(prior.PlayerKey, request.PlayerKey, StringComparison.Ordinal) &&
+        string.Equals(prior.Mode, request.Mode, StringComparison.Ordinal) &&
+        string.Equals(prior.ShipId, request.ShipId, StringComparison.Ordinal) &&
+        string.Equals(prior.LoadoutTemplateKey, request.LoadoutTemplateKey, StringComparison.Ordinal) &&
+        string.Equals(prior.ModePolicyId, request.ModePolicyId, StringComparison.Ordinal);
+
     private static AetheriaDeploymentReceipt Receipt(
         AetheriaHangarState hangar,
         AetheriaDeploymentRequest request,
@@ -268,21 +291,28 @@ public static class AetheriaHangar
         string now,
         bool accepted,
         string diagnostic,
-        long revision) => new()
+        long revision)
     {
-        DeploymentId = accepted ? $"deployment:{hangar.HangarId}:{revision}" : "",
-        RequestId = request.RequestId,
-        Accepted = accepted,
-        Diagnostic = diagnostic,
-        PlayerKey = request.PlayerKey,
-        Mode = request.Mode,
-        ShipId = request.ShipId,
-        LoadoutTemplateKey = request.LoadoutTemplateKey,
-        HangarRevision = revision,
-        ModePolicyId = request.ModePolicyId,
-        Loadout = accepted ? Clone(loadout!.RootEntity) : new AetheriaRuntimeEntityLoadoutCommit(),
-        CommittedAtUtc = now
-    };
+        var deploymentId = accepted ? $"deployment:{hangar.HangarId}:{revision}" : "";
+        var runId = accepted ? $"{request.Mode}-{hangar.HangarId}-{revision}" : "";
+        return new AetheriaDeploymentReceipt
+        {
+            DeploymentId = deploymentId,
+            RequestId = request.RequestId,
+            Accepted = accepted,
+            Diagnostic = diagnostic,
+            PlayerKey = request.PlayerKey,
+            Mode = request.Mode,
+            ShipId = request.ShipId,
+            LoadoutTemplateKey = request.LoadoutTemplateKey,
+            HangarRevision = revision,
+            ModePolicyId = request.ModePolicyId,
+            Loadout = accepted ? Clone(loadout!.RootEntity) : new AetheriaRuntimeEntityLoadoutCommit(),
+            CommittedAtUtc = now,
+            RunId = runId,
+            RunRecordKey = accepted ? $"global:aetheria.run_state.{runId}.v1" : ""
+        };
+    }
 
     private static AetheriaRuntimeEntityLoadoutCommit Clone(AetheriaEntityLoadout source) => new()
     {

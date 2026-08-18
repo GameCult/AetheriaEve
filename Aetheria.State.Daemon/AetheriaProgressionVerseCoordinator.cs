@@ -266,11 +266,21 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             throw new InvalidOperationException("No Odin discovery endpoint is configured for the selected Verse.");
         var remote = await ResolveRemoteProgressionAsync(source, cancellationToken).ConfigureAwait(false);
         var target = remote.Target;
+        var forwardedRequest = new EveSurfaceCommandRequest(
+            request.Schema,
+            request.ProviderId,
+            request.SurfaceId,
+            request.OperationRecord,
+            request.PayloadFields,
+            request.IssuedAt,
+            _runtimeId,
+            request.CommandBoundary,
+            request.ReceiptSchema);
 
         await _remote.SubmitDocumentAsync(
             target,
             AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + request.CommandId,
-            request,
+            forwardedRequest,
             _runtimeId,
             "aetheria-progression-router",
             cancellationToken).ConfigureAwait(false);

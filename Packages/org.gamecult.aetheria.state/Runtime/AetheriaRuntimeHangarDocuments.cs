@@ -134,5 +134,7 @@ namespace GameCult.Aetheria.State.Verse
         [Key(9)] public string ModePolicyId { get; set; } = "";
         [Key(10)] public AetheriaRuntimeEntityLoadoutCommit Loadout { get; set; } = new AetheriaRuntimeEntityLoadoutCommit();
         [Key(11)] public string CommittedAtUtc { get; set; } = "";
+        [Key(12)] public string RunId { get; set; } = "";
+        [Key(13)] public string RunRecordKey { get; set; } = "";
     }
 }

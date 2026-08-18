@@ -551,6 +551,7 @@ namespace Aetheria.Editor
                 "--client-cultmesh-host 127.0.0.1 " +
                 "--client-cultmesh-advertise-host 127.0.0.1 " +
                 $"--client-cultmesh-port {Port} " +
+                $"--asset-bundle-root {Quote(Path.Combine(ProjectRoot, "Aetheria.Assets.Unity", "Build", "EveAssets"))} " +
                 "--tick-interval-ms 20 --fixed-delta-ms 20 --no-odin-announcements";
             var startInfo = new ProcessStartInfo(DaemonExePath, arguments)
             {

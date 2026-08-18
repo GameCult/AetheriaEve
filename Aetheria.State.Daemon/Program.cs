@@ -204,7 +204,7 @@ while (!stopped.Task.IsCompleted)
     else
     {
         var firstTick = await TickAsync(
-            node, options, unityBundles, worldPhysics, latestFrame, ingressState, buildPublications: false).ConfigureAwait(false);
+            node, options, unityBundles, worldPhysics, latestFrame, ingressState, refreshControlPlane: false).ConfigureAwait(false);
         TraceStartup("first-tick");
         latestFrame = firstTick.Frame;
         initialPrepared = PreparePublication(
@@ -270,7 +270,7 @@ while (!stopped.Task.IsCompleted)
         }
 
         var buildPublications = DateTimeOffset.UtcNow >= nextApiPublicationUtc;
-        var tick = await TickAsync(node, options, unityBundles, worldPhysics, latestFrame, ingressState, buildPublications: false).ConfigureAwait(false);
+        var tick = await TickAsync(node, options, unityBundles, worldPhysics, latestFrame, ingressState, refreshControlPlane: buildPublications).ConfigureAwait(false);
         ThrowIfClientHostFaulted(cultMeshClientHost);
         latestFrame = tick.Frame;
         await PublishHotEntityStateAsync(
@@ -357,7 +357,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     IAetheriaRuntimeWorldPhysics worldPhysics,
     AetheriaRuntimeDaemonFrameDocument? currentFrame,
     AetheriaDaemonIngressState ingressState,
-    bool buildPublications)
+    bool refreshControlPlane)
 {
     var traceTickPhases = string.Equals(
         Environment.GetEnvironmentVariable("AETHERIA_TRACE_TICK_PHASES"),
@@ -375,8 +375,10 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     TracePhase("core-ingress");
     await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
     TracePhase("provider-ingress");
-    if (!ingressState.ControlPlaneInitialized || buildPublications)
+    if (!ingressState.ControlPlaneInitialized || refreshControlPlane)
         await RefreshControlPlaneInputsAsync(node, ingressState).ConfigureAwait(false);
+    else
+        await RefreshGameSessionInputsAsync(node, ingressState).ConfigureAwait(false);
 
     var fixedDeltaSeconds = currentFrame?.FixedDeltaSeconds > 0
         ? currentFrame.FixedDeltaSeconds
@@ -464,7 +466,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
             StopCompressedSimulationOnAttention = terminus && simulationStepCount > 1,
             StarbridgeScenario = starbridgeScenario,
             StarbridgeSession = starbridgeSession,
-            BuildPublications = buildPublications,
+            BuildPublications = false,
             OperationContext = new AetheriaRuntimeDaemonOperationContext
             {
                 LoadoutTemplates = loadoutTemplates
@@ -498,25 +500,6 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
         authorizedCommands,
         policyRejectedCommandIds).ConfigureAwait(false);
     TracePhase("command-facts");
-
-    if (buildPublications)
-    {
-        await PublishDurableDaemonDocumentsAsync(node, result).ConfigureAwait(false);
-        await PublishClientGameplayDocumentsAsync(
-            node,
-            options,
-            unityBundles,
-            result,
-            ingressState.Catalog ?? throw new InvalidOperationException("Aetheria runtime catalog was not initialized."),
-            reactiveSurfaceState: null,
-            publishTopology: true).ConfigureAwait(false);
-        await PublishSecondaryTopologyDocumentsAsync(node, options, result).ConfigureAwait(false);
-        TracePhase("api-publication");
-        await PublishStateSurfacesAsync(node, options, result.Frame.PublishedAtUtc, publishHangar: false).ConfigureAwait(false);
-        TracePhase("state-surfaces");
-        await PublishOdinSurfaceAnnouncementsAsync(node, options, result.Frame.PublishedAtUtc).ConfigureAwait(false);
-        TracePhase("odin-announcements");
-    }
 
     return result;
 }
@@ -637,11 +620,7 @@ static async Task RefreshControlPlaneInputsAsync(
     AetheriaStateNode node,
     AetheriaDaemonIngressState ingressState)
 {
-    var gameSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
-        .ReadAsync().ConfigureAwait(false);
-    ingressState.GameMode = gameSession?.Mode ?? "";
-    ingressState.RequestedSimulationRate = gameSession?.SimulationRate ?? 0;
-    ingressState.SimulationRate = gameSession?.EffectiveSimulationRate ?? gameSession?.SimulationRate ?? 0;
+    await RefreshGameSessionInputsAsync(node, ingressState).ConfigureAwait(false);
     ingressState.LoadoutTemplates = node.Cache
         .GetAll<AetheriaLoadoutTemplate>()
         .Select(ToLoadoutTemplateCommit)
@@ -658,6 +637,17 @@ static async Task RefreshControlPlaneInputsAsync(
         .ReadAsync().ConfigureAwait(false);
     ingressState.AuthorityLeases = node.Documents<AetheriaRuntimeAuthorityLeaseDocument>().ToArray();
     ingressState.ControlPlaneInitialized = true;
+}
+
+static async Task RefreshGameSessionInputsAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonIngressState ingressState)
+{
+    var gameSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+        .ReadAsync().ConfigureAwait(false);
+    ingressState.GameMode = gameSession?.Mode ?? "";
+    ingressState.RequestedSimulationRate = gameSession?.SimulationRate ?? 0;
+    ingressState.SimulationRate = gameSession?.EffectiveSimulationRate ?? gameSession?.SimulationRate ?? 0;
 }
 
 static async Task ApplySimulationClockCommandsAsync(
@@ -782,13 +772,14 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
         !IsLoopbackHost(options.ClientCultMeshAdvertiseHost);
     if (remotePublication &&
         (options.ClientCultMeshWebSocketPort <= 0 ||
+         options.ClientCultMeshQuicPort <= 0 ||
          string.IsNullOrWhiteSpace(options.ProviderSigningKeyPath) ||
          string.IsNullOrWhiteSpace(options.ProviderKeyId) ||
          string.IsNullOrWhiteSpace(options.AuthorityRouteGrantPath) ||
          !options.ClientCultMeshCertificateWasExplicit))
     {
         throw new InvalidOperationException(
-            "Remote CultMesh publication requires an explicit WebSocket port, TLS certificate, " +
+            "Remote CultMesh publication requires explicit WebSocket and QUIC ports, a TLS certificate, " +
             "provider P-256 key/id, and an Odin-issued authority route grant.");
     }
     var realtimeCertificate = LoadOrCreateRealtimeCertificate(
@@ -796,6 +787,47 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
         options.ClientCultMeshCertificatePath,
         options.ClientCultMeshCertificatePassword,
         requireExisting: remotePublication);
+    const string localRouteGeneration = "aetheria-client-local-v2";
+    var advertisedEndpoint = "";
+    var advertisedBrowserEndpoint = remotePublication
+        ? $"wss://{options.ClientCultMeshAdvertiseHost}:{options.ClientCultMeshWebSocketPort}/cultmesh"
+        : "";
+    var advertisedContentEndpoint = remotePublication
+        ? $"https://{options.ClientCultMeshAdvertiseHost}:{options.ClientCultMeshWebSocketPort}/content"
+        : "";
+    var certificatePin = Convert.ToHexString(SHA256.HashData(realtimeCertificate.RawData));
+    var advertisedRealtimeEndpoint = remotePublication
+        ? $"{CultMeshQuicRealtimeTransportConnector.Scheme}://{options.ClientCultMeshAdvertiseHost}:{options.ClientCultMeshQuicPort}" +
+          $"?cert-sha256={certificatePin}"
+        : "";
+    ECDsa? providerSigningKey = null;
+    CultMeshAuthorityRoute[]? certifiedRoutes = null;
+    try
+    {
+        if (remotePublication)
+        {
+            providerSigningKey = LoadP256PrivateKey(options.ProviderSigningKeyPath);
+            var providerPublicKey = CultMeshEcdsaP256PublicKey.From(options.ProviderKeyId, providerSigningKey);
+            certifiedRoutes = LoadAuthorityRouteGrant(
+                options.AuthorityRouteGrantPath,
+                options.VerseId,
+                options.DaemonId,
+                providerPublicKey,
+                options.ProgressionTrust,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [CultMeshProtocols.Documents.Value] = advertisedBrowserEndpoint,
+                    [CultMeshProtocols.Content.Value] = advertisedContentEndpoint,
+                    [CultMeshProtocols.RealtimeState.Value] = advertisedRealtimeEndpoint
+                });
+        }
+    }
+    catch
+    {
+        providerSigningKey?.Dispose();
+        realtimeCertificate.Dispose();
+        throw;
+    }
     var localTransportBindAddress = remotePublication ? IPAddress.Loopback : clientBindAddress;
     var tcpServer = new TcpFramedCultNetSchemaServer(new TcpListener(
         localTransportBindAddress,
@@ -841,7 +873,6 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
         serverGroup = new CultNetSchemaServerGroup(tcpServer, browserServer);
         server = serverGroup;
     }
-    const string localRouteGeneration = "aetheria-client-local-v2";
     var content = new CultMeshTcpContentServer(
         new TcpListener(localTransportBindAddress, options.ClientCultMeshContentPort),
         unityBundles.ResolveChunk,
@@ -867,6 +898,7 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
     }
     catch
     {
+        providerSigningKey?.Dispose();
         realtimeCertificate.Dispose();
         content.Dispose();
         serverGroup?.Dispose();
@@ -875,61 +907,32 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
         tcpServer.Dispose();
         throw;
     }
-    var advertisedEndpoint = remotePublication
+    advertisedEndpoint = remotePublication
         ? ""
         : $"cultnet+tcp://{options.ClientCultMeshAdvertiseHost}:{tcpServer.LocalEndPoint.Port}";
-    var advertisedBrowserEndpoint = remotePublication
-        ? $"wss://{options.ClientCultMeshAdvertiseHost}:{options.ClientCultMeshWebSocketPort}/cultmesh"
-        : "";
-    var advertisedContentEndpoint = remotePublication
-        ? $"https://{options.ClientCultMeshAdvertiseHost}:{options.ClientCultMeshWebSocketPort}/content"
-        : $"{CultMeshTcpContentTransportConnector.Scheme}://{options.ClientCultMeshAdvertiseHost}:{content.LocalEndPoint.Port}";
-    var certificatePin = Convert.ToHexString(SHA256.HashData(realtimeCertificate.RawData));
-    var advertisedRealtimeEndpoint =
-        $"{CultMeshQuicRealtimeTransportConnector.Scheme}://{options.ClientCultMeshAdvertiseHost}:{realtime.LocalEndPoint.Port}" +
-        $"?cert-sha256={certificatePin}";
-    ECDsa? providerSigningKey = null;
-    CultMeshAuthorityRoute[]? certifiedRoutes = null;
-    if (remotePublication)
+    if (!remotePublication)
     {
-        providerSigningKey = LoadP256PrivateKey(options.ProviderSigningKeyPath);
-        var providerPublicKey = CultMeshEcdsaP256PublicKey.From(options.ProviderKeyId, providerSigningKey);
-        certifiedRoutes = LoadAuthorityRouteGrant(
-            options.AuthorityRouteGrantPath,
-            options.VerseId,
-            options.DaemonId,
-            providerPublicKey,
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [CultMeshProtocols.Documents.Value] = advertisedBrowserEndpoint,
-                [CultMeshProtocols.Content.Value] = advertisedContentEndpoint,
-                [CultMeshProtocols.RealtimeState.Value] = advertisedRealtimeEndpoint
-            });
+        advertisedContentEndpoint =
+            $"{CultMeshTcpContentTransportConnector.Scheme}://{options.ClientCultMeshAdvertiseHost}:{content.LocalEndPoint.Port}";
+        advertisedRealtimeEndpoint =
+            $"{CultMeshQuicRealtimeTransportConnector.Scheme}://{options.ClientCultMeshAdvertiseHost}:{realtime.LocalEndPoint.Port}" +
+            $"?cert-sha256={certificatePin}";
     }
 
     CultMeshAuthorityRoute[] CurrentAuthorityRoutes() => certifiedRoutes ?? new[]
     {
-        new CultMeshAuthorityRoute(
+        (Endpoint: advertisedEndpoint, Protocol: CultMeshProtocols.Documents.Value),
+        (Endpoint: advertisedBrowserEndpoint, Protocol: CultMeshProtocols.Documents.Value),
+        (Endpoint: advertisedContentEndpoint, Protocol: CultMeshProtocols.Content.Value),
+        (Endpoint: advertisedRealtimeEndpoint, Protocol: CultMeshProtocols.RealtimeState.Value)
+    }
+        .Where(route => !string.IsNullOrWhiteSpace(route.Endpoint))
+        .Select(route => new CultMeshAuthorityRoute(
             options.DaemonId,
-            advertisedEndpoint,
-            new[] { CultMeshProtocols.Documents.Value },
-            generation: localRouteGeneration),
-        new CultMeshAuthorityRoute(
-            options.DaemonId,
-            advertisedBrowserEndpoint,
-            new[] { CultMeshProtocols.Documents.Value },
-            generation: localRouteGeneration),
-        new CultMeshAuthorityRoute(
-            options.DaemonId,
-            advertisedContentEndpoint,
-            new[] { CultMeshProtocols.Content.Value },
-            generation: localRouteGeneration),
-        new CultMeshAuthorityRoute(
-            options.DaemonId,
-            advertisedRealtimeEndpoint,
-            new[] { CultMeshProtocols.RealtimeState.Value },
-            generation: localRouteGeneration)
-    }.Where(route => !string.IsNullOrWhiteSpace(route.Endpoint)).ToArray();
+            route.Endpoint,
+            new[] { route.Protocol },
+            generation: localRouteGeneration))
+        .ToArray();
 
     var proofSigners = remotePublication
         ? certifiedRoutes!
@@ -1377,17 +1380,35 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
             });
         }
     });
-    server.OnCultNet<CultNetDocumentPutRawMessage>(async (message, _) =>
+    server.OnCultNet<CultNetDocumentPutRawMessage>(async (message, peer) =>
     {
-        if (string.Equals(message.Document.SchemaId, AetheriaRuntimeDaemonSchemas.Command, StringComparison.Ordinal))
+        try
         {
-            var command = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
-                message.Document.Payload);
-            await node.SubmitDaemonCommandAsync(command).ConfigureAwait(false);
-            return;
-        }
+            if (!sessionIdentity.TryGetSourceRuntimeId(peer, out var sourceRuntimeId))
+                throw new InvalidOperationException("CultMesh session identity must be established before command ingress.");
+            if (!string.Equals(message.Document.PayloadEncoding, "messagepack", StringComparison.OrdinalIgnoreCase) ||
+                node.Database.Documents.DeserializeRawDocument(message.Document) is not EveSurfaceCommandRequest request)
+                throw new InvalidOperationException("The public Aetheria CultMesh boundary accepts typed Eve command intents only.");
+            var expectedRecordKey = AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + request.CommandId;
+            if (string.IsNullOrWhiteSpace(request.CommandId) ||
+                !string.Equals(message.Document.RecordKey, expectedRecordKey, StringComparison.Ordinal))
+                throw new InvalidOperationException("Eve command record identity does not match its typed command id.");
+            if (string.IsNullOrWhiteSpace(request.ProviderId) ||
+                string.IsNullOrWhiteSpace(request.SurfaceId) ||
+                string.IsNullOrWhiteSpace(request.Command))
+                throw new InvalidOperationException("Eve command provider, surface, and command are required.");
+            if (!string.Equals(request.ClientId, sourceRuntimeId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Eve command client identity does not match the established CultMesh session.");
 
-        await node.Database.ApplyPutAsync(message).ConfigureAwait(false);
+            await node.Database.PutAsync(new CultRecordKey(expectedRecordKey), request).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            peer.SendCultNet(new CultNetErrorMessage
+            {
+                Error = $"Aetheria command ingress rejected document put: {error.Message}"
+            });
+        }
     });
     if (browserApp != null)
     {
@@ -1459,14 +1480,9 @@ static X509Certificate2 CreateRealtimeCertificate(string advertisedHost)
     else names.AddDnsName(advertisedHost);
     request.CertificateExtensions.Add(names.Build());
     request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
-    using var generated = request.CreateSelfSigned(
+    return request.CreateSelfSigned(
         DateTimeOffset.UtcNow.AddMinutes(-1),
         DateTimeOffset.UtcNow.AddDays(7));
-    // System.Net.Quic uses Schannel on Windows; Schannel server credentials reject ephemeral private keys.
-    return X509CertificateLoader.LoadPkcs12(
-        generated.Export(X509ContentType.Pfx),
-        null,
-        X509KeyStorageFlags.Exportable);
 }
 
 static X509Certificate2 LoadOrCreateRealtimeCertificate(
@@ -1732,6 +1748,7 @@ static CultMeshAuthorityRoute[] LoadAuthorityRouteGrant(
     string verseId,
     string authorityRuntimeId,
     CultMeshEcdsaP256PublicKey providerKey,
+    CultMeshAuthorityTrustPolicy trust,
     IReadOnlyDictionary<string, string> expectedEndpoints)
 {
     if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -1752,7 +1769,7 @@ static CultMeshAuthorityRoute[] LoadAuthorityRouteGrant(
         throw new InvalidOperationException(
             $"Odin authority route grant names Verse '{descriptor.VerseId}', expected '{verseId}'.");
 
-    var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    var now = DateTimeOffset.UtcNow;
     var selected = new List<CultMeshAuthorityRoute>();
     foreach (var expected in expectedEndpoints)
     {
@@ -1776,9 +1793,7 @@ static CultMeshAuthorityRoute[] LoadAuthorityRouteGrant(
             throw new InvalidOperationException(
                 $"Odin authority route grant provider key does not match '{providerKey.KeyId}'.");
         }
-        if (now < certificate.IssuedAtUnixMilliseconds || now >= certificate.ExpiresAtUnixMilliseconds)
-            throw new InvalidOperationException(
-                $"Odin authority route grant is not currently valid for '{route.Endpoint}'.");
+        trust.Validate(verseId, route, now);
         selected.Add(route);
     }
 
@@ -2580,7 +2595,16 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
 
         if (string.Equals(request.SurfaceId, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal))
         {
-            activatedSession |= await AcceptHangarInvocationAsync(node, options, request).ConfigureAwait(false);
+            try
+            {
+                activatedSession |= await AcceptHangarInvocationAsync(node, options, request).ConfigureAwait(false);
+            }
+            catch (TimeoutException error)
+            {
+                Console.Error.WriteLine(
+                    $"Hangar command '{request.CommandId}' has no final remote receipt yet and remains pending: {error.Message}");
+                continue;
+            }
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
             deletedAny = true;
             continue;
@@ -2747,7 +2771,8 @@ static async Task<bool> AcceptHangarInvocationAsync(
                 diagnostic = receipt.Diagnostic;
                 if (accepted)
                 {
-                    await ActivateSessionAsync(node, options, receipt.Mode, request.CommandId, now).ConfigureAwait(false);
+                    await ActivateSessionAsync(node, options, receipt.Mode, receipt.RunRecordKey, request.CommandId, now).ConfigureAwait(false);
+                    await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
                     activatesSession = true;
                     navigation = new EveSurfaceNavigationTarget(
                         options.VerseId,
@@ -2759,21 +2784,20 @@ static async Task<bool> AcceptHangarInvocationAsync(
             }
             case AetheriaRuntimeHangarCommands.Continue:
             {
-                accepted = await AetheriaDaemonHangarCoordinator.CanContinueAsync(
+                var deployment = await AetheriaDaemonHangarCoordinator.ContinueAsync(
                     node,
                     Payload(request, "deploymentId")).ConfigureAwait(false);
+                accepted = deployment != null;
                 diagnostic = accepted ? "" : "No resumable deployment exists for the selected ship and mode.";
-                if (accepted)
+                if (deployment != null)
                 {
-                    var draft = await node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
-                        .ReadAsync().ConfigureAwait(false)
-                        ?? throw new InvalidOperationException("Hangar selection is unavailable.");
-                    await ActivateSessionAsync(node, options, draft.SelectedMode, request.CommandId, now).ConfigureAwait(false);
+                    await ActivateSessionAsync(node, options, deployment.Mode, deployment.RunRecordKey, request.CommandId, now).ConfigureAwait(false);
+                    await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
                     activatesSession = true;
                     navigation = new EveSurfaceNavigationTarget(
                         options.VerseId,
                         request.ProviderId,
-                        SurfaceForMode(draft.SelectedMode),
+                        SurfaceForMode(deployment.Mode),
                         "interactive-world");
                 }
                 break;
@@ -2783,7 +2807,7 @@ static async Task<bool> AcceptHangarInvocationAsync(
                 break;
         }
     }
-    catch (Exception error)
+    catch (Exception error) when (error is not TimeoutException)
     {
         accepted = false;
         diagnostic = error.Message;
@@ -2812,10 +2836,11 @@ static async Task ActivateSessionAsync(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
     string mode,
+    string runRecordKey,
     string commandId,
     string now)
 {
-    var run = await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings).ConfigureAwait(false)
+    var run = await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, runRecordKey).ConfigureAwait(false)
         ?? throw new InvalidOperationException("Mode activation requires a canonical run checkpoint.");
     await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
         .ReplaceAsync(new AetheriaGameSessionState
@@ -2953,7 +2978,7 @@ static async Task PublishStateSurfacesAsync(
                 hangarView.Draft.SelectedShipId,
                 hangarView.Draft.SelectedMode,
                 updatedAtUtc,
-                Math.Max(1, hangarView.Hangar.Revision + hangarView.Source.Revision),
+                Math.Max(1, hangarView.Hangar.Revision + hangarView.Draft.Revision + hangarView.Source.Revision),
                 hangarView.Loadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(hangarView.Loadout),
                 hangarView.Catalog,
                 hangarView.Source,
@@ -3547,15 +3572,19 @@ static async Task EnsureVerseAuthorityPolicyAsync(
 
 static async Task<AetheriaRuntimeRunCheckpointCommit?> ReadRuntimeRunCheckpointAsync(
     AetheriaStateNode node,
-    AetheriaRuntimeDaemonRenderSettings renderSettings)
+    AetheriaRuntimeDaemonRenderSettings renderSettings,
+    string? runRecordKey = null)
 {
-    var settings = await node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey).ReadAsync().ConfigureAwait(false);
-    if (string.IsNullOrWhiteSpace(settings?.ActiveRunKey))
-        return null;
+    if (string.IsNullOrWhiteSpace(runRecordKey))
+    {
+        var settings = await node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey).ReadAsync().ConfigureAwait(false);
+        runRecordKey = settings?.ActiveRunKey;
+    }
+    if (string.IsNullOrWhiteSpace(runRecordKey)) return null;
 
     var run = await ReadDurableBootstrapDocumentAsync<AetheriaRunState>(
         node,
-        new CultRecordKey(settings.ActiveRunKey)).ConfigureAwait(false);
+        new CultRecordKey(runRecordKey)).ConfigureAwait(false);
     if (run == null)
         return null;
 

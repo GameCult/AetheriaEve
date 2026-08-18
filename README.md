@@ -68,6 +68,12 @@ Odin endpoints may be unsigned only in the automatically selected local
 development policy. Accepted launch/continue receipts route the generic
 lowerer to the selected Verse's Pilot surface.
 
+The current remote route proof authenticates the provider, not the player.
+Local Hangar progression is executable end to end; a production GameCult Verse
+must additionally bind an authenticated account principal to per-player Hangar
+and draft records before serving authoritative progression. A session runtime
+ID is not an account credential.
+
 ## Architecture
 
 Start with:

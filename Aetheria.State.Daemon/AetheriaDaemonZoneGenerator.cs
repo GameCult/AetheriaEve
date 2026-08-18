@@ -33,7 +33,8 @@ internal static class AetheriaDaemonZoneGenerator
         AetheriaRuntimeCatalogSnapshot catalog,
         string now,
         string scenario,
-        AetheriaDeploymentReceipt? deployment = null)
+        AetheriaDeploymentReceipt? deployment = null,
+        bool flush = true)
     {
         scenario = AetheriaDaemonTerminusScenarios.Parse(scenario);
         if (deployment != null && (!deployment.Accepted || !AetheriaGameModes.IsKnown(deployment.Mode)))
@@ -43,13 +44,13 @@ internal static class AetheriaDaemonZoneGenerator
             !string.Equals(scenario, AetheriaDaemonTerminusScenarios.Standard, StringComparison.Ordinal))
             throw new InvalidOperationException("Terminus proof scenarios cannot impersonate another product mode.");
         var mode = deployment?.Mode ?? AetheriaGameModes.Terminus;
-        var runId = deployment == null
-            ? RunIdFor(scenario)
-            : $"{mode}-{StableToken(deployment.DeploymentId)}";
+        var runId = deployment == null ? RunIdFor(scenario) : deployment.RunId;
+        if (string.IsNullOrWhiteSpace(runId))
+            throw new InvalidOperationException("An accepted deployment must own a stable run identity.");
         var generationSeed = deployment == null
             ? GenerationSeed
             : AetheriaDaemonRunFactory.StableSeed(deployment.DeploymentId);
-        var runKey = new CultRecordKey($"global:aetheria.run_state.{runId}.v1");
+        var runKey = new CultRecordKey(deployment?.RunRecordKey ?? $"global:aetheria.run_state.{runId}.v1");
         var zoneKey = new CultRecordKey($"global:aetheria.zone_state.{runId}.0.v1");
         var corporationKeys = (catalog.Corporations ?? Array.Empty<AetheriaRuntimeCorporation>())
             .Select(value => value.CorporationKey)
@@ -140,7 +141,8 @@ internal static class AetheriaDaemonZoneGenerator
                 .ConfigureAwait(false);
         }
 
-        await node.FlushAsync().ConfigureAwait(false);
+        if (flush)
+            await node.FlushAsync().ConfigureAwait(false);
     }
 
     public static string RunIdFor(string scenario)

@@ -160,7 +160,12 @@ namespace Aetheria.Editor
         {
             var output = Environment.GetEnvironmentVariable("AETHERIA_EVE_BUNDLE_OUTPUT");
             return string.IsNullOrWhiteSpace(output)
-                ? Path.GetFullPath(Path.Combine("Build", "EveAssets", target.ToString()))
+                ? Path.GetFullPath(Path.Combine(
+                    Directory.GetParent(Application.dataPath)?.FullName
+                        ?? throw new InvalidOperationException("Unity project root is unavailable."),
+                    "Build",
+                    "EveAssets",
+                    target.ToString()))
                 : output;
         }
 

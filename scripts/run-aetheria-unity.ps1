@@ -11,6 +11,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "Aetheria.Unity"
 $assetProject = Join-Path $root "Aetheria.Assets.Unity"
+$assetBundleRoot = Join-Path $assetProject "Build\EveAssets"
 $artifacts = Join-Path $project "Build\Logs"
 $clientExe = Join-Path $project "Build\Windows\Aetheria.exe"
 $daemonProject = Join-Path $root "Aetheria.State.Daemon\Aetheria.State.Daemon.csproj"
@@ -32,6 +33,7 @@ if (-not (Test-Path $stateRecords)) {
 
 if (-not $SkipBuild) {
   $env:AETHERIA_ASSET_CATALOG_STATE = $state
+  $env:AETHERIA_EVE_BUNDLE_OUTPUT = Join-Path $assetBundleRoot "StandaloneWindows64"
   $assetLog = Join-Path $artifacts "asset-bundles.log"
   $assets = Start-Process $UnityExe -ArgumentList @(
     "-batchmode", "-quit", "-projectPath", $assetProject,
@@ -66,6 +68,7 @@ $daemonArguments = @(
   "--client-cultmesh-host", "127.0.0.1",
   "--client-cultmesh-advertise-host", "127.0.0.1",
   "--client-cultmesh-port", $Port,
+  "--asset-bundle-root", $assetBundleRoot,
   "--tick-interval-ms", 20,
   "--fixed-delta-ms", 20,
   "--no-odin-announcements"

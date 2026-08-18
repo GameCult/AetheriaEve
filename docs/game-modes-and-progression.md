@@ -192,19 +192,40 @@ Local selection reads and writes the daemon's moddable `.cc` state. A remote
 selection reads that Verse's typed Hangar/catalog documents and forwards equip,
 remove, selection, launch, and continue operations to that Verse's authority.
 Launch consumes the daemon-owned draft and instantiates its selected committed
-loadout into a newly identified Terminus, Starbridge, or Arena session; continue
-reopens only a deployment matching both selected ship and mode. The three modes
+loadout into a newly identified Terminus, Starbridge, or Arena session. The
+accepted Deployment receipt owns that run identity and exact run-record key;
+Hangar mutation, receipt, immutable loadout snapshot, and generated run become
+durable in one flush. `ActiveRunKey` is only a derived convenience pointer.
+Continue resolves the receipt-owned run instead of guessing through that global
+pointer, and reopens only a deployment matching both selected ship and mode. The three modes
 already share this minimal headless deployment boundary. Their deeper rules,
 network admission, and settlement remain mode-owned work.
 The accepted Eve receipt carries the selected Verse, its Odin-discovered
 rendezvous route, and `aetheria.pilot` as a renderer-neutral navigation target.
 EveUnity prepares the destination beside the mounted Hangar, tries every
-receipt-carried Odin endpoint, and swaps only after the destination is ready.
-A failed route therefore cannot destroy the usable Hangar. Aetheria's Unity
+receipt-carried Odin endpoint, stages the provider, and commits the swap only
+after the generic host mounts it. Preparation or mount failure rolls the
+provider back and remounts the prior surface. A failed route therefore cannot
+strand the client without a usable Hangar. Aetheria's Unity
 shell has no Verse, Hangar, or navigation policy code.
 
+The public CultMesh document boundary is command-only. It decodes the registered
+typed `EveSurfaceCommandRequest`, requires the exact command record key, and
+binds `ClientId` to the runtime identity established for that transport session;
+it cannot apply arbitrary raw document puts to Hangar, draft, run, or policy
+state. A forwarded remote command remains pending across timeout and retries the
+same idempotent request until the selected Verse returns its canonical receipt;
+the forwarding daemon cannot manufacture a denial after the remote authority
+may have committed. Remote providers validate every Odin-issued route grant
+against the configured root, provider key, endpoint, generation, protection,
+and expiry before opening a public listener.
+
 This is the first vertical slice, not the completed cross-mode progression
-machine. Remote account binding, Settlement, currencies/unlocks, richer fitting
+machine. Session runtime identity is not an authenticated player/account
+principal. Consequently Local is the proven progression mode, while a
+production GameCult Verse still requires authenticated account binding and
+per-principal Hangar/draft record ownership before it may expose player
+progression. Settlement, currencies/unlocks, richer fitting
 interaction, and complete Starbridge/Arena admission policy still need to enter
 the same Hangar boundary. The old main-menu
 `New Game` writer is no longer a product run-creation authority. Explicit

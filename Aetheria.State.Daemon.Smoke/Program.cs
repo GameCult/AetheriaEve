@@ -272,10 +272,53 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 var player = node.MutableDocument<AetheriaEntitySnapshot>(new CultRecordKey(run.CurrentEntityKey))
                     .ReadAsync().GetAwaiter().GetResult()!;
                 Require(run.GameMode == AetheriaGameModes.Terminus &&
-                        run.GenerationSeed == AetheriaDaemonRunFactory.StableSeed(deploymentId),
-                    "the accepted Hangar deployment must own the new Terminus run identity");
+                        run.GenerationSeed == AetheriaDaemonRunFactory.StableSeed(deploymentId) &&
+                        receipt.RunId == run.RunId && receipt.RunRecordKey == runKey,
+                    "the accepted Hangar deployment must own the exact resumable Terminus run identity");
                 Require(player.Equipment.All(slot => !string.Equals(slot.ItemKey, removedItemKey, StringComparison.Ordinal)),
                     "Terminus must instantiate the configured Hangar loadout, not regenerate the starter fit");
+
+                var deployedHangar = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                var reusedRequest = AetheriaHangar.Admit(
+                    deployedHangar,
+                    new AetheriaDeploymentRequest
+                    {
+                        RequestId = "launch-configured",
+                        PlayerKey = deployedHangar.PlayerKey,
+                        Mode = AetheriaGameModes.Arena,
+                        ShipId = ship.ShipId,
+                        LoadoutTemplateKey = ship.LoadoutTemplateKey,
+                        ExpectedHangarRevision = deployedHangar.Revision,
+                        ModePolicyId = AetheriaModePolicies.ArenaServer
+                    },
+                    template,
+                    "2026-08-08T00:00:03Z");
+                Require(!reusedRequest.Accepted && reusedRequest.Diagnostic.Contains("different payload", StringComparison.Ordinal),
+                    "a deployment request id cannot be replayed with different mode, ship, or loadout semantics");
+
+                AetheriaDaemonHangarCoordinator.SelectShipAsync(node, ship.ShipId, "2026-08-08T00:00:04Z")
+                    .GetAwaiter().GetResult();
+                AetheriaDaemonHangarCoordinator.SelectModeAsync(node, AetheriaGameModes.Arena, "2026-08-08T00:00:04Z")
+                    .GetAwaiter().GetResult();
+                deployedHangar = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                var secondReceipt = AetheriaDaemonHangarCoordinator.LaunchAsync(
+                        node, runtimeCatalog, "launch-second", deployedHangar.Revision, "2026-08-08T00:00:05Z")
+                    .GetAwaiter().GetResult();
+                Require(secondReceipt.Accepted && secondReceipt.RunRecordKey != receipt.RunRecordKey,
+                    "each accepted deployment must own a distinct resumable run record");
+
+                AetheriaDaemonHangarCoordinator.SelectShipAsync(node, selectedShipId, "2026-08-08T00:00:06Z")
+                    .GetAwaiter().GetResult();
+                AetheriaDaemonHangarCoordinator.SelectModeAsync(node, AetheriaGameModes.Terminus, "2026-08-08T00:00:06Z")
+                    .GetAwaiter().GetResult();
+                var resumed = AetheriaDaemonHangarCoordinator.ContinueAsync(node, deploymentId)
+                    .GetAwaiter().GetResult();
+                settings = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                Require(resumed?.RunRecordKey == runKey && settings.ActiveRunKey == runKey,
+                    "Continue must resolve the selected deployment's run identity instead of trusting the latest global pointer");
             }
 
             using (var reopened = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult())

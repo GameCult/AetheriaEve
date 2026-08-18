@@ -15,6 +15,7 @@ if (!File.Exists(seed) || !Directory.Exists(seed + ".records"))
 
 var smokeRoot = Path.Combine(Path.GetTempPath(), "aetheria-progression-verse-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(smokeRoot);
+Console.WriteLine($"Progression smoke state: {smokeRoot}");
 var localState = Path.Combine(smokeRoot, "local.cc");
 var remoteState = Path.Combine(smokeRoot, "remote.cc");
 CopyState(seed, localState);
@@ -89,6 +90,16 @@ try
             remoteTarget,
             AetheriaStateNode.HangarKey.ToString());
         var remoteRevision = remoteHangar.Revision;
+        await RequireRawProgressionPutRejectedAsync(
+            remoteClient,
+            remoteTarget,
+            AetheriaStateNode.HangarKey.ToString(),
+            remoteHangar);
+        var hangarAfterRejectedPut = await remoteClient.ReadAsync<AetheriaHangarState>(
+            remoteTarget,
+            AetheriaStateNode.HangarKey.ToString());
+        Require(hangarAfterRejectedPut.Revision == remoteRevision,
+            "A public CultMesh peer must not mutate Hangar state through a generic raw document put.");
         var remoteSurface = await ReadUntilAsync(
             client,
             localTarget,
@@ -177,21 +188,25 @@ try
             "Remote Terminus navigation must carry only the configured Odin rendezvous route, not flattened content or realtime provider routes.");
         using (var navigatedClient = Client(launchNavigation.RendezvousEndpoints[0]))
         {
-            await ReadUntilAsync(
-                navigatedClient,
+            using var gameSurfaceDemand = await navigatedClient.LeaseDocumentAsync<EveSurfaceDocument>(
                 remoteTarget,
-                AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString(),
-                (EveSurfaceDocument surface) =>
-                    string.Equals(surface.Surface.Id, AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId, StringComparison.Ordinal),
+                AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString());
+            var gameSurface = await ReadLiveUntilAsync(
+                gameSurfaceDemand.Handle,
+                surface => string.Equals(surface.Surface.Id, AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId, StringComparison.Ordinal),
+                TimeSpan.FromSeconds(10));
+            Require(
+                string.Equals(gameSurface.Surface.Id, AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId, StringComparison.Ordinal),
+                "Navigating into Terminus must publish the Pilot Eve surface through the live demand subscription.");
+            using var gameplayStateClient = Client(remoteEndpoint);
+            await ReadUntilAsync(
+                gameplayStateClient,
+                remoteTarget,
+                AetheriaStateNode.GameSessionStateKey.ToString(),
+                (AetheriaGameSessionState session) =>
+                    session.Mode == AetheriaGameSessionState.TerminusMode && session.SimulationRate > 0,
                 TimeSpan.FromSeconds(10));
         }
-        await ReadUntilAsync(
-            remoteClient,
-            remoteTarget,
-            AetheriaStateNode.GameSessionStateKey.ToString(),
-            (AetheriaGameSessionState session) =>
-                session.Mode == AetheriaGameSessionState.TerminusMode && session.SimulationRate > 0,
-            TimeSpan.FromSeconds(10));
 
         var continueSurface = await ReadUntilAsync(
             client,
@@ -215,6 +230,11 @@ try
     local = StartDaemon(root, localState, "progression-local", localVerse, localPort,
         "--odin-discovery-endpoint", remoteEndpoint);
     await WaitForEndpointAsync(local, localPort, TimeSpan.FromSeconds(30));
+    await WaitForVerseAdvertisementAsync(
+        localEndpoint,
+        localVerse,
+        "progression-local",
+        TimeSpan.FromSeconds(45));
     using (var restartedClient = Client(localEndpoint))
     {
         var restored = await ReadUntilAsync(
@@ -228,13 +248,34 @@ try
             "Daemon restart must preserve the selected progression Verse by stable identity.");
     }
 
-    Console.WriteLine("Aetheria Hangar Verse discovery, remote spatial refit, Terminus launch/continue navigation, and restart smoke passed.");
+    Console.WriteLine("Aetheria Hangar Verse discovery, raw-write rejection, remote spatial refit, Terminus launch/continue navigation, and restart smoke passed.");
+}
+catch
+{
+    Console.Error.WriteLine($"Local daemon: {ProcessState(local)}; remote daemon: {ProcessState(remote)}.");
+    throw;
 }
 finally
 {
     Stop(local);
     Stop(remote);
-    try { Directory.Delete(smokeRoot, recursive: true); } catch { }
+    if (!string.Equals(Environment.GetEnvironmentVariable("AETHERIA_SMOKE_KEEP_STATE"), "1", StringComparison.Ordinal))
+    {
+        try { Directory.Delete(smokeRoot, recursive: true); } catch { }
+    }
+}
+
+static string ProcessState(Process? process)
+{
+    if (process == null) return "not-started";
+    var state = process.HasExited ? $"exited({process.ExitCode})" : $"running(pid={process.Id})";
+    if (!process.StartInfo.Environment.TryGetValue("AETHERIA_SMOKE_LOG_PATH", out var logPath) ||
+        string.IsNullOrWhiteSpace(logPath) || !File.Exists(logPath))
+        return state;
+    string[] lines;
+    try { lines = File.ReadAllLines(logPath); }
+    catch { return state; }
+    return state + Environment.NewLine + string.Join(Environment.NewLine, lines.TakeLast(20));
 }
 
 static CultMeshClient Client(string rendezvousEndpoint) => new(new CultMeshClientOptions
@@ -242,6 +283,7 @@ static CultMeshClient Client(string rendezvousEndpoint) => new(new CultMeshClien
     RendezvousEndpoints = new[] { rendezvousEndpoint },
     Sessions = new CultMeshSessionManagerOptions
     {
+        RuntimeId = "progression-verse-smoke",
         Trust = new CultMeshAuthorityTrustPolicy(CultMeshAuthorityTrustMode.LocalDevelopment)
     },
     Discovery = new CultMeshVerseDiscoveryClientOptions
@@ -276,6 +318,9 @@ static async Task<EveCommandReceiptDocument> SubmitRequestAsync(
     CultMeshSessionTarget target,
     EveSurfaceCommandRequest request)
 {
+    string? transportError = null;
+    var session = await client.ConnectAsync(target, CultMeshProtocols.Documents);
+    using var errorSubscription = session.OnCultNet<CultNetErrorMessage>(error => transportError = error.Error);
     var requestRecordKey = AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + request.CommandId;
     await client.SubmitDocumentAsync(
         target,
@@ -283,18 +328,47 @@ static async Task<EveCommandReceiptDocument> SubmitRequestAsync(
         request,
         "progression-verse-smoke",
         "headless-smoke");
-    var receipt = await ReadUntilAsync(
-        client,
-        target,
-        AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId).ToString(),
-        (EveCommandReceiptDocument receipt) => receipt.CommandId == request.CommandId,
-        TimeSpan.FromSeconds(10));
+    EveCommandReceiptDocument receipt;
+    try
+    {
+        receipt = await ReadUntilAsync(
+            client,
+            target,
+            AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId).ToString(),
+            (EveCommandReceiptDocument receipt) => receipt.CommandId == request.CommandId,
+            TimeSpan.FromSeconds(10));
+    }
+    catch (Exception error) when (!string.IsNullOrWhiteSpace(transportError))
+    {
+        throw new InvalidOperationException($"Command ingress failed: {transportError}", error);
+    }
     await RequireDeletedAsync<EveSurfaceCommandRequest>(
         client,
         target,
         requestRecordKey,
         TimeSpan.FromSeconds(10));
     return receipt;
+}
+
+static async Task RequireRawProgressionPutRejectedAsync<TDocument>(
+    CultMeshClient client,
+    CultMeshSessionTarget target,
+    string recordKey,
+    TDocument document)
+    where TDocument : class
+{
+    var rejection = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+    var session = await client.ConnectAsync(target, CultMeshProtocols.Documents);
+    using var subscription = session.OnCultNet<CultNetErrorMessage>(error => rejection.TrySetResult(error.Error));
+    await client.SubmitDocumentAsync(
+        target,
+        recordKey,
+        document,
+        "progression-verse-smoke",
+        "headless-smoke");
+    var diagnostic = await rejection.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    Require(diagnostic.Contains("typed Eve command intents only", StringComparison.Ordinal),
+        $"Raw progression put was rejected for the wrong reason: {diagnostic}");
 }
 
 static async Task RequireDeletedAsync<T>(
@@ -353,6 +427,30 @@ static async Task<T> ReadUntilAsync<T>(
     throw new TimeoutException($"Timed out reading '{recordKey}' from target '{target}'.{observed}", last);
 }
 
+static async Task<T> ReadLiveUntilAsync<T>(
+    CultMeshDocumentHandle<T> handle,
+    Func<T, bool> predicate,
+    TimeSpan timeout)
+    where T : class
+{
+    var deadline = DateTimeOffset.UtcNow + timeout;
+    Exception? last = null;
+    while (DateTimeOffset.UtcNow < deadline)
+    {
+        try
+        {
+            var value = await handle.LatestAsync();
+            if (predicate(value)) return value;
+        }
+        catch (KeyNotFoundException error)
+        {
+            last = error;
+        }
+        await Task.Delay(50);
+    }
+    throw new TimeoutException($"Timed out awaiting live CultMesh document '{handle.DocumentId}'.", last);
+}
+
 static EveSurfaceComponent Find(EveSurfaceComponent component, string id)
 {
     if (component.Id == id) return component;
@@ -399,6 +497,10 @@ static Process StartDaemon(
         "--client-cultmesh-quic-port", "0",
         "--no-odin-announcements"
     };
+    var assetBundleRoot = Environment.GetEnvironmentVariable("AETHERIA_SMOKE_ASSET_BUNDLE_ROOT")
+        ?? Path.Combine(root, "Build", "EveAssets");
+    if (Directory.Exists(assetBundleRoot))
+        arguments.AddRange(new[] { "--asset-bundle-root", Quote(assetBundleRoot) });
     arguments.AddRange(extra.Select((value, index) => index % 2 == 1 ? Quote(value) : value));
     var start = new ProcessStartInfo(daemon, string.Join(" ", arguments))
     {
@@ -408,7 +510,17 @@ static Process StartDaemon(
         UseShellExecute = false,
         CreateNoWindow = true
     };
+    var logPath = state + ".daemon.log";
+    start.Environment["AETHERIA_SMOKE_LOG_PATH"] = logPath;
     var process = Process.Start(start) ?? throw new InvalidOperationException("Failed to start Aetheria daemon.");
+    var logGate = new object();
+    void Record(string? line)
+    {
+        if (line == null) return;
+        lock (logGate) File.AppendAllText(logPath, line + Environment.NewLine);
+    }
+    process.OutputDataReceived += (_, eventArgs) => Record(eventArgs.Data);
+    process.ErrorDataReceived += (_, eventArgs) => Record(eventArgs.Data);
     process.BeginOutputReadLine();
     process.BeginErrorReadLine();
     return process;
