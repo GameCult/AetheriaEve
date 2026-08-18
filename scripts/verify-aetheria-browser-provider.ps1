@@ -32,16 +32,16 @@ if (-not (Test-Path -LiteralPath $NodePath -PathType Leaf)) {
     throw "Node.js was not found. Pass -NodePath explicitly."
 }
 
-if ([string]::IsNullOrWhiteSpace($ChromePath)) {
-    $ChromePath = Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"
-}
-if (-not (Test-Path -LiteralPath $ChromePath -PathType Leaf)) {
-    throw "Chrome was not found. Pass -ChromePath explicitly."
+if (-not [string]::IsNullOrWhiteSpace($ChromePath) -and
+    -not (Test-Path -LiteralPath $ChromePath -PathType Leaf)) {
+    throw "The configured Chromium-family browser was not found: $ChromePath"
 }
 
 $previousChromePath = $env:CHROME_PATH
 try {
-    $env:CHROME_PATH = $ChromePath
+    if (-not [string]::IsNullOrWhiteSpace($ChromePath)) {
+        $env:CHROME_PATH = [IO.Path]::GetFullPath($ChromePath)
+    }
     & $NodePath (Join-Path $PSScriptRoot "verify-aetheria-browser-provider.mjs") `
         --cultlib-root $CultLibRoot `
         --eve-root $EveRoot

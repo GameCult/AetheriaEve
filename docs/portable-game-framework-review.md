@@ -29,10 +29,10 @@ does not protect hidden information, aggregate expensive state, window a large
 collection, or provide a native hot layout. It is a second wire model whose only
 job is to become the canonical Eve wire model.
 
-The CultMesh getting-started series also stops before the claimed outcome. It
-links a durable-state test, shows an identity-first client, and explicitly says
-that the browser/Electron counterpart and a command-driven two-runtime sample
-are still missing. That is useful honesty, but not yet onboarding.
+The CultMesh getting-started series previously stopped before the claimed
+outcome: it linked a durable-state test and showed identity-first connection,
+but had no command-driven two-runtime program. The repaired series now treats
+that executable path as its acceptance test rather than tutorial prose.
 
 ### Repaired on 2026-08-17
 
@@ -67,6 +67,17 @@ before materializing a canonical command. The witness then restarts the daemon
 on another physical WebSocket endpoint, updates Odin at the same rendezvous
 identity, and requires the retained browser lease to reconnect, resubscribe,
 and obtain a second receipt without learning the replacement endpoint.
+
+The generic getting-started command now runs two explicit layers. The first
+packs the TypeScript/CultMesh/Eve packages and installs them into an empty
+temporary consumer before proving DOM lowering, headless observation,
+idempotency, receipt identity, and `.cc` reopen. The second boots a C# provider
+that publishes the canonical Eve C# surface type, a local Odin fixture, real
+Chromium, and a retained C# client. Chromium invokes the first command; after
+the provider moves to a new route, C# invokes the second through
+`CultMeshClient.InvokeAsync`. Both retained clients rediscover by identity and
+observe the same provider-authored state and receipt chronology. No sample owns
+physical route selection or reconnect policy.
 
 Run it from this repository with:
 
@@ -109,9 +120,10 @@ two physical callbacks, not a dead callback pair for every released handle.
 These gates and the cross-runtime explicit-update scheduling gate now run on
 Windows and Linux CI. Eve contract generation and browser lowering, including
 the two-host DOM isolation test, have the same Windows/Linux matrix. The clean
-package-consumer verifier no longer assumes `node.exe` or `npm.cmd` and passes
-from a fresh temporary install on Windows; Linux execution is now owned by CI
-rather than implied by a Windows-only script.
+package-consumer verifier no longer assumes `node.exe` or `npm.cmd`. The same
+one-command artifact plus live-network checkpoint is a Windows/Linux CI gate;
+a serialized sample build avoids the shared source-generator output race that
+the Windows runner exposed.
 
 The August 18 registry check returned `E404` for
 `@gamecult/eve-browser-lowering`, `@gamecult/eve-contracts`, and the CultMesh
@@ -223,14 +235,16 @@ test rather than achieved properties.
 | P0 | Conformance witnesses | The static pack resolves repository witnesses and checks schema IDs against typed source. The actual Aetheria browser witness boots the product daemon, discovers and leases the Hangar through a local Odin fixture, lowers it in Chromium, submits the native Verse select command, observes its daemon receipt, rejects a forged client identity, then follows the restarted daemon to a new route and obtains a second receipt through the retained lease. | Repeat the same product chronology through deployed Odin and a retained native consumer; static fixture agreement and the local Odin fixture cannot satisfy those infrastructure/native-runtime proofs. |
 | P0 | Stable identity path | Eve Unity discovers and reconnects through `CultMeshClient`; Aetheria's local `.cc` facade no longer accepts physical endpoints or constructs client-owned Eve surfaces. `CultMeshBrowserOdinRendezvous` now gives browsers the same identity-first Verse-catalog boundary and survives a physical provider move. | Generate Aetheria domain handles over the generic client and prove the actual daemon through local and configured Odin routes without restoring an application-owned replica. |
 | P1 | Contract ownership | Eve `0.3.0` owns the renderer-neutral C# surface contract. A clean Unity consumer passed 136/136 tests against the released CultLib `1.0.45`, Eve surface, and EveUnity packages; Aetheria's daemon project now references Eve rather than EveUnity. Eve contract and browser packages now build/test on Windows and Linux. | Put the released clean-Unity consumer in CI and reject any renderer repository reference from headless daemon projects. Source package matrices are necessary but do not prove the released Unity graph. |
-| P1 | Executable onboarding | The artifact-only `samples/eve-two-runtime` verifier installs missing build dependencies, packs the local packages, installs them into an empty temporary consumer, and proves DOM lowering plus a headless observer. Its launcher is OS-neutral and passes on Windows. The separate `samples/eve-browser-network` witness runs a C# provider, local Odin fixture, real Chromium Eve lowerer, and C# observer; it rotates the provider route and proves rediscovery, resubscription, receipts, and durable state. The relevant npm package names are currently unpublished (`E404`), so no published-registry claim is made. | Choose and execute package publication/version ownership, then run both fixtures on Windows/Linux from those released artifacts; add retained C# lease reconnection, and keep the local Odin fixture distinct from deployed-Odin evidence. |
+| P1 | Executable onboarding | One documented command runs the empty-consumer packed-artifact checkpoint and the real Chromium/C# network checkpoint on Windows and Linux CI. The C# provider uses Eve's canonical surface type. Chromium invokes before provider route replacement; the retained C# client invokes afterward through the generic identity-owned operation API. Both clients rediscover, resubscribe, and converge on the same durable state and receipt ids without application transport loops. The relevant npm package names remain unpublished (`E404`), so no published-registry claim is made. | Choose and execute package publication/version ownership, then rerun the unchanged command from released artifacts; keep the local Odin fixture distinct from deployed-Odin evidence. |
 | P1 | Client resource lifetime | `CultMeshClient` exposes disposable document and collection leases, reference-counts dynamic resources, and reports active resource counts. Retained sessions multiplex logical subscribers through one physical callback per message type. The 100,000-distinct-key gate leaves zero resources and exactly two transport callbacks and runs on Windows/Linux CI. | Add a real-transport long-duration memory plateau measurement; structural counts now prove ownership, while process memory remains a separate observation. |
 | P1 | Long-session state growth | Peer-import chronology is deleted. Indexed committed-command facts and receipts own history; handled Eve invocations and processed daemon commands leave their transient inboxes; hot-frame chronology fields are compatibility tombstones. A 10,000-command smoke holds final serialized frame size within 64 bytes of the first, while the live progression smoke requires each handled Eve request to disappear after its receipt. | Define retention/segmentation for the durable fact and receipt journal, then benchmark total `.cc` growth and restart cost. The hot checkpoint and ingress queues are bounded; the audit store is not yet. |
 | P1 | Starbridge finality | The daemon no longer accepts peer committed facts, and the removed CLI lane is rejected explicitly. The authority smoke now enters through canonical Terminus bootstrap instead of treating a rendered frame as durable run state. | Build the typed Pilot candidate, Commander selection/replay, and single-final-log protocol; prove mismatch, late candidate, restart, and non-jurisdiction negatives. |
 
 The generic and product live-network boundaries now have executable witnesses.
-The Aetheria witness proves the real daemon, retained browser lease, commands,
-receipts, and one Odin-mediated physical route replacement. The remaining
-product proof is to expose the same receipt/state to a retained native consumer
-and repeat the chronology against deployed Odin. The generic sample remains
-framework evidence, not a substitute for those product/infrastructure gates.
+The generic witness proves command submission from Chromium and retained C# on
+opposite sides of an Odin-mediated provider route replacement. The Aetheria
+witness proves the real daemon, retained browser lease, commands, receipts, and
+the same physical replacement shape. The remaining product proof is to expose
+the Aetheria receipt/state to a retained native consumer and repeat the product
+chronology against deployed Odin. Released-registry closure remains blocked on
+package publication authority; source witnesses do not launder that gap.
