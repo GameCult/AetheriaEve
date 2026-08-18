@@ -81,6 +81,28 @@ artifact onboarding or the deployed Odin service. Anonymous provider transport
 is confined to loopback development; the Odin fixture uses its authenticated
 host adapter, and a remotely reachable provider still requires one too.
 
+CultMesh reactive documents now perform no polling or serialization while
+idle. Python uses one lazy process scheduler instead of creating an operating-
+system timer/thread for each dirty document, and C# no longer clones both sides
+of a matching canonical echo before discovering that they agree. The full
+reference probe holds 1, 100, and 1,000 writable 16 KiB documents idle for ten
+seconds, then mutates one percent at 60 Hz for ten seconds. At 1,000 documents
+it observed 6,000/6,000 publications, 5.8 KiB of idle allocation, 0.77 ms p99
+update-to-publication latency, and a 7.05 allocation-to-payload ratio. The probe
+fails above a 10x ratio or 250 ms p99 rather than treating those measurements as
+decorative output.
+
+Retained CultMesh sessions now install one physical callback per message type
+and multiplex disposable logical subscribers behind it. A 100,000-distinct-key
+lease/release test finishes with zero active document/collection resources and
+two physical callbacks, not a dead callback pair for every released handle.
+These gates and the cross-runtime explicit-update scheduling gate now run on
+Windows and Linux CI. Eve contract generation and browser lowering, including
+the two-host DOM isolation test, have the same Windows/Linux matrix. The clean
+package-consumer verifier no longer assumes `node.exe` or `npm.cmd` and passes
+from a fresh temporary install on Windows; Linux execution is now owned by CI
+rather than implied by a Windows-only script.
+
 ## Target authority map
 
 Owner:
@@ -179,13 +201,13 @@ test rather than achieved properties.
 
 | Priority | Fracture | Current evidence | Required repair/proof |
 | --- | --- | --- | --- |
-| P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. The executable CultLib scaling gate proves 1, 100, and 1,000 idle documents schedule zero work and editing one percent schedules only that one percent. C# delay ownership is clock-injected; browser animation-frame disposal is now cancellation-correct. | Add measured allocations, clone/serialization counts, payload bytes, and update latency against representative 16 KiB documents; the deterministic scheduling gate does not impersonate those measurements. |
-| P0 | Browser lowerer instance isolation | Eve browser lowering now carries surface/options/styles/component indexes per host, patches only bound component subtrees, and coalesces synchronous binding bursts. A two-host DOM test proves command/asset/skin isolation plus focus, selection, scroll, and root preservation. | Add the browser host witness to CI and the released-artifact consumer smoke. |
+| P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. The executable scaling gate proves 1, 100, and 1,000 idle documents schedule zero work and editing one percent schedules only that one percent. Python uses one lazy scheduler. The C# 16 KiB reference workload records allocation, CPU, threads, payload throughput, and p50/p95/p99 latency; its full 1,000-document run published 6,000/6,000 updates at 0.77 ms p99 and 7.05 allocated bytes per payload byte after the matching-echo clone cut. | Add the same measured payload/allocation/latency probe to TypeScript and Python. Scheduling semantics are shared; measured runtime cost is currently reference-C# evidence. |
+| P0 | Browser lowerer instance isolation | Eve browser lowering now carries surface/options/styles/component indexes per host, patches only bound component subtrees, and coalesces synchronous binding bursts. A two-host DOM test proves command/asset/skin isolation plus focus, selection, scroll, and root preservation. Eve runs the source build and test on Windows and Linux and rejects generated-output drift. | Add the browser host witness to the released-artifact consumer smoke; source-package CI does not prove published artifact closure. |
 | P0 | Conformance witnesses | The static pack resolves repository witnesses and checks schema IDs against typed source. The actual Aetheria browser witness boots the product daemon, discovers and leases the Hangar through a local Odin fixture, lowers it in Chromium, submits the native Verse select command, observes its daemon receipt, rejects a forged client identity, then follows the restarted daemon to a new route and obtains a second receipt through the retained lease. | Repeat the same product chronology through deployed Odin and a retained native consumer; static fixture agreement and the local Odin fixture cannot satisfy those infrastructure/native-runtime proofs. |
 | P0 | Stable identity path | Eve Unity discovers and reconnects through `CultMeshClient`; Aetheria's local `.cc` facade no longer accepts physical endpoints or constructs client-owned Eve surfaces. `CultMeshBrowserOdinRendezvous` now gives browsers the same identity-first Verse-catalog boundary and survives a physical provider move. | Generate Aetheria domain handles over the generic client and prove the actual daemon through local and configured Odin routes without restoring an application-owned replica. |
-| P1 | Contract ownership | Eve `0.3.0` owns the renderer-neutral C# surface contract. A clean Unity consumer passed 136/136 tests against the released CultLib `1.0.45`, Eve surface, and EveUnity packages; Aetheria's daemon project now references Eve rather than EveUnity. | Keep the clean-consumer witness in CI and reject any renderer repository reference from headless daemon projects. |
-| P1 | Executable onboarding | The artifact-only `samples/eve-two-runtime` verifier proves clean package consumption. The separate `samples/eve-browser-network` witness runs a C# provider, local Odin fixture, real Chromium Eve lowerer, and C# observer; it rotates the provider route and proves rediscovery, resubscription, receipts, and durable state. | Run the fixture on Windows/Linux from released artifacts, add retained C# lease reconnection, and keep the local Odin fixture distinct from deployed-Odin evidence. |
-| P1 | Client resource lifetime | `CultMeshClient` now exposes disposable document and collection leases, reference-counts dynamic resources, and reports active resource counts. Churn tests prove released handles leave the cache. | Add the 100k-key allocation/subscription benchmark so the fixed ownership remains visible under load. |
+| P1 | Contract ownership | Eve `0.3.0` owns the renderer-neutral C# surface contract. A clean Unity consumer passed 136/136 tests against the released CultLib `1.0.45`, Eve surface, and EveUnity packages; Aetheria's daemon project now references Eve rather than EveUnity. Eve contract and browser packages now build/test on Windows and Linux. | Put the released clean-Unity consumer in CI and reject any renderer repository reference from headless daemon projects. Source package matrices are necessary but do not prove the released Unity graph. |
+| P1 | Executable onboarding | The artifact-only `samples/eve-two-runtime` verifier packs the local packages, installs them into an empty temporary consumer, and proves DOM lowering plus a headless observer. Its launcher is now OS-neutral and passes on Windows. The separate `samples/eve-browser-network` witness runs a C# provider, local Odin fixture, real Chromium Eve lowerer, and C# observer; it rotates the provider route and proves rediscovery, resubscription, receipts, and durable state. | Run both fixtures on Windows/Linux from released artifacts, add retained C# lease reconnection, and keep the local Odin fixture distinct from deployed-Odin evidence. |
+| P1 | Client resource lifetime | `CultMeshClient` exposes disposable document and collection leases, reference-counts dynamic resources, and reports active resource counts. Retained sessions multiplex logical subscribers through one physical callback per message type. The 100,000-distinct-key gate leaves zero resources and exactly two transport callbacks and runs on Windows/Linux CI. | Add a real-transport long-duration memory plateau measurement; structural counts now prove ownership, while process memory remains a separate observation. |
 | P1 | Long-session state growth | Peer-import chronology is deleted. Indexed committed-command facts and receipts own history; handled Eve invocations and processed daemon commands leave their transient inboxes; hot-frame chronology fields are compatibility tombstones. A 10,000-command smoke holds final serialized frame size within 64 bytes of the first, while the live progression smoke requires each handled Eve request to disappear after its receipt. | Define retention/segmentation for the durable fact and receipt journal, then benchmark total `.cc` growth and restart cost. The hot checkpoint and ingress queues are bounded; the audit store is not yet. |
 | P1 | Starbridge finality | The daemon no longer accepts peer committed facts, and the removed CLI lane is rejected explicitly. The authority smoke now enters through canonical Terminus bootstrap instead of treating a rendered frame as durable run state. | Build the typed Pilot candidate, Commander selection/replay, and single-final-log protocol; prove mismatch, late candidate, restart, and non-jurisdiction negatives. |
 
