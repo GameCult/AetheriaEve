@@ -21,6 +21,12 @@ public static class AetheriaDaemonTutorialRunWriter
         AetheriaStateNode node,
         AetheriaRuntimeCatalogSnapshot catalog,
         string now)
+        => await node.CommitAsync(() => WriteCoreAsync(node, catalog, now)).ConfigureAwait(false);
+
+    private static async Task<AetheriaDaemonWrittenRun> WriteCoreAsync(
+        AetheriaStateNode node,
+        AetheriaRuntimeCatalogSnapshot catalog,
+        string now)
     {
         var factions = AetheriaDaemonTutorialTopologyGenerator.ResolveFossilFactions(catalog);
         var world = AetheriaDaemonTutorialWorldGenerator.Generate(factions, GenerationSeed);
@@ -123,7 +129,6 @@ public static class AetheriaDaemonTutorialRunWriter
         await node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
             .ReplaceAsync(settings)
             .ConfigureAwait(false);
-        await node.FlushAsync().ConfigureAwait(false);
         return new AetheriaDaemonWrittenRun(RunId, runKey, playerEntityKey, true);
     }
 

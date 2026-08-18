@@ -161,8 +161,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         {
             next.Revision = Math.Max(0, existing.Revision) + 1;
             next.UpdatedAtUtc = now ?? "";
-            await pointer.ReplaceAsync(next).ConfigureAwait(false);
-            await _node.FlushAsync().ConfigureAwait(false);
+            await _node.CommitAsync(() => pointer.ReplaceAsync(next)).ConfigureAwait(false);
         }
         return next;
     }
@@ -192,8 +191,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         next.Diagnostic = "";
         next.Revision = Math.Max(0, current.Revision) + 1;
         next.UpdatedAtUtc = now ?? "";
-        await pointer.ReplaceAsync(next).ConfigureAwait(false);
-        await _node.FlushAsync().ConfigureAwait(false);
+        await _node.CommitAsync(() => pointer.ReplaceAsync(next)).ConfigureAwait(false);
         return next;
     }
 
@@ -287,10 +285,20 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             OdinDiscoveryEndpoints = (source.OdinDiscoveryEndpoints ?? Array.Empty<string>()).ToArray(),
             CreatedAtUtc = now ?? ""
         };
-        await _node.MutableDocument<AetheriaProgressionCommandRouteDocument>(routeKey)
-            .ReplaceAsync(route).ConfigureAwait(false);
-        await _node.FlushAsync().ConfigureAwait(false);
-        return route;
+        return await _node.CommitAsync(async () =>
+        {
+            var committed = await _node.MutableDocument<AetheriaProgressionCommandRouteDocument>(routeKey)
+                .ReadAsync().ConfigureAwait(false);
+            if (committed != null)
+            {
+                if (!string.Equals(committed.PayloadHash, payloadHash, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different payload.");
+                return committed;
+            }
+            await _node.MutableDocument<AetheriaProgressionCommandRouteDocument>(routeKey)
+                .ReplaceAsync(route).ConfigureAwait(false);
+            return route;
+        }).ConfigureAwait(false);
     }
 
     public async Task<EveCommandReceiptDocument> ForwardHangarInvocationAsync(
@@ -390,10 +398,12 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         next.Diagnostic = diagnostic;
         next.Revision = Math.Max(0, current.Revision) + 1;
         next.UpdatedAtUtc = now ?? "";
-        await _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
-            .ReplaceAsync(next).ConfigureAwait(false);
-        await _node.FlushAsync().ConfigureAwait(false);
-        return next;
+        return await _node.CommitAsync(async () =>
+        {
+            await _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
+                .ReplaceAsync(next).ConfigureAwait(false);
+            return next;
+        }).ConfigureAwait(false);
     }
 
     private static AetheriaProgressionVerseView UnavailableView(AetheriaProgressionSourceDocument source) => new()

@@ -14,13 +14,15 @@ public static class AetheriaDaemonHangarCoordinator
         AetheriaRuntimeCatalogSnapshot catalog,
         string now)
     {
-        var existing = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
-            .ReadAsync().ConfigureAwait(false);
-        if (existing != null)
+        await node.CommitAsync(async () =>
         {
-            await EnsureDraftAsync(node, existing, now).ConfigureAwait(false);
-            return;
-        }
+            var existing = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                .ReadAsync().ConfigureAwait(false);
+            if (existing != null)
+            {
+                await EnsureDraftCoreAsync(node, existing, now).ConfigureAwait(false);
+                return;
+            }
 
         var factionKey = (catalog.Corporations ?? [])
             .Select(value => value.CorporationKey)
@@ -55,9 +57,9 @@ public static class AetheriaDaemonHangarCoordinator
             .Select(value => new AetheriaHangarItemStack { ItemKey = value.ItemKey, Quantity = 1 })
             .ToArray();
 
-        await node.MutableDocument<AetheriaLoadoutTemplate>(loadoutKey).ReplaceAsync(loadout).ConfigureAwait(false);
-        await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey).ReplaceAsync(new AetheriaHangarState
-        {
+            await node.MutableDocument<AetheriaLoadoutTemplate>(loadoutKey).ReplaceAsync(loadout).ConfigureAwait(false);
+            await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey).ReplaceAsync(new AetheriaHangarState
+            {
             HangarId = "local",
             PlayerKey = LocalPlayerKey,
             Revision = 1,
@@ -74,17 +76,17 @@ public static class AetheriaDaemonHangarCoordinator
             Inventory = inventory,
             LoadoutTemplateKeys = [loadoutKey.ToString()],
             UpdatedAtUtc = now
-        }).ConfigureAwait(false);
-        await node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey).ReplaceAsync(new AetheriaHangarDraftState
-        {
+            }).ConfigureAwait(false);
+            await node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey).ReplaceAsync(new AetheriaHangarDraftState
+            {
             PlayerKey = LocalPlayerKey,
             SelectedShipId = StarterShipId,
             SelectedMode = AetheriaGameModes.Terminus,
             ActiveView = AetheriaHangarViews.Overview,
             Revision = 1,
             UpdatedAtUtc = now
+            }).ConfigureAwait(false);
         }).ConfigureAwait(false);
-        await node.FlushAsync().ConfigureAwait(false);
     }
 
     public static async Task<AetheriaHangarDraftState> EnsureDraftAsync(
@@ -92,15 +94,8 @@ public static class AetheriaDaemonHangarCoordinator
         AetheriaHangarState hangar,
         string now)
     {
-        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            return await EnsureDraftCoreAsync(node, hangar, now).ConfigureAwait(false);
-        }
-        finally
-        {
-            AetheriaHangarMutationGate.Gate.Release();
-        }
+        return await node.CommitAsync(
+            () => EnsureDraftCoreAsync(node, hangar, now)).ConfigureAwait(false);
     }
 
     private static async Task<AetheriaHangarDraftState> EnsureDraftCoreAsync(
@@ -137,7 +132,6 @@ public static class AetheriaDaemonHangarCoordinator
             UpdatedAtUtc = now
         };
         await pointer.ReplaceAsync(next).ConfigureAwait(false);
-        await node.FlushAsync().ConfigureAwait(false);
         return next;
     }
 
@@ -179,8 +173,7 @@ public static class AetheriaDaemonHangarCoordinator
         long expectedRevision,
         string now)
     {
-        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
-        try
+        return await node.CommitAsync(async () =>
         {
             var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
                 .ReadAsync().ConfigureAwait(false)
@@ -233,13 +226,8 @@ public static class AetheriaDaemonHangarCoordinator
                     LastStartCommandId = requestId,
                     UpdatedAtUtc = now
                 }).ConfigureAwait(false);
-            await node.FlushAsync().ConfigureAwait(false);
             return receipt;
-        }
-        finally
-        {
-            AetheriaHangarMutationGate.Gate.Release();
-        }
+        }).ConfigureAwait(false);
     }
 
     public static async Task<bool> CanContinueAsync(
@@ -251,15 +239,17 @@ public static class AetheriaDaemonHangarCoordinator
         AetheriaStateNode node,
         string deploymentId)
     {
-        var deployment = await FindContinuationAsync(node, deploymentId).ConfigureAwait(false);
-        if (deployment == null) return null;
-        var settingsPointer = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey);
-        var settings = await settingsPointer.ReadAsync().ConfigureAwait(false) ?? new AetheriaPlayerSettings();
-        settings.ActiveRunKey = deployment.RunRecordKey;
-        settings.LastUpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O");
-        await settingsPointer.ReplaceAsync(settings).ConfigureAwait(false);
-        await node.FlushAsync().ConfigureAwait(false);
-        return deployment;
+        return await node.CommitAsync(async () =>
+        {
+            var deployment = await FindContinuationAsync(node, deploymentId).ConfigureAwait(false);
+            if (deployment == null) return null;
+            var settingsPointer = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey);
+            var settings = await settingsPointer.ReadAsync().ConfigureAwait(false) ?? new AetheriaPlayerSettings();
+            settings.ActiveRunKey = deployment.RunRecordKey;
+            settings.LastUpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O");
+            await settingsPointer.ReplaceAsync(settings).ConfigureAwait(false);
+            return deployment;
+        }).ConfigureAwait(false);
     }
 
     private static async Task<AetheriaDeploymentReceipt?> FindContinuationAsync(
@@ -300,8 +290,7 @@ public static class AetheriaDaemonHangarCoordinator
         string now,
         Action<AetheriaHangarDraftState, AetheriaHangarState> mutate)
     {
-        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
-        try
+        return await node.CommitAsync(async () =>
         {
             var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
                 .ReadAsync().ConfigureAwait(false)
@@ -320,13 +309,8 @@ public static class AetheriaDaemonHangarCoordinator
             mutate(next, hangar);
             await node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
                 .ReplaceAsync(next).ConfigureAwait(false);
-            await node.FlushAsync().ConfigureAwait(false);
             return next;
-        }
-        finally
-        {
-            AetheriaHangarMutationGate.Gate.Release();
-        }
+        }).ConfigureAwait(false);
     }
 
     private static AetheriaRuntimeEntityLoadoutCommit ToRuntimeLoadout(

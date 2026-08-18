@@ -61,22 +61,24 @@ var latestFrame = await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>
 TraceStartup("latest-frame");
 var unityBundles = BuildUnityBundleArtifactSet(options);
 TraceStartup("provider-asset-bundles");
-await EnsureWorldDocumentAsync(node).ConfigureAwait(false);
-TraceStartup("world-document");
 var persistedRuntimeCatalog = await node.Database
     .GetAsync<AetheriaRuntimeCatalogSnapshot>(AetheriaStateNode.RuntimeCatalogKey)
     .ConfigureAwait(false);
-var tradePolicyChanged = await EnsureTradeValuePolicyAsync(node, startedAtUtc).ConfigureAwait(false);
-TraceStartup("trade-policy");
-var nativeCatalogChanged = await AetheriaDaemonNativeCatalog.EnsureAsync(node).ConfigureAwait(false);
-TraceStartup("native-catalog");
-await node.FlushAsync().ConfigureAwait(false);
+await node.CommitAsync(async () =>
+{
+    await EnsureWorldDocumentAsync(node).ConfigureAwait(false);
+    TraceStartup("world-document");
+    var tradePolicyChanged = await EnsureTradeValuePolicyAsync(node, startedAtUtc).ConfigureAwait(false);
+    TraceStartup("trade-policy");
+    var nativeCatalogChanged = await AetheriaDaemonNativeCatalog.EnsureAsync(node).ConfigureAwait(false);
+    TraceStartup("native-catalog");
+    if (persistedRuntimeCatalog == null ||
+        string.IsNullOrWhiteSpace(persistedRuntimeCatalog.NameCorpusRecordKey) ||
+        tradePolicyChanged ||
+        nativeCatalogChanged)
+        await node.RefreshRuntimeCatalogAsync().ConfigureAwait(false);
+}).ConfigureAwait(false);
 TraceStartup("initial-flush");
-if (persistedRuntimeCatalog == null ||
-    string.IsNullOrWhiteSpace(persistedRuntimeCatalog.NameCorpusRecordKey) ||
-    tradePolicyChanged ||
-    nativeCatalogChanged)
-    await node.RefreshRuntimeCatalogAsync().ConfigureAwait(false);
 TraceStartup("runtime-catalog");
 await AetheriaDaemonHangarCoordinator.EnsureAsync(node, node.RuntimeCatalog().Latest(), startedAtUtc).ConfigureAwait(false);
 TraceStartup("hangar");
@@ -606,27 +608,29 @@ static async Task PersistPreparedDocumentsAsync(
     AetheriaReactiveSurfacePublicationState? reactiveSurfaceState = null)
 {
     await physicsPersistence.PersistPrivateAsync(prepared.Physics).ConfigureAwait(false);
-    await PublishDurableDaemonDocumentsAsync(node, prepared.Publication).ConfigureAwait(false);
-    if (initialTopology)
+    await node.CommitAsync(async () =>
     {
-        await PublishSecondaryTopologyDocumentsAsync(node, options, prepared.Publication).ConfigureAwait(false);
-        await PublishStateSurfacesAsync(node, options, prepared.Publication.Frame.PublishedAtUtc, publishHangar: false).ConfigureAwait(false);
-        await PublishOdinSurfaceAnnouncementsAsync(node, options, prepared.Publication.Frame.PublishedAtUtc).ConfigureAwait(false);
-    }
-    else
-    {
-        if (unityBundles == null)
-            throw new InvalidOperationException("Periodic publication requires the provider asset set.");
-        await PublishClientGameplayDocumentsAsync(
-            node,
-            options,
-            unityBundles,
-            prepared.Publication,
-            prepared.Catalog,
-            reactiveSurfaceState,
-            publishTopology: false).ConfigureAwait(false);
-    }
-    await node.FlushAsync(soft: false).ConfigureAwait(false);
+        await PublishDurableDaemonDocumentsAsync(node, prepared.Publication).ConfigureAwait(false);
+        if (initialTopology)
+        {
+            await PublishSecondaryTopologyDocumentsAsync(node, options, prepared.Publication).ConfigureAwait(false);
+            await PublishStateSurfacesAsync(node, options, prepared.Publication.Frame.PublishedAtUtc, publishHangar: false).ConfigureAwait(false);
+            await PublishOdinSurfaceAnnouncementsAsync(node, options, prepared.Publication.Frame.PublishedAtUtc).ConfigureAwait(false);
+        }
+        else
+        {
+            if (unityBundles == null)
+                throw new InvalidOperationException("Periodic publication requires the provider asset set.");
+            await PublishClientGameplayDocumentsAsync(
+                node,
+                options,
+                unityBundles,
+                prepared.Publication,
+                prepared.Catalog,
+                reactiveSurfaceState,
+                publishTopology: false).ConfigureAwait(false);
+        }
+    }, soft: false).ConfigureAwait(false);
     await physicsPersistence.ActivateAsync().ConfigureAwait(false);
 }
 
@@ -754,14 +758,17 @@ static async Task PublishCommittedFactAsync(
     AetheriaStateNode node,
     AetheriaRuntimeCommittedCommandFactDocument fact)
 {
-    await node.PutCommittedCommandFactAsync(fact).ConfigureAwait(false);
-    var receipt = AetheriaRuntimeDaemonReceiptProjector.Project(
-        fact,
-        AetheriaRuntimeDaemonGameSurfaceBuilder.SurfaceId);
-    await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(receipt.CommandId), receipt)
-        .ConfigureAwait(false);
-    if (string.Equals(Environment.GetEnvironmentVariable("AETHERIA_TRACE_EVE_SNAPSHOTS"), "1", StringComparison.Ordinal))
-        Console.WriteLine($"Eve command receipt command={receipt.CommandId} state={receipt.State} provider={receipt.ProviderId}");
+    await node.CommitAsync(async () =>
+    {
+        await node.PutCommittedCommandFactAsync(fact).ConfigureAwait(false);
+        var receipt = AetheriaRuntimeDaemonReceiptProjector.Project(
+            fact,
+            AetheriaRuntimeDaemonGameSurfaceBuilder.SurfaceId);
+        await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(receipt.CommandId), receipt)
+            .ConfigureAwait(false);
+        if (string.Equals(Environment.GetEnvironmentVariable("AETHERIA_TRACE_EVE_SNAPSHOTS"), "1", StringComparison.Ordinal))
+            Console.WriteLine($"Eve command receipt command={receipt.CommandId} state={receipt.State} provider={receipt.ProviderId}");
+    }).ConfigureAwait(false);
 }
 
 static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
@@ -2594,13 +2601,18 @@ static EveSurfaceComponent SurfaceNode(
         children);
 }
 
-static async Task<bool> AcceptCoreEveInvocationsAsync(
+static Task<bool> AcceptCoreEveInvocationsAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    AetheriaRuntimeDaemonFrameDocument? currentFrame)
+    => node.CommitAsync(() => AcceptCoreEveInvocationsCoreAsync(node, options, currentFrame));
+
+static async Task<bool> AcceptCoreEveInvocationsCoreAsync(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
     AetheriaRuntimeDaemonFrameDocument? currentFrame)
 {
     var activatedSession = false;
-    var deletedAny = false;
     var pendingRequests = node.Cache.GetStoredDocuments<EveSurfaceCommandRequest>()
         .Where(stored => !string.IsNullOrWhiteSpace(((EveSurfaceCommandRequest)stored.Document).CommandId))
         .Select(stored => (stored.Key, Request: (EveSurfaceCommandRequest)stored.Document))
@@ -2621,7 +2633,6 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
         {
             Console.Error.WriteLine($"Rejected Hangar command envelope '{request.CommandId}': {error.Message}");
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
-            deletedAny = true;
             continue;
         }
         var alreadyReceipted = node.Cache.Get<EveCommandReceiptDocument>(
@@ -2631,7 +2642,6 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
         if (alreadyReceipted || alreadySubmitted)
         {
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
-            deletedAny = true;
             continue;
         }
 
@@ -2648,7 +2658,6 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
                 continue;
             }
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
-            deletedAny = true;
             continue;
         }
 
@@ -2664,7 +2673,6 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
             command.AuthorRuntimeId = request.ClientId;
             await node.SubmitDaemonCommandAsync(command).ConfigureAwait(false);
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
-            deletedAny = true;
             continue;
         }
 
@@ -2683,14 +2691,18 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
         await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(denied.CommandId), denied)
             .ConfigureAwait(false);
         await node.Database.DeleteAsync<EveSurfaceCommandRequest>(storedRequest.Key).ConfigureAwait(false);
-        deletedAny = true;
     }
-    if (deletedAny)
-        await node.FlushAsync().ConfigureAwait(false);
     return activatedSession;
 }
 
-static async Task<bool> AcceptHangarInvocationAsync(
+static Task<bool> AcceptHangarInvocationAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    EveSurfaceCommandRequest request,
+    string payloadHash)
+    => node.CommitAsync(() => AcceptHangarInvocationCoreAsync(node, options, request, payloadHash));
+
+static async Task<bool> AcceptHangarInvocationCoreAsync(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
     EveSurfaceCommandRequest request,
@@ -2729,7 +2741,6 @@ static async Task<bool> AcceptHangarInvocationAsync(
             await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), remoteReceipt)
                 .ConfigureAwait(false);
             await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
-            await node.FlushAsync().ConfigureAwait(false);
             return false;
         }
 
@@ -2880,7 +2891,6 @@ static async Task<bool> AcceptHangarInvocationAsync(
         navigation);
     await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), receiptDocument)
         .ConfigureAwait(false);
-    await node.FlushAsync().ConfigureAwait(false);
     return activatesSession;
 }
 
@@ -2994,11 +3004,18 @@ static async Task AcceptEveCommandsAsync(
     }
 }
 
-static async Task PublishStateSurfacesAsync(
+static Task PublishStateSurfacesAsync(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
     string updatedAtUtc,
     bool publishHangar = true)
+    => node.CommitAsync(() => PublishStateSurfacesCoreAsync(node, options, updatedAtUtc, publishHangar));
+
+static async Task PublishStateSurfacesCoreAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    string updatedAtUtc,
+    bool publishHangar)
 {
     var verseHost = await EnsureVerseHostSettingsAsync(node, options, updatedAtUtc).ConfigureAwait(false);
     var eveStatus = await node.MutableDocument<AetheriaEveCommandAcceptanceStatus>(AetheriaStateNode.EveCommandAcceptanceStatusKey).ReadAsync().ConfigureAwait(false);
@@ -3038,7 +3055,6 @@ static async Task PublishStateSurfacesAsync(
                 hangarView.Draft.ActiveView))
             .ConfigureAwait(false);
     }
-    await node.FlushAsync().ConfigureAwait(false);
 }
 
 static AetheriaProgressionVerseCoordinator CreateProgressionVerseCoordinator(
@@ -3570,7 +3586,14 @@ static async Task EnsurePlayableRunDocumentsAsync(
         now).ConfigureAwait(false);
 }
 
-static async Task EnsureGameSessionAsync(
+static Task EnsureGameSessionAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    string now,
+    AetheriaRuntimeDaemonFrameDocument? latestFrame)
+    => node.CommitAsync(() => EnsureGameSessionCoreAsync(node, options, now, latestFrame));
+
+static async Task EnsureGameSessionCoreAsync(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
     string now,
@@ -3623,7 +3646,6 @@ static async Task EnsureGameSessionAsync(
             EffectiveSimulationRate = initialSimulationRate,
             UpdatedAtUtc = now
         }).ConfigureAwait(false);
-    await node.FlushAsync().ConfigureAwait(false);
 }
 
 static bool FrameBelongsToSession(
@@ -4791,16 +4813,13 @@ internal sealed class AetheriaDaemonHostOptions
 
 public static class AetheriaHangarCommandJournal
 {
-    private static readonly SemaphoreSlim Gate = new(1, 1);
-
     public static async Task<string> AdmitAsync(
         AetheriaStateNode node,
         CultRecordKey requestRecordKey,
         EveSurfaceCommandRequest request,
         string now)
     {
-        await Gate.WaitAsync().ConfigureAwait(false);
-        try
+        return await node.CommitAsync(async () =>
         {
             var payloadHash = PayloadHash(request);
             var envelopeKey = AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId);
@@ -4820,13 +4839,8 @@ public static class AetheriaHangarCommandJournal
             }
             if (pending == null)
                 await node.Database.PutAsync(requestRecordKey, request).ConfigureAwait(false);
-            await node.FlushAsync().ConfigureAwait(false);
             return payloadHash;
-        }
-        finally
-        {
-            Gate.Release();
-        }
+        }).ConfigureAwait(false);
     }
 
     public static async Task<string> ValidateAsync(
@@ -4834,8 +4848,7 @@ public static class AetheriaHangarCommandJournal
         EveSurfaceCommandRequest request,
         string now)
     {
-        await Gate.WaitAsync().ConfigureAwait(false);
-        try
+        return await node.CommitAsync(async () =>
         {
             var payloadHash = PayloadHash(request);
             var envelopeKey = AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId);
@@ -4846,14 +4859,9 @@ public static class AetheriaHangarCommandJournal
             {
                 await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
                     .ReplaceAsync(NewEnvelope(request, payloadHash, now)).ConfigureAwait(false);
-                await node.FlushAsync().ConfigureAwait(false);
             }
             return payloadHash;
-        }
-        finally
-        {
-            Gate.Release();
-        }
+        }).ConfigureAwait(false);
     }
 
     public static string PayloadHash(EveSurfaceCommandRequest request)

@@ -31,6 +31,8 @@ public static class AetheriaDocumentRegistry
         typeof(AetheriaHangarState),
         typeof(AetheriaHangarDraftState),
         typeof(AetheriaProgressionSourceDocument),
+        typeof(AetheriaHangarCommandEnvelopeDocument),
+        typeof(AetheriaProgressionCommandRouteDocument),
         typeof(AetheriaRuntimeSession),
         typeof(AetheriaMigrationLedger),
         typeof(AetheriaLegacyCatalogQuarantine),

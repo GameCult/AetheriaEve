@@ -4,6 +4,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Aetheria.State.Documents;
 using GameCult.Aetheria.State.Verse;
@@ -33,6 +34,8 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
         AetheriaCatalogKeys.ItemDefinitionFromLegacyId("8ec30f8d-8536-48b4-bd64-65f29f229895").ToString()  // Dockyard berth
     ];
     private readonly CultMeshNode _node;
+    private readonly SemaphoreSlim _commitGate = new(1, 1);
+    private readonly AsyncLocal<int> _commitDepth = new();
     private CultMeshDocumentHandle<AetheriaRuntimeCatalogSnapshot>? _runtimeCatalog;
     private CultMeshDocumentHandle<AetheriaRuntimeNameCorpusSnapshot>? _runtimeNameCorpus;
     private CultMeshDocumentHandle<EveSurfaceDocument>? _catalogSurface;
@@ -293,23 +296,26 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
     public async Task<AetheriaRuntimeCatalogSnapshot> RefreshRuntimeCatalogAsync()
     {
         var snapshot = AetheriaRuntimeCatalogStore.OpenReadOnly(StatePath);
-        await Database.PutAsync(
-            RuntimeNameCorpusKey,
-            new AetheriaRuntimeNameCorpusSnapshot
-            {
-                NameFiles = snapshot.NameFiles.ToArray()
-            }).ConfigureAwait(false);
-        snapshot.NameFiles = snapshot.NameFiles
-            .Select(nameFile => new AetheriaRuntimeNameFile(
-                nameFile.NameFileKey,
-                nameFile.Name,
-                nameFile.NameCount,
-                nameFile.SampleNames.ToArray(),
-                Array.Empty<string>()))
-            .ToArray();
-        snapshot.NameCorpusRecordKey = RuntimeNameCorpusKey.ToString();
-        await Database.PutAsync(RuntimeCatalogKey, snapshot).ConfigureAwait(false);
-        return snapshot;
+        return await CommitAsync(async () =>
+        {
+            await Database.PutAsync(
+                RuntimeNameCorpusKey,
+                new AetheriaRuntimeNameCorpusSnapshot
+                {
+                    NameFiles = snapshot.NameFiles.ToArray()
+                }).ConfigureAwait(false);
+            snapshot.NameFiles = snapshot.NameFiles
+                .Select(nameFile => new AetheriaRuntimeNameFile(
+                    nameFile.NameFileKey,
+                    nameFile.Name,
+                    nameFile.NameCount,
+                    nameFile.SampleNames.ToArray(),
+                    Array.Empty<string>()))
+                .ToArray();
+            snapshot.NameCorpusRecordKey = RuntimeNameCorpusKey.ToString();
+            await Database.PutAsync(RuntimeCatalogKey, snapshot).ConfigureAwait(false);
+            return snapshot;
+        }).ConfigureAwait(false);
     }
 
     public Task<CultRecordHandle<AetheriaRuntimeDaemonCommandDocument>> SubmitDaemonCommandAsync(
@@ -322,7 +328,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
         if (string.IsNullOrWhiteSpace(command.IssuedAtUtc))
             command.IssuedAtUtc = DateTime.UtcNow.ToString("O");
 
-        return Database.PutAsync(DaemonCommandKey(command.CommandId), command);
+        return CommitAsync(() => Database.PutAsync(DaemonCommandKey(command.CommandId), command));
     }
 
     public Task<CultRecordHandle<AetheriaRuntimeCommittedCommandFactDocument>> PutCommittedCommandFactAsync(
@@ -335,9 +341,9 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
         if (string.IsNullOrWhiteSpace(fact.CommittedAtUtc))
             fact.CommittedAtUtc = DateTime.UtcNow.ToString("O");
 
-        return Database.PutAsync(
+        return CommitAsync(() => Database.PutAsync(
             new CultRecordKey(AetheriaRuntimeCommittedCommandFactDocument.CreateRecordKey(fact.FactId)),
-            fact);
+            fact));
     }
 
     public Task DeleteDaemonCommandAsync(string commandId)
@@ -345,8 +351,8 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
         if (string.IsNullOrWhiteSpace(commandId))
             throw new ArgumentException("Daemon command id must be non-empty.", nameof(commandId));
 
-        return Database.DeleteAsync<AetheriaRuntimeDaemonCommandDocument>(
-            AetheriaRuntimeVerseRecordKeys.DaemonCommand(commandId));
+        return CommitAsync(() => Database.DeleteAsync<AetheriaRuntimeDaemonCommandDocument>(
+            AetheriaRuntimeVerseRecordKeys.DaemonCommand(commandId)));
     }
 
     private static CultRecordKey DaemonCommandKey(string commandId)
@@ -365,7 +371,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
         if (string.IsNullOrWhiteSpace(command.IssuedAtUtc))
             command.IssuedAtUtc = DateTime.UtcNow.ToString("O");
 
-        return Database.PutAsync(EveCommandKey(command.CommandId), command);
+        return CommitAsync(() => Database.PutAsync(EveCommandKey(command.CommandId), command));
     }
 
     private static CultRecordKey EveCommandKey(string commandId)
@@ -373,9 +379,47 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
         return new CultRecordKey($"eve:commands:{StableToken(commandId)}:gamecult.eve.command.v1");
     }
 
+    /// <summary>
+    /// Owns one Aetheria state mutation and its durable manifest commit. Every document
+    /// belonging to the mutation is staged while this scope is held; nested scopes join
+    /// the outer commit and cannot publish an intermediate generation.
+    /// </summary>
+    public Task CommitAsync(Func<Task> stageAsync, bool soft = false)
+    {
+        if (stageAsync == null) throw new ArgumentNullException(nameof(stageAsync));
+        return CommitAsync(async () =>
+        {
+            await stageAsync().ConfigureAwait(false);
+            return true;
+        }, soft);
+    }
+
+    /// <summary>Runs one value-producing mutation inside the state-node commit boundary.</summary>
+    public async Task<T> CommitAsync<T>(Func<Task<T>> stageAsync, bool soft = false)
+    {
+        if (stageAsync == null) throw new ArgumentNullException(nameof(stageAsync));
+        if (_commitDepth.Value > 0)
+            return await stageAsync().ConfigureAwait(false);
+
+        await _commitGate.WaitAsync().ConfigureAwait(false);
+        _commitDepth.Value++;
+        try
+        {
+            var result = await stageAsync().ConfigureAwait(false);
+            await _node.FlushAsync(soft).ConfigureAwait(false);
+            return result;
+        }
+        finally
+        {
+            _commitDepth.Value--;
+            _commitGate.Release();
+        }
+    }
+
+    /// <summary>Commits any already-staged legacy mutation through the same state-node owner.</summary>
     public Task FlushAsync(bool soft = false)
     {
-        return _node.FlushAsync(soft);
+        return CommitAsync(() => Task.CompletedTask, soft);
     }
 
     private static string StableToken(string value)
@@ -459,7 +503,13 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
             _ => Database.WatchRecord<T>(key)
                 .Where(change => change.Document != null)
                 .Select(change => change.Document!),
-            async (_, value) => { await Database.PutAsync(key, value).ConfigureAwait(false); },
+            async (_, value) =>
+            {
+                await CommitAsync(async () =>
+                {
+                    await Database.PutAsync(key, value).ConfigureAwait(false);
+                }).ConfigureAwait(false);
+            },
             sources:
             [
                 CultMesh.ProjectionSource(key.ToString())
@@ -468,6 +518,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
 
     public void Dispose()
     {
+        _commitGate.Dispose();
         _node.Dispose();
     }
 

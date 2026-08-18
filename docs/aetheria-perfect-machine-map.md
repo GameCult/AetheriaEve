@@ -16,9 +16,14 @@ Date: 2026-06-13
 > Hangar, draft, run, or policy state. The Hangar admission owner plans against a
 > clone, generates the run, then submits Hangar state, immutable
 > Deployment/loadout snapshot, receipt-owned run ID/record key, run state, and
-> `GameSession` through one Hangar mutation gate. CultCache v4 writes content-addressed
-> record pages and exposes the batch through one atomic manifest generation
-> swap. `ActiveRunKey` is derived, and stale daemon frames cannot replace the
+> `GameSession` through the state node's single mutation-and-commit boundary.
+> Hangar actions, command ingress, run generation, and periodic frame/surface
+> publication all join that owner; no opportunistic flush can publish another
+> operation's staged subset. CultCache v4 writes content-addressed record pages,
+> exposes the batch through one atomic manifest generation swap, and leases the
+> selected manifest generation until a reader has hydrated every referenced
+> page. Observer callbacks run only after that read lease is released.
+> `ActiveRunKey` is derived, and stale daemon frames cannot replace the
 > session-owned run identity. Forwarded remote operations persist an immutable
 > command envelope and Verse/authority/route target before uncertain timeout;
 > later Verse selection cannot retarget the retry. A remote

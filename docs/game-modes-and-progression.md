@@ -195,10 +195,14 @@ Launch consumes the daemon-owned draft and instantiates its selected committed
 loadout into a newly identified Terminus, Starbridge, or Arena session. The
 accepted Deployment receipt owns that run identity and exact run-record key;
 Hangar mutation, receipt, immutable loadout snapshot, generated run, and active
-`GameSession` enter one staged batch under the single Hangar mutation gate.
+`GameSession` enter one staged batch under the state node's single
+mutation-and-commit boundary. Command ingress and periodic multi-document
+publication use that same owner and cannot flush the batch halfway through.
 CultCache directory storage writes immutable generation pages and exposes the
-batch with one atomic manifest swap; a failed write reopens entirely before or
-after the deployment, never between them. `ActiveRunKey` is only a derived convenience pointer.
+batch with one atomic manifest swap; readers hold the selected generation
+through complete page hydration, then release it before publishing observers.
+A failed write reopens entirely before or after the deployment, never between
+them. `ActiveRunKey` is only a derived convenience pointer.
 Continue resolves the receipt-owned run instead of guessing through that global
 pointer, and reopens only a deployment matching both selected ship and mode.
 The active `GameSession` owns live run identity. A prior daemon frame is reusable

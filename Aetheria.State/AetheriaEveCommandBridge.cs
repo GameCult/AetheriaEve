@@ -27,10 +27,14 @@ public static class AetheriaEveCommandBridge
 {
     public const string CommandSchema = "gamecult.eve.command.v1";
 
-    public static async Task<AetheriaEveCommandAcceptanceReport> AcceptObservedAsync(AetheriaStateNode node)
+    public static Task<AetheriaEveCommandAcceptanceReport> AcceptObservedAsync(AetheriaStateNode node)
     {
         if (node == null) throw new ArgumentNullException(nameof(node));
+        return node.CommitAsync(() => AcceptObservedCoreAsync(node));
+    }
 
+    private static async Task<AetheriaEveCommandAcceptanceReport> AcceptObservedCoreAsync(AetheriaStateNode node)
+    {
         var report = new AetheriaEveCommandAcceptanceReport();
         var accepted = new List<string>();
         var rejected = new List<string>();
@@ -65,7 +69,6 @@ public static class AetheriaEveCommandBridge
             switch (command.Kind)
             {
                 case AetheriaRuntimeEveCommandKind.CatalogRefresh:
-                    await node.FlushAsync().ConfigureAwait(false);
                     var catalog = await node.RefreshRuntimeCatalogAsync().ConfigureAwait(false);
                     await node.MutableDocument<EveSurfaceDocument>(AetheriaStateNode.CatalogSurfaceKey)
                         .ReplaceAsync(AetheriaEveSurfaceDocuments.BuildCatalogSurface(catalog, command.IssuedAtUtc))
@@ -138,7 +141,6 @@ public static class AetheriaEveCommandBridge
                 .ConfigureAwait(false);
         }
 
-        await node.FlushAsync().ConfigureAwait(false);
         report.AcceptedCommandIds = accepted.ToArray();
         report.RejectedCommandIds = rejected.ToArray();
         report.AccountedCommandIds = report.AcceptedCommandIds

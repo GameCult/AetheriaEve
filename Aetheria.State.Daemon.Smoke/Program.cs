@@ -117,6 +117,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         RunCheck(HangarLaunchUsesConfiguredLoadoutAndContinuesSavedRun);
         RunCheck(EveryAdvertisedModeUsesTheSharedDeploymentBoundary);
         RunCheck(ConcurrentHangarCommandIdsAdmitOneImmutablePayload);
+        RunCheck(StateNodeCommitScopeCannotBeFlushedHalfwayByCommandIngress);
     }
 
     public void RunCommandScale() => RunCheck(FrameSizeDoesNotGrowWithCommandChronology);
@@ -405,6 +406,110 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 .ReadAsync().GetAwaiter().GetResult()!;
             Require(string.Equals(envelope.PayloadHash, AetheriaHangarCommandJournal.PayloadHash(pending), StringComparison.Ordinal),
                 "the durable Hangar command envelope and executable request must describe the same winning payload");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void StateNodeCommitScopeCannotBeFlushedHalfwayByCommandIngress()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"aetheria-state-commit-{Guid.NewGuid():N}");
+        var statePath = Path.Combine(root, "aetheria.cc");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var node = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
+            var runtimeCatalog = TutorialPopulationCatalog(out _);
+            runtimeCatalog.Items.Single(item => string.Equals(item.HullType, "Station", StringComparison.Ordinal)).ItemKey =
+                AetheriaDaemonNativeCatalog.DockyardHullItemKey;
+            AetheriaDaemonHangarCoordinator.EnsureAsync(node, runtimeCatalog, "2026-08-19T00:00:00Z")
+                .GetAwaiter().GetResult();
+            node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
+                .ReplaceAsync(new AetheriaProgressionSourceDocument
+                {
+                    SelectedVerseId = AetheriaProgressionSources.Local,
+                    Status = AetheriaProgressionSourceStatuses.Local,
+                    Revision = 1,
+                    UpdatedAtUtc = "2026-08-19T00:00:00Z"
+                }).GetAwaiter().GetResult();
+
+            var before = node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
+                .ReadAsync().GetAwaiter().GetResult()!;
+            using var firstDocumentStaged = new ManualResetEventSlim();
+            using var releaseTransaction = new ManualResetEventSlim();
+            var transaction = Task.Run(() => node.CommitAsync(async () =>
+            {
+                await node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
+                    .ReplaceAsync(new AetheriaHangarDraftState
+                    {
+                        PlayerKey = before.PlayerKey,
+                        SelectedShipId = before.SelectedShipId,
+                        SelectedMode = AetheriaGameModes.Arena,
+                        ActiveView = before.ActiveView,
+                        Revision = before.Revision + 1,
+                        UpdatedAtUtc = "2026-08-19T00:00:01Z"
+                    }).ConfigureAwait(false);
+                firstDocumentStaged.Set();
+                Require(releaseTransaction.Wait(TimeSpan.FromSeconds(5)),
+                    "state transaction test timed out before staging its matching document");
+                await node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
+                    .ReplaceAsync(new AetheriaProgressionSourceDocument
+                    {
+                        SelectedVerseId = AetheriaProgressionSources.Local,
+                        Status = AetheriaProgressionSourceStatuses.Local,
+                        Diagnostic = "same-generation",
+                        Revision = 2,
+                        UpdatedAtUtc = "2026-08-19T00:00:01Z"
+                    }).ConfigureAwait(false);
+            }));
+            Require(firstDocumentStaged.Wait(TimeSpan.FromSeconds(5)),
+                "state transaction did not reach its deterministic midpoint");
+
+            var commandId = "commit-boundary-ingress";
+            var request = new EveSurfaceCommandRequest(
+                AetheriaRuntimeProviderIdentity.ProviderId,
+                AetheriaRuntimeHangarCommands.SurfaceId,
+                new CultMeshOperationInvocationDescriptor(
+                    AetheriaRuntimeHangarCommands.SelectShip,
+                    idempotencyKey: commandId),
+                CultMesh.OperationPayload(("shipId", before.SelectedShipId)),
+                DateTimeOffset.Parse("2026-08-19T00:00:01Z", CultureInfo.InvariantCulture),
+                "pilot:commit-smoke");
+            var ingress = AetheriaHangarCommandJournal.AdmitAsync(
+                node,
+                new CultRecordKey(AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + commandId),
+                request,
+                "2026-08-19T00:00:01Z");
+            Require(!ingress.Wait(TimeSpan.FromMilliseconds(100)),
+                "command ingress must not flush while another state-node generation is staged");
+
+            using (var durableReader = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult())
+            {
+                var durableDraft = durableReader.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                var durableEnvelope = durableReader.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(
+                        AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(commandId))
+                    .ReadAsync().GetAwaiter().GetResult();
+                Require(durableDraft.Revision == before.Revision && durableEnvelope == null,
+                    "durable readers must see the complete prior generation while a state transaction is open");
+            }
+
+            releaseTransaction.Set();
+            Task.WhenAll(transaction, ingress).GetAwaiter().GetResult();
+            using var reopened = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
+            var finalDraft = reopened.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
+                .ReadAsync().GetAwaiter().GetResult()!;
+            var finalSource = reopened.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
+                .ReadAsync().GetAwaiter().GetResult()!;
+            var finalEnvelope = reopened.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(
+                    AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(commandId))
+                .ReadAsync().GetAwaiter().GetResult();
+            Require(finalDraft.SelectedMode == AetheriaGameModes.Arena &&
+                    finalSource.Diagnostic == "same-generation" &&
+                    finalEnvelope != null,
+                "the complete state transaction must commit before the queued ingress generation");
         }
         finally
         {

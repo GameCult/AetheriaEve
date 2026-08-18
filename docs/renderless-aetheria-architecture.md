@@ -115,8 +115,12 @@ invokes the selected Verse's authoritative Hangar. A separate typed Hangar
 draft owns the current ship, mode, and view selection; button payloads and
 renderers do not. The immutable Deployment receipt owns the exact run identity
 and record key; Hangar state, receipt, loadout snapshot, generated run, and
-`GameSession` share one staged Hangar commit. CultCache publishes immutable
-record pages through one atomic manifest generation swap, while `ActiveRunKey`
+`GameSession` share one staged state-node commit. The same state-node owner
+serializes command ingress and periodic multi-document publication, so neither
+can flush the other's intermediate writes. CultCache publishes immutable
+record pages through one atomic manifest generation swap; readers lease that
+generation through complete page hydration and release it before notifying
+observers. `ActiveRunKey`
 is derived navigation state. The session owns live run identity; a cached frame
 is input only when its run ID matches. An accepted launch or
 continue receipt carries a renderer-neutral navigation target: stable Verse,

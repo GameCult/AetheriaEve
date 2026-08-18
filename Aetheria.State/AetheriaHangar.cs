@@ -13,8 +13,7 @@ public static class AetheriaHangar
         if (node == null) throw new ArgumentNullException(nameof(node));
         if (request == null) throw new ArgumentNullException(nameof(request));
 
-        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
-        try
+        return await node.CommitAsync<AetheriaDeploymentReceipt>(async () =>
         {
             var pointer = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey);
             var hangar = await pointer.ReadAsync().ConfigureAwait(false)
@@ -30,13 +29,8 @@ public static class AetheriaHangar
                 return receipt;
 
             await pointer.ReplaceAsync(updated).ConfigureAwait(false);
-            await node.FlushAsync().ConfigureAwait(false);
             return receipt;
-        }
-        finally
-        {
-            AetheriaHangarMutationGate.Gate.Release();
-        }
+        }).ConfigureAwait(false);
     }
 
     public static (AetheriaHangarState Hangar, AetheriaDeploymentReceipt Receipt) Plan(
@@ -98,8 +92,7 @@ public static class AetheriaHangar
         bool hasDestinationPosition = false,
         string rotation = "None")
     {
-        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
-        try
+        return await node.CommitAsync<AetheriaHangarMutationResult>(async () =>
         {
             var pointer = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey);
             var hangar = await pointer.ReadAsync().ConfigureAwait(false)
@@ -164,13 +157,8 @@ public static class AetheriaHangar
             updatedTemplate.CreatedAtUtc = template.CreatedAtUtc;
             await templatePointer.ReplaceAsync(updatedTemplate).ConfigureAwait(false);
             await pointer.ReplaceAsync(updatedHangar).ConfigureAwait(false);
-            await node.FlushAsync().ConfigureAwait(false);
             return new(true, "", updatedHangar.Revision);
-        }
-        finally
-        {
-            AetheriaHangarMutationGate.Gate.Release();
-        }
+        }).ConfigureAwait(false);
     }
 
     public static async Task<AetheriaHangarMutationResult> RemoveAsync(
@@ -180,8 +168,7 @@ public static class AetheriaHangar
         long expectedRevision,
         string now)
     {
-        await AetheriaHangarMutationGate.Gate.WaitAsync().ConfigureAwait(false);
-        try
+        return await node.CommitAsync<AetheriaHangarMutationResult>(async () =>
         {
             var pointer = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey);
             var hangar = await pointer.ReadAsync().ConfigureAwait(false)
@@ -223,13 +210,8 @@ public static class AetheriaHangar
             updatedHangar.UpdatedAtUtc = now;
             await templatePointer.ReplaceAsync(updatedTemplate).ConfigureAwait(false);
             await pointer.ReplaceAsync(updatedHangar).ConfigureAwait(false);
-            await node.FlushAsync().ConfigureAwait(false);
             return new(true, "", updatedHangar.Revision);
-        }
-        finally
-        {
-            AetheriaHangarMutationGate.Gate.Release();
-        }
+        }).ConfigureAwait(false);
     }
 
     private static string? ValidateRefit(
@@ -452,11 +434,6 @@ public static class AetheriaHangar
         clone.CreatedAtUtc = source.CreatedAtUtc;
         return clone;
     }
-}
-
-public static class AetheriaHangarMutationGate
-{
-    public static SemaphoreSlim Gate { get; } = new(1, 1);
 }
 
 public sealed class AetheriaHangarMutationResult

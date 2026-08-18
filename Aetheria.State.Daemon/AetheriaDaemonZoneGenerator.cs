@@ -36,6 +36,12 @@ internal static class AetheriaDaemonZoneGenerator
         AetheriaDeploymentReceipt? deployment = null,
         bool flush = true)
     {
+        if (flush)
+        {
+            await node.CommitAsync(() => WritePlayableRunAsync(
+                node, catalog, now, scenario, deployment, flush: false)).ConfigureAwait(false);
+            return;
+        }
         scenario = AetheriaDaemonTerminusScenarios.Parse(scenario);
         if (deployment != null && (!deployment.Accepted || !AetheriaGameModes.IsKnown(deployment.Mode)))
             throw new InvalidOperationException("A product run requires an accepted deployment for a known mode.");
@@ -140,9 +146,6 @@ internal static class AetheriaDaemonZoneGenerator
                 .ReplaceAsync(entities[i])
                 .ConfigureAwait(false);
         }
-
-        if (flush)
-            await node.FlushAsync().ConfigureAwait(false);
     }
 
     public static string RunIdFor(string scenario)

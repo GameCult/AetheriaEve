@@ -59,15 +59,18 @@ internal static class AetheriaBrowserEveCommandIngress
                 : request.MessageId;
             var commandRecordKey = new CultRecordKey(
                 $"eve:command-invocations:{AetheriaRuntimeVerseRecordKeys.StableToken(commandId)}");
-            var alreadyReceipted = node.Cache.Get<EveCommandReceiptDocument>(
-                AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(commandId)) != null;
-            if (!alreadyReceipted && node.Cache.Get<EveSurfaceCommandRequest>(commandRecordKey) == null)
+            var alreadyReceipted = await node.CommitAsync(async () =>
             {
-                await node.Database.PutAsync(
-                    commandRecordKey,
-                    ToCommandRequest(request, intent, commandId)).ConfigureAwait(false);
-                await node.FlushAsync().ConfigureAwait(false);
-            }
+                var receipted = node.Cache.Get<EveCommandReceiptDocument>(
+                    AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(commandId)) != null;
+                if (!receipted && node.Cache.Get<EveSurfaceCommandRequest>(commandRecordKey) == null)
+                {
+                    await node.Database.PutAsync(
+                        commandRecordKey,
+                        ToCommandRequest(request, intent, commandId)).ConfigureAwait(false);
+                }
+                return receipted;
+            }).ConfigureAwait(false);
 
             peer.SendCultNet(Response(
                 request,

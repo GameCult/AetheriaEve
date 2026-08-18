@@ -11,6 +11,15 @@ public static class AetheriaDaemonRegularRunWriter
         string now,
         uint generationSeed,
         AetheriaDaemonRegularTopologySettings? topologySettings = null)
+        => await node.CommitAsync(
+            () => WriteCoreAsync(node, catalog, now, generationSeed, topologySettings)).ConfigureAwait(false);
+
+    private static async Task<AetheriaDaemonWrittenRun> WriteCoreAsync(
+        AetheriaStateNode node,
+        AetheriaRuntimeCatalogSnapshot catalog,
+        string now,
+        uint generationSeed,
+        AetheriaDaemonRegularTopologySettings? topologySettings)
     {
         if (node == null) throw new ArgumentNullException(nameof(node));
         if (catalog == null) throw new ArgumentNullException(nameof(catalog));
@@ -119,7 +128,6 @@ public static class AetheriaDaemonRegularRunWriter
         settings.LastUpdatedAtUtc = now;
         await node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
             .ReplaceAsync(settings).ConfigureAwait(false);
-        await node.FlushAsync().ConfigureAwait(false);
         return new AetheriaDaemonWrittenRun(runId, runKey, playerEntityKey, false)
         {
             SessionMode = AetheriaGameSessionState.AetheriaMode

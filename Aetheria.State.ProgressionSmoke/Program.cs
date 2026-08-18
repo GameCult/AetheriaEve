@@ -5,11 +5,18 @@ using GameCult.Eve.Surface;
 using GameCult.Mesh;
 using GameCult.Networking;
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 
 try
 {
+if (args.Contains("--process-output-lifecycle", StringComparer.Ordinal))
+{
+    RunProcessOutputLifecycleSmoke();
+    Console.WriteLine("Progression smoke child output lifecycle failed in a controlled process.");
+    return;
+}
 var root = Directory.GetCurrentDirectory();
 var seed = Path.Combine(root, "Aetheria.Unity", "Build", "aetheria-unity.cc");
 if (!File.Exists(seed) || !Directory.Exists(seed + ".records"))
@@ -596,14 +603,7 @@ static Process StartDaemon(
     var logPath = state + ".daemon.log";
     start.Environment["AETHERIA_SMOKE_LOG_PATH"] = logPath;
     var process = Process.Start(start) ?? throw new InvalidOperationException("Failed to start Aetheria daemon.");
-    var logGate = new object();
-    void Record(string? line)
-    {
-        if (line == null) return;
-        lock (logGate) File.AppendAllText(logPath, line + Environment.NewLine);
-    }
-    process.OutputDataReceived += (_, eventArgs) => Record(eventArgs.Data);
-    process.ErrorDataReceived += (_, eventArgs) => Record(eventArgs.Data);
+    AetheriaProgressionSmokeProcessOutput.Attach(process, logPath);
     process.BeginOutputReadLine();
     process.BeginErrorReadLine();
     return process;
@@ -693,18 +693,155 @@ static int FreeTcpPort()
 static void Stop(Process? process)
 {
     if (process == null) return;
+    var exited = false;
     try
     {
         if (!process.HasExited) process.Kill(entireProcessTree: true);
-        process.WaitForExit(5000);
+        exited = process.WaitForExit(5000);
+        if (exited)
+            process.WaitForExit();
     }
-    catch { }
-    process.Dispose();
+    catch (Exception error)
+    {
+        Console.Error.WriteLine($"Aetheria progression smoke child shutdown failed cleanly: {error}");
+        Environment.ExitCode = 1;
+    }
+    finally
+    {
+        try
+        {
+            if (!exited && process.HasExited)
+            {
+                process.WaitForExit();
+                exited = true;
+            }
+            if (!exited)
+            {
+                Console.Error.WriteLine($"Aetheria progression smoke child {process.Id} did not terminate within five seconds.");
+                Environment.ExitCode = 1;
+            }
+            else
+            {
+                AetheriaProgressionSmokeProcessOutput.Detach(process);
+                process.Dispose();
+            }
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"Aetheria progression smoke child cleanup failed cleanly: {error}");
+            Environment.ExitCode = 1;
+        }
+    }
 }
 
 static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
 
+static void RunProcessOutputLifecycleSmoke()
+{
+    var priorExitCode = Environment.ExitCode;
+    Environment.ExitCode = 0;
+    var unhandled = false;
+    UnhandledExceptionEventHandler observer = (_, _) => unhandled = true;
+    AppDomain.CurrentDomain.UnhandledException += observer;
+    Process? child = null;
+    try
+    {
+        var missingLog = Path.Combine(
+            Path.GetTempPath(),
+            "aetheria-missing-output-" + Guid.NewGuid().ToString("N"),
+            "child.log");
+        child = Process.Start(new ProcessStartInfo(
+            "cmd.exe",
+            "/d /c \"for /L %i in (1,1,5000) do @echo child-output\"")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        }) ?? throw new InvalidOperationException("Could not start the output lifecycle probe child.");
+        AetheriaProgressionSmokeProcessOutput.Attach(child, missingLog);
+        child.BeginOutputReadLine();
+        child.BeginErrorReadLine();
+        Thread.Sleep(20);
+        Stop(child);
+        child = null;
+        Require(Environment.ExitCode == 1,
+            "an unavailable child log must become a controlled smoke failure");
+        Require(!unhandled,
+            "child output capture must never escape through AppDomain.UnhandledException");
+    }
+    finally
+    {
+        if (child != null) Stop(child);
+        AppDomain.CurrentDomain.UnhandledException -= observer;
+        if (priorExitCode != 0)
+            Environment.ExitCode = priorExitCode;
+    }
+}
+
 static void Require(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+internal static class AetheriaProgressionSmokeProcessOutput
+{
+    private static readonly ConcurrentDictionary<int, Capture> Captures = new();
+
+    public static void Attach(Process process, string logPath)
+    {
+        var capture = new Capture(logPath);
+        if (!Captures.TryAdd(process.Id, capture))
+            throw new InvalidOperationException($"Output capture already exists for child process {process.Id}.");
+        process.OutputDataReceived += capture.OutputHandler;
+        process.ErrorDataReceived += capture.ErrorHandler;
+    }
+
+    public static void Detach(Process process)
+    {
+        if (!Captures.TryRemove(process.Id, out var capture)) return;
+        process.OutputDataReceived -= capture.OutputHandler;
+        process.ErrorDataReceived -= capture.ErrorHandler;
+        if (capture.ErrorCount > 0)
+        {
+            Console.Error.WriteLine(
+                $"Aetheria progression smoke child output capture failed cleanly " +
+                $"({capture.ErrorCount} write attempt(s)): {capture.FirstError}");
+            Environment.ExitCode = 1;
+        }
+    }
+
+    private sealed class Capture
+    {
+        private readonly string _logPath;
+        private readonly object _gate = new();
+        private Exception? _firstError;
+        private int _errorCount;
+
+        public Capture(string logPath)
+        {
+            _logPath = logPath;
+            OutputHandler = (_, eventArgs) => Record(eventArgs.Data);
+            ErrorHandler = (_, eventArgs) => Record(eventArgs.Data);
+        }
+
+        public DataReceivedEventHandler OutputHandler { get; }
+        public DataReceivedEventHandler ErrorHandler { get; }
+        public Exception? FirstError => _firstError;
+        public int ErrorCount => Volatile.Read(ref _errorCount);
+
+        private void Record(string? line)
+        {
+            if (line == null) return;
+            try
+            {
+                lock (_gate) File.AppendAllText(_logPath, line + Environment.NewLine);
+            }
+            catch (Exception error)
+            {
+                Interlocked.CompareExchange(ref _firstError, error, null);
+                Interlocked.Increment(ref _errorCount);
+            }
+        }
+    }
 }
