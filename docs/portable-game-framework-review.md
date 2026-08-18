@@ -84,13 +84,23 @@ host adapter, and a remotely reachable provider still requires one too.
 CultMesh reactive documents now perform no polling or serialization while
 idle. Python uses one lazy process scheduler instead of creating an operating-
 system timer/thread for each dirty document, and C# no longer clones both sides
-of a matching canonical echo before discovering that they agree. The full
-reference probe holds 1, 100, and 1,000 writable 16 KiB documents idle for ten
-seconds, then mutates one percent at 60 Hz for ten seconds. At 1,000 documents
-it observed 6,000/6,000 publications, 5.8 KiB of idle allocation, 0.77 ms p99
-update-to-publication latency, and a 7.05 allocation-to-payload ratio. The probe
-fails above a 10x ratio or 250 ms p99 rather than treating those measurements as
-decorative output.
+of a matching canonical echo before discovering that they agree. TypeScript's
+headless scheduler uses one cancellable microtask rather than `setTimeout(0)`;
+on Windows that cut removed an accidental roughly 16 ms timer floor without
+changing the browser's animation-frame batching policy.
+
+One executable probe now applies the same workload to C#, TypeScript, and
+Python: hold 1, 100, and 1,000 writable 16 KiB documents idle for ten seconds,
+then mutate one percent at 60 Hz for ten seconds. In the full 1,000-document
+run, C# published 6,000/6,000 updates at 0.77 ms p99 with a 7.05
+allocation-to-payload ratio, TypeScript published 6,010/6,010 at 0.90 ms p99
+with a 13.9 MiB heap peak, and Python published 6,000/6,000 at 11.94 ms p99
+with a 775 KiB traced-allocation peak and one scheduler thread. Runtime-specific
+memory counters are reported honestly rather than pretending GC heap growth,
+traced Python allocations, and cumulative .NET allocations are the same unit.
+The quick form of this probe runs on Windows and Linux CI and fails on a missed
+publication, 250 ms p99, or 128 MiB runtime-appropriate peak; C# also rejects an
+allocation-to-payload ratio above 10.
 
 Retained CultMesh sessions now install one physical callback per message type
 and multiplex disposable logical subscribers behind it. A 100,000-distinct-key
@@ -208,7 +218,7 @@ test rather than achieved properties.
 
 | Priority | Fracture | Current evidence | Required repair/proof |
 | --- | --- | --- | --- |
-| P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. The executable scaling gate proves 1, 100, and 1,000 idle documents schedule zero work and editing one percent schedules only that one percent. Python uses one lazy scheduler. The C# 16 KiB reference workload records allocation, CPU, threads, payload throughput, and p50/p95/p99 latency; its full 1,000-document run published 6,000/6,000 updates at 0.77 ms p99 and 7.05 allocated bytes per payload byte after the matching-echo clone cut. | Add the same measured payload/allocation/latency probe to TypeScript and Python. Scheduling semantics are shared; measured runtime cost is currently reference-C# evidence. |
+| P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. The executable scaling gate proves 1, 100, and 1,000 idle documents schedule zero work and editing one percent schedules only that one percent. The shared measured workload records payload, CPU, runtime-appropriate memory, and p50/p95/p99 latency in all three runtimes. Full 1,000-document results were C# 6,000/6,000 at 0.77 ms p99, TypeScript 6,010/6,010 at 0.90 ms, and Python 6,000/6,000 at 11.94 ms with one scheduler thread. | Add the same workload over a real transport and native hot bodies. The local document probes now falsify idle polling and scheduler explosions; they do not measure network backpressure, copy count, or renderer cadence. |
 | P0 | Browser lowerer instance isolation | Eve browser lowering now carries surface/options/styles/component indexes per host, patches only bound component subtrees, and coalesces synchronous binding bursts. A two-host DOM test proves command/asset/skin isolation plus focus, selection, scroll, and root preservation. Eve runs the source build and test on Windows and Linux and rejects generated-output drift. | Add the browser host witness to the released-artifact consumer smoke; source-package CI does not prove published artifact closure. |
 | P0 | Conformance witnesses | The static pack resolves repository witnesses and checks schema IDs against typed source. The actual Aetheria browser witness boots the product daemon, discovers and leases the Hangar through a local Odin fixture, lowers it in Chromium, submits the native Verse select command, observes its daemon receipt, rejects a forged client identity, then follows the restarted daemon to a new route and obtains a second receipt through the retained lease. | Repeat the same product chronology through deployed Odin and a retained native consumer; static fixture agreement and the local Odin fixture cannot satisfy those infrastructure/native-runtime proofs. |
 | P0 | Stable identity path | Eve Unity discovers and reconnects through `CultMeshClient`; Aetheria's local `.cc` facade no longer accepts physical endpoints or constructs client-owned Eve surfaces. `CultMeshBrowserOdinRendezvous` now gives browsers the same identity-first Verse-catalog boundary and survives a physical provider move. | Generate Aetheria domain handles over the generic client and prove the actual daemon through local and configured Odin routes without restoring an application-owned replica. |

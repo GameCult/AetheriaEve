@@ -6,10 +6,10 @@ This document records the intended architecture before the next demolition pass.
 It is not an implementation claim. It is the map the implementation must be
 measured against.
 
-Canonical Eve-side doctrine lives in
-`E:\Projects\Eve\docs\world-state-lowering.md`. This Aetheria document applies
-that doctrine to Aetheria: the daemon is the provider, Eve owns world-state
-lowering semantics, and Aetheria clients are conformance targets.
+Canonical Eve-side doctrine lives in the Eve repository's
+`docs/world-state-lowering.md`. This Aetheria document applies that doctrine to
+Aetheria: the daemon is the provider, Eve owns world-state lowering semantics,
+and Aetheria clients are conformance targets.
 
 ## Objective
 

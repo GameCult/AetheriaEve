@@ -120,7 +120,7 @@ Each mode is also a concrete CultMesh authority proof:
   simulation and final log while validated Pilot predictions correct facts in
   explicitly assigned jurisdictions.
 
-After Starbridge mixed authority and Arena server authority are proven in live
+After Arena server authority and Starbridge mixed authority are proven in live
 play and deterministic replay, the next authority milestone is
 **witness-authoritative** operation. Witness authority must reuse the same typed
 fact slots, inputs, versions, evidence, finality, and replay contracts. It is
