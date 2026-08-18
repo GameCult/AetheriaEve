@@ -85,8 +85,19 @@ runtime ID as separate values. Odin resolution accepts a route only when the
 Verse descriptor advertises both identities. Documents, collections,
 operations, content, bodies, realtime state, and reconnect all retain that same
 target. The former one-string API—which silently used one value as both Verse
-and provider—is deleted. A negative test requires a forged provider on a valid
-Verse to fail before any transport connector runs.
+and provider—is deleted. Route selection rejects untrusted candidates
+individually, so a forged or stale route cannot veto a valid certified
+fallback.
+
+Remote authority is cryptographic rather than a string echoed by the peer.
+Consumer configuration pins Odin P-256 roots; Odin signs the exact
+Verse/runtime/protocol/endpoint/generation/provider-key route; the provider
+proves possession of that key over a client nonce before the session becomes
+usable. Remote document routes require WSS or QUIC. Unsigned routes are valid
+only under an explicitly selected loopback-development policy. The daemon's
+Unity-facing provider is therefore loopback-only, while the Hangar progression
+coordinator can consume signed remote routes discovered through configured
+Odin endpoints.
 
 Aetheria's Hangar still exposes the intended single Verse dropdown. The daemon,
 not the lowerer, resolves the selected Verse's authoritative progression
@@ -104,9 +115,10 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-aetheria-browser-provide
 This is a source-tree product witness: it deliberately names sibling CultLib
 and Eve roots and uses the executable local Odin fixture. It proves the real
 provider/browser boundary and provider route replacement, not released-
-artifact onboarding or the deployed Odin service. Anonymous provider transport
-is confined to loopback development; the Odin fixture uses its authenticated
-host adapter, and a remotely reachable provider still requires one too.
+artifact onboarding or the deployed Odin service. Unsigned provider transport
+is confined to loopback development. The deployed remote witness must use a
+pinned Odin root, signed route, provider nonce proof, and protected channel;
+the local fixture does not impersonate that proof.
 
 CultMesh reactive documents now perform no polling or serialization while
 idle. Python uses one lazy process scheduler instead of creating an operating-
@@ -334,7 +346,7 @@ test rather than achieved properties.
 | P0 | Reactive document authority and idle work | C#, TypeScript, and Python expose read-only observed mirrors plus explicit authoritative or prediction writers. The executable scaling gate proves 1, 100, and 1,000 idle documents schedule zero work and editing one percent schedules only that one percent. The shared measured workload records payload, CPU, runtime-appropriate memory, and p50/p95/p99 latency in all three runtimes. Full 1,000-document results were C# 6,000/6,000 at 0.77 ms p99, TypeScript 6,010/6,010 at 0.90 ms, and Python 6,000/6,000 at 11.94 ms with one scheduler thread. The mapped 16 KiB hot-body probe completed 600 timed 60 Hz frames at 0.71 ms p99, 2.04 MiB allocated, zero blocked writes, and zero unavoidable copies. | Run the representative document/body workload through the promoted remote realtime transport and a real renderer cadence. Local mapped bodies now prove copy telemetry and native-slot behavior; they do not prove QUIC backpressure or GPU/native-lowerer cost. |
 | P0 | Browser lowerer instance isolation | Eve browser lowering now carries surface/options/styles/component indexes per host, patches only bound component subtrees, and coalesces synchronous binding bursts. A two-host DOM test proves command/asset/skin isolation plus focus, selection, scroll, and root preservation. Eve runs the source build and test on Windows and Linux and rejects generated-output drift. | Add the browser host witness to the released-artifact consumer smoke; source-package CI does not prove published artifact closure. |
 | P0 | Conformance witnesses | The static pack resolves repository witnesses and checks schema IDs against typed source. The actual Aetheria browser witness boots the product daemon, discovers and leases the Hangar through a local Odin fixture, lowers it in Chromium, submits the native Verse select command, observes its daemon receipt, rejects a forged client identity, then follows the restarted daemon to a new route and obtains a second receipt through the retained lease. | Repeat the same product chronology through deployed Odin and a retained native consumer; static fixture agreement and the local Odin fixture cannot satisfy those infrastructure/native-runtime proofs. |
-| P0 | Stable identity path | C# and browser sessions use the explicit `(VerseId, ProviderRuntimeId)` identity pair. Odin resolution rejects a Verse route that does not advertise the requested provider before transport connection. Documents, operations, content, bodies, realtime, and reconnect retain the same target. EveUnity carries the pair separately from Eve surface provider identity. Aetheria's only player Verse selector remains the daemon-published Hangar dropdown; its coordinator derives the provider from the selected Odin descriptor. The direct `.cc` client facade, client-target sidecar, boot selector, replica worker, SDK-style Unity state reader, and client-built surfaces are deleted. | Generate Aetheria domain handles over the generic client and repeat the product chronology through local and configured Odin routes without restoring an application-owned replica. |
+| P0 | Stable identity and route trust | C# and browser sessions use the explicit `(VerseId, ProviderRuntimeId)` identity pair. Remote routes must carry an Odin-rooted certificate and the live provider must prove the bound key over a fresh nonce before use; unsigned routes are loopback-development only. Invalid routes are rejected independently so a valid certified fallback remains usable. Documents, operations, content, bodies, realtime, and reconnect retain the same target. EveUnity receives the trust policy explicitly. Aetheria's daemon publishes its local Eve surface only on loopback and its Hangar coordinator derives remote progression providers from the selected Odin descriptor under configured roots. | Run the same selection, provider-proof, receipt, reconnect, and route-rotation chronology through deployed Odin and WSS/QUIC. Current C#/browser security proofs and exact-head daemon compilation do not prove deployed certificates or the Unity player package graph. |
 | P1 | Contract ownership | Eve owns the renderer-neutral C# surface contract. A clean Unity consumer passed 136/136 tests against the released CultLib, Eve surface, and EveUnity packages; Aetheria's daemon project now references Eve rather than EveUnity. `GameCult.Eve.Surface` also packs with CultLib's NuGet closure and runs from an empty PackageReference-only .NET consumer. Eve contract and browser packages build/test on Windows and Linux. | Publish/version the verified NuGet artifact and put the released clean-Unity consumer in CI. Local NuGet closure and source package matrices do not prove registry availability or the released Unity graph. |
 | P1 | Cross-runtime schema generation | The old RTS generator is quarantined as legacy evidence: it discards C# property types, emits handwritten TS declarations, and no longer generates against the live render-splats/CultMesh query contract. A focused codec now derives the daemon-command schema, enum, slots, tombstone, and array extent from C# and passes an actual C#↔TypeScript MessagePack round trip in both directions. | Move this proof into shared CultMesh schema/IDL generation and cover every promoted document and operation. One command codec proves the wire boundary it names; it does not make the handwritten RTS document catalog generated. |
 | P1 | Executable onboarding | One documented command runs an empty PackageReference-only .NET Eve consumer, the empty-consumer packed TypeScript checkpoint, and the real Chromium/C# network checkpoint on Windows and Linux CI. The C# provider uses Eve's canonical surface type. Chromium invokes before provider route replacement; the retained C# client invokes afterward through the generic identity-owned operation API. Both clients rediscover, resubscribe, and converge on the same durable state and receipt ids without application transport loops. The NuGet and npm artifacts are local packs rather than published-registry dependencies, so no registry claim is made. | Choose and execute package publication/version ownership, then rerun the unchanged command from released artifacts; keep the local Odin fixture distinct from deployed-Odin evidence. |

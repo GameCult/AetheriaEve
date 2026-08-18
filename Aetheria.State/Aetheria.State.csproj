@@ -18,10 +18,10 @@
                       ReferenceOutputAssembly="false" />
     <ProjectReference Include="$(CultLibRoot)\src\GameCult.Mesh\GameCult.Mesh.csproj" />
     <ProjectReference Include="$(CultLibRoot)\src\GameCult.Networking\GameCult.Networking.csproj" />
-    <ProjectReference Include="..\..\CultMath\src\CultMath\CultMath.csproj" />
+    <ProjectReference Include="$(CultMathRoot)\src\CultMath\CultMath.csproj" />
     <ProjectReference Include="$(EveRoot)\packages\org.gamecult.eve.surface\GameCult.Eve.Surface.csproj"
                       AdditionalProperties="CultLibRoot=$(CultLibRoot)" />
-    <ProjectReference Include="..\..\EvePlugins\plugins\eve-plugin-fields\GameCult.Eve.PluginFields.csproj"
+    <ProjectReference Include="$(EvePluginsRoot)\plugins\eve-plugin-fields\GameCult.Eve.PluginFields.csproj"
                       AdditionalProperties="CultLibRoot=$(CultLibRoot)" />
   </ItemGroup>
 

@@ -777,11 +777,11 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
     var bundleCdnManifests = BuildBundleCdnManifestIndex(unityBundles);
     Trace("cdn-documents");
     var clientBindAddress = ParseBindAddress(options.ClientCultMeshHost);
-    if (options.ClientCultMeshWebSocketPort >= 0 && !IPAddress.IsLoopback(clientBindAddress))
+    if (!IPAddress.IsLoopback(clientBindAddress) || !IsLoopbackHost(options.ClientCultMeshAdvertiseHost))
     {
         throw new InvalidOperationException(
-            "The anonymous development WebSocket route may bind only to loopback. " +
-            "Use an authenticated web host adapter for a remotely reachable browser route.");
+            "The Unity-facing Aetheria CultMesh host is a loopback development authority. " +
+            "Remote publication requires an Odin-certified route and provider proof configuration.");
     }
     var tcpServer = new TcpFramedCultNetSchemaServer(new TcpListener(
         clientBindAddress,
@@ -807,9 +807,16 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
         serverGroup = new CultNetSchemaServerGroup(tcpServer, browserServer);
         server = serverGroup;
     }
-    var content = new CultMeshTcpContentServer(new TcpListener(
-        ParseBindAddress(options.ClientCultMeshHost),
-        options.ClientCultMeshContentPort), unityBundles.ResolveChunk);
+    const string localRouteGeneration = "aetheria-client-local-v2";
+    var content = new CultMeshTcpContentServer(
+        new TcpListener(ParseBindAddress(options.ClientCultMeshHost), options.ClientCultMeshContentPort),
+        unityBundles.ResolveChunk,
+        new CultMeshTcpContentServerOptions
+        {
+            VerseId = options.VerseId,
+            AuthorityRuntimeId = options.DaemonId,
+            RouteGeneration = localRouteGeneration
+        });
     Trace("tcp-listeners");
     var realtimeCertificate = LoadOrCreateRealtimeCertificate(
         options.ClientCultMeshAdvertiseHost,
@@ -845,6 +852,12 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
     var advertisedRealtimeEndpoint =
         $"{CultMeshQuicRealtimeTransportConnector.Scheme}://{options.ClientCultMeshAdvertiseHost}:{realtime.LocalEndPoint.Port}" +
         $"?cert-sha256={certificatePin}";
+    var sessionIdentity = new CultMeshSessionIdentityServer(
+        server,
+        options.DaemonId,
+        new[] { options.VerseId },
+        new[] { CultMeshProtocols.Documents.Value },
+        new[] { localRouteGeneration });
     tcpServer.PeerFailed += (endpoint, error) => Console.Error.WriteLine(
         $"Aetheria client CultMesh peer {endpoint} failed: {error.GetType().Name}: {error.Message}");
     server.OnCultNet<CultMeshVerseCatalogRequestMessage>((request, peer) =>
@@ -856,10 +869,29 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
             new CultMeshVerseCompatibility(
                 "cultmesh.v0",
                 CultMeshVerseDescriptor.ComputeRulesHash("aetheria", "runtime-world.v1")),
-            discoveryEndpoints: new[] { advertisedEndpoint, advertisedBrowserEndpoint, advertisedContentEndpoint, advertisedRealtimeEndpoint }
-                .Where(endpoint => !string.IsNullOrWhiteSpace(endpoint))
-                .ToArray(),
-            authorityRuntimeIds: new[] { options.DaemonId },
+            authorityRoutes: new[]
+            {
+                new CultMeshAuthorityRoute(
+                    options.DaemonId,
+                    advertisedEndpoint,
+                    new[] { CultMeshProtocols.Documents.Value },
+                    generation: localRouteGeneration),
+                new CultMeshAuthorityRoute(
+                    options.DaemonId,
+                    advertisedBrowserEndpoint,
+                    new[] { CultMeshProtocols.Documents.Value },
+                    generation: localRouteGeneration),
+                new CultMeshAuthorityRoute(
+                    options.DaemonId,
+                    advertisedContentEndpoint,
+                    new[] { CultMeshProtocols.Content.Value },
+                    generation: localRouteGeneration),
+                new CultMeshAuthorityRoute(
+                    options.DaemonId,
+                    advertisedRealtimeEndpoint,
+                    new[] { CultMeshProtocols.RealtimeState.Value },
+                    generation: localRouteGeneration)
+            }.Where(route => !string.IsNullOrWhiteSpace(route.Endpoint)).ToArray(),
             description: "Aetheria provider Verse");
         peer.SendCultNet(new CultMeshVerseCatalogResponseMessage
         {
@@ -1314,6 +1346,7 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
         }
         catch
         {
+            sessionIdentity.Dispose();
             serverGroup?.Dispose();
             await browserApp.DisposeAsync().ConfigureAwait(false);
             await browserServer!.DisposeAsync().ConfigureAwait(false);
@@ -1327,6 +1360,7 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
     return new AetheriaClientCultMeshHost(
         server,
         serverGroup,
+        sessionIdentity,
         tcpServer,
         browserServer,
         browserApp,
@@ -1594,6 +1628,13 @@ static IPAddress ParseBindAddress(string host)
     }
 
     return IPAddress.Parse(host);
+}
+
+static bool IsLoopbackHost(string host)
+{
+    if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+        return true;
+    return IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
 }
 
 static bool SnapshotWants(
@@ -2718,7 +2759,7 @@ static async Task PublishStateSurfacesAsync(
 static AetheriaProgressionVerseCoordinator CreateProgressionVerseCoordinator(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options) =>
-    new(node, options.DaemonId, options.VerseId, options.OdinDiscoveryEndpoints);
+    new(node, options.DaemonId, options.VerseId, options.OdinDiscoveryEndpoints, options.ProgressionTrust);
 
 static async Task PublishOdinSurfaceAnnouncementsAsync(
     AetheriaStateNode node,
@@ -4132,6 +4173,7 @@ internal sealed class AetheriaClientCultMeshHost : IAsyncDisposable
     public AetheriaClientCultMeshHost(
         ICultNetSchemaServer protocol,
         CultNetSchemaServerGroup? protocolGroup,
+        CultMeshSessionIdentityServer sessionIdentity,
         TcpFramedCultNetSchemaServer control,
         CultNetWebSocketSchemaServer? browser,
         WebApplication? browserApp,
@@ -4145,6 +4187,7 @@ internal sealed class AetheriaClientCultMeshHost : IAsyncDisposable
     {
         Protocol = protocol ?? throw new ArgumentNullException(nameof(protocol));
         ProtocolGroup = protocolGroup;
+        SessionIdentity = sessionIdentity ?? throw new ArgumentNullException(nameof(sessionIdentity));
         Control = control ?? throw new ArgumentNullException(nameof(control));
         Browser = browser;
         BrowserApp = browserApp;
@@ -4159,6 +4202,7 @@ internal sealed class AetheriaClientCultMeshHost : IAsyncDisposable
 
     public ICultNetSchemaServer Protocol { get; }
     private CultNetSchemaServerGroup? ProtocolGroup { get; }
+    private CultMeshSessionIdentityServer SessionIdentity { get; }
     public TcpFramedCultNetSchemaServer Control { get; }
     public CultNetWebSocketSchemaServer? Browser { get; }
     private WebApplication? BrowserApp { get; }
@@ -4174,6 +4218,7 @@ internal sealed class AetheriaClientCultMeshHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        SessionIdentity.Dispose();
         ProtocolGroup?.Dispose();
         if (BrowserApp != null)
         {
@@ -4208,6 +4253,8 @@ internal sealed class AetheriaDaemonHostOptions
     public string OdinCultMeshUri { get; init; } = "";
     public bool EnableOdinAnnouncements { get; init; }
     public IReadOnlyList<string> OdinDiscoveryEndpoints { get; init; } = Array.Empty<string>();
+    public CultMeshAuthorityTrustPolicy ProgressionTrust { get; init; } = new(
+        CultMeshAuthorityTrustMode.AuthenticatedRemote);
     public TimeSpan TickInterval { get; init; } = TimeSpan.FromMilliseconds(20);
     public TimeSpan ApiPublicationInterval { get; init; } = TimeSpan.FromSeconds(1);
     public double FixedDeltaSeconds { get; init; } = 0.02;
@@ -4260,6 +4307,18 @@ internal sealed class AetheriaDaemonHostOptions
             .Select(endpoint => endpoint.Trim())
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+        var odinRoots = ReadOptions(args, "--odin-root-p256")
+            .Concat((Environment.GetEnvironmentVariable("AETHERIA_ODIN_ROOT_P256") ?? "")
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(ParseOdinRoot)
+            .GroupBy(root => root.KeyId, StringComparer.Ordinal)
+            .Select(group => group.Single())
+            .ToArray();
+        var progressionTrust = odinDiscoveryEndpoints.Length > 0 &&
+            odinDiscoveryEndpoints.All(IsLoopbackEndpoint) && odinRoots.Length == 0
+                ? new CultMeshAuthorityTrustPolicy(CultMeshAuthorityTrustMode.LocalDevelopment)
+                : new CultMeshAuthorityTrustPolicy(CultMeshAuthorityTrustMode.AuthenticatedRemote, odinRoots);
         var noOdinAnnouncements = HasFlag(args, "--no-odin-announcements");
         var apiPublicationIntervalMs = ReadPositiveInt(args, "--api-publication-interval-ms") ?? 1000;
         var sessionId = ReadOption(args, "--session-id");
@@ -4304,6 +4363,7 @@ internal sealed class AetheriaDaemonHostOptions
             OdinCultMeshUri = noOdinAnnouncements ? "" : odinCultMeshUri,
             EnableOdinAnnouncements = !noOdinAnnouncements && !string.IsNullOrWhiteSpace(odinCultMeshUri),
             OdinDiscoveryEndpoints = odinDiscoveryEndpoints,
+            ProgressionTrust = progressionTrust,
             TickInterval = TimeSpan.FromMilliseconds(intervalMs),
             ApiPublicationInterval = TimeSpan.FromMilliseconds(apiPublicationIntervalMs),
             FixedDeltaSeconds = fixedDeltaMs / 1000.0,
@@ -4373,5 +4433,18 @@ internal sealed class AetheriaDaemonHostOptions
         if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
             return true;
         return IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
+    }
+
+    private static bool IsLoopbackEndpoint(string endpoint) =>
+        Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) &&
+        (uri.IsLoopback || IsLoopbackHost(uri.Host));
+
+    private static CultMeshEcdsaP256PublicKey ParseOdinRoot(string value)
+    {
+        var parts = (value ?? "").Trim().Split(':');
+        if (parts.Length != 3 || parts.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException(
+                "--odin-root-p256 must be '<key-id>:<base64url-x>:<base64url-y>'.");
+        return new CultMeshEcdsaP256PublicKey(parts[0], parts[1], parts[2]);
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.IO;
 using GameCult.Eve.UnityScene;
+using GameCult.Mesh;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -27,7 +28,9 @@ public sealed class AetheriaUnityClient : MonoBehaviour
             providerId: "aetheria",
             surfaceId: surfaceId,
             requiredSurfaceKind: "interactive-world",
-            clientRuntimeId: "aetheria-unity");
+            clientRuntimeId: "aetheria-unity",
+            authorityTrust: new CultMeshAuthorityTrustPolicy(
+                CultMeshAuthorityTrustMode.LocalDevelopment));
         _bootstrap = gameObject.AddComponent<EveUnityPlayableWorldClientBootstrap>();
         _bootstrap.ConfigureProvider(_provider);
         StartCoroutine(ConnectAfterFirstFrame());

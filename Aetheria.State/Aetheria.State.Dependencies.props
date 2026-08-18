@@ -1,6 +1,8 @@
 <Project>
   <PropertyGroup>
     <CultLibRoot Condition="'$(CultLibRoot)' == ''">$(MSBuildThisFileDirectory)..\..\CultLib</CultLibRoot>
+    <CultMathRoot Condition="'$(CultMathRoot)' == ''">$(MSBuildThisFileDirectory)..\..\CultMath</CultMathRoot>
+    <EvePluginsRoot Condition="'$(EvePluginsRoot)' == ''">$(MSBuildThisFileDirectory)..\..\EvePlugins</EvePluginsRoot>
     <EveRoot Condition="'$(EveRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Eve</EveRoot>
     <YmirRoot Condition="'$(YmirRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Ymir</YmirRoot>
   </PropertyGroup>

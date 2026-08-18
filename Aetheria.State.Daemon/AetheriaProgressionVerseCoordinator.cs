@@ -3,6 +3,8 @@ using Aetheria.State.Documents;
 using GameCult.Aetheria.State.Verse;
 using GameCult.Eve.Surface;
 using GameCult.Mesh;
+using GameCult.Networking;
+using GameCult.Networking.WebSockets;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -31,7 +33,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         AetheriaStateNode node,
         string runtimeId,
         string localVerseId,
-        IEnumerable<string>? odinEndpoints)
+        IEnumerable<string>? odinEndpoints,
+        CultMeshAuthorityTrustPolicy authorityTrust)
     {
         _node = node ?? throw new ArgumentNullException(nameof(node));
         _runtimeId = string.IsNullOrWhiteSpace(runtimeId) ? "aetheria-progression-router" : runtimeId.Trim();
@@ -48,16 +51,41 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             {
                 ConnectTimeout = TimeSpan.FromSeconds(2),
                 ResponseTimeout = TimeSpan.FromSeconds(2),
-                SourceId = "aetheria-configured-odin"
+                SourceId = "aetheria-configured-odin",
+                CreateClientForEndpoint = CreateDiscoveryClient
             };
             _discovery = CultMesh.CreateVerseDiscoveryClient(discoveryOptions);
             _remote = new CultMeshClient(new CultMeshClientOptions
             {
                 RendezvousEndpoints = _odinEndpoints,
                 Discovery = discoveryOptions,
+                Sessions = new CultMeshSessionManagerOptions
+                {
+                    RuntimeId = _runtimeId,
+                    Trust = authorityTrust ?? throw new ArgumentNullException(nameof(authorityTrust))
+                },
+                Connectors = new ICultMeshTransportConnector[]
+                {
+                    new CultMeshTcpSchemaTransportConnector(),
+                    new CultMeshUriSchemaTransportConnector(
+                        "cultnet-websocket",
+                        new[] { "ws", "wss" },
+                        _ => new CultNetWebSocketSchemaClient())
+                },
                 SubscriptionResponseTimeout = TimeSpan.FromSeconds(2)
             });
         }
+    }
+
+    private static ICultNetSchemaClient CreateDiscoveryClient(string endpoint)
+    {
+        if (Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) &&
+            (string.Equals(uri.Scheme, "ws", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(uri.Scheme, "wss", StringComparison.OrdinalIgnoreCase)))
+        {
+            return new CultNetWebSocketSchemaClient();
+        }
+        return CultNetSchemaClients.CreateForEndpoint(endpoint);
     }
 
     public async Task<AetheriaProgressionSourceDocument> EnsureAndRefreshAsync(string now)
@@ -97,7 +125,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     : AetheriaProgressionSourceStatuses.Unavailable;
                 next.Diagnostic = selectedIsAvailable ? "" : "The selected Verse was not advertised by the configured Odin.";
             }
-            catch (Exception error) when (error is TimeoutException || error is InvalidOperationException)
+            catch (Exception error) when (IsRemoteAvailabilityFailure(error))
             {
                 foreach (var option in existing.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
                 {
@@ -209,7 +237,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                 Catalog = catalog
             };
         }
-        catch (Exception error) when (error is TimeoutException || error is InvalidOperationException)
+        catch (Exception error) when (IsRemoteAvailabilityFailure(error))
         {
             source = await PersistAvailabilityAsync(
                 source,
@@ -257,7 +285,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     cancellationToken).ConfigureAwait(false);
                 return AddNavigationRoute(receipt, source);
             }
-            catch (Exception error) when (error is TimeoutException || error is InvalidOperationException)
+            catch (Exception error) when (IsRemoteAvailabilityFailure(error))
             {
                 await Task.Delay(50, cancellationToken).ConfigureAwait(false);
             }
@@ -376,7 +404,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     cancellationToken).ConfigureAwait(false);
                 return new RemoteProgression(target, hangar);
             }
-            catch (Exception error) when (error is TimeoutException || error is InvalidOperationException)
+            catch (Exception error) when (IsRemoteAvailabilityFailure(error))
             {
                 failures.Add($"{authorityRuntimeId}: {error.Message}");
             }
@@ -388,6 +416,9 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
     }
 
     private sealed record RemoteProgression(CultMeshSessionTarget Target, AetheriaHangarState Hangar);
+
+    private static bool IsRemoteAvailabilityFailure(Exception error) =>
+        error is TimeoutException or InvalidOperationException or CultMeshSessionException;
 
     private static AetheriaProgressionSourceDocument Clone(AetheriaProgressionSourceDocument source) => new()
     {

@@ -230,6 +230,10 @@ finally
 static CultMeshClient Client(string rendezvousEndpoint) => new(new CultMeshClientOptions
 {
     RendezvousEndpoints = new[] { rendezvousEndpoint },
+    Sessions = new CultMeshSessionManagerOptions
+    {
+        Trust = new CultMeshAuthorityTrustPolicy(CultMeshAuthorityTrustMode.LocalDevelopment)
+    },
     Discovery = new CultMeshVerseDiscoveryClientOptions
     {
         ConnectTimeout = TimeSpan.FromSeconds(2),

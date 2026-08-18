@@ -25,6 +25,10 @@ Console.WriteLine($"Aetheria advertised routes: {string.Join(", ", advertised.Di
 using var client = new CultMeshClient(new CultMeshClientOptions
 {
     RendezvousEndpoints = new[] { controlEndpoint },
+    Sessions = new CultMeshSessionManagerOptions
+    {
+        Trust = new CultMeshAuthorityTrustPolicy(CultMeshAuthorityTrustMode.LocalDevelopment)
+    },
     RealtimeConnectors = new ICultMeshRealtimeTransportConnector[]
     {
         new CultMeshQuicRealtimeTransportConnector()

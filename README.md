@@ -56,13 +56,17 @@ rendezvous endpoints:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run-aetheria-unity.ps1 `
-  -OdinDiscoveryEndpoint cultnet+tcp://odin.example:3076
+  -OdinDiscoveryEndpoint wss://odin.example/cultmesh `
+  -OdinRootP256 gamecult-odin-2026:<base64url-x>:<base64url-y>
 ```
 
 The dropdown itself is daemon-published Eve/CultUI. **Local** uses the local
 moddable `.cc` progression state; discovered remote Verses keep their own
-authority. Accepted launch/continue receipts route the generic lowerer to the
-selected Verse's Pilot surface.
+authority. Remote routes must chain to one of the explicitly configured Odin
+P-256 roots and prove the advertised provider key over WSS or QUIC. Loopback
+Odin endpoints may be unsigned only in the automatically selected local
+development policy. Accepted launch/continue receipts route the generic
+lowerer to the selected Verse's Pilot surface.
 
 ## Architecture
 

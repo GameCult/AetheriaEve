@@ -3,6 +3,7 @@ param(
   [int] $Port = 3076,
   [string] $State = "",
   [string[]] $OdinDiscoveryEndpoint = @(),
+  [string[]] $OdinRootP256 = @(),
   [switch] $SkipBuild
 )
 
@@ -72,6 +73,11 @@ $daemonArguments = @(
 foreach ($endpoint in $OdinDiscoveryEndpoint) {
   if (-not [string]::IsNullOrWhiteSpace($endpoint)) {
     $daemonArguments += @("--odin-discovery-endpoint", $endpoint.Trim())
+  }
+}
+foreach ($rootKey in $OdinRootP256) {
+  if (-not [string]::IsNullOrWhiteSpace($rootKey)) {
+    $daemonArguments += @("--odin-root-p256", $rootKey.Trim())
   }
 }
 $daemon = Start-Process dotnet -ArgumentList $daemonArguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $daemonLog -RedirectStandardError "$daemonLog.error"

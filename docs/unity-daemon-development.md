@@ -13,6 +13,12 @@ client connects first to the daemon's local CultMesh endpoint. With no
 `--odin-discovery-endpoint` values this is a Local-only development Verse.
 Configured Odin endpoints populate the daemon-owned Hangar Verse selector and
 may route the generic client to a remote provider after an accepted operation.
+Set `AETHERIA_ODIN_DISCOVERY_ENDPOINTS` to a semicolon-separated endpoint list
+before opening Unity. For remote endpoints, also set
+`AETHERIA_ODIN_ROOT_P256` to one or more semicolon-separated
+`<key-id>:<base64url-x>:<base64url-y>` trust roots. Remote provider routes must
+be Odin-signed and use WSS or QUIC; unsigned transport is confined to explicit
+loopback development.
 
 The named daemon apphost is launched with both system .NET runtime-root
 variables pinned explicitly rather than inheriting Unity's embedded runtime
