@@ -20,11 +20,11 @@ $expected = @{
         "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#27b56c85abc6ecf8fa1121b9e1e58cd17338edd4",
         "27b56c85abc6ecf8fa1121b9e1e58cd17338edd4")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#49f49203c8c5c7631c806965916618eaaf238d14",
-        "49f49203c8c5c7631c806965916618eaaf238d14")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#07f1df9cf4f4f04ede42043889ca4a25da909629",
+        "07f1df9cf4f4f04ede42043889ca4a25da909629")
     "org.gamecult.eve.unity-uitoolkit" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#49f49203c8c5c7631c806965916618eaaf238d14",
-        "49f49203c8c5c7631c806965916618eaaf238d14")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#07f1df9cf4f4f04ede42043889ca4a25da909629",
+        "07f1df9cf4f4f04ede42043889ca4a25da909629")
 }
 
 foreach ($packageName in $expected.Keys) {
