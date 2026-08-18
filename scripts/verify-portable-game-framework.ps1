@@ -60,8 +60,13 @@ foreach ($rule in $runtimeClientForbidden) {
     }
 }
 
-$headlessProjectFiles = & rg --files $Root -g '*.csproj' -g '*.props' -g '!**/obj/**' -g '!**/bin/**' |
-    Where-Object { $_ -match '[\\/]Aetheria\.State' }
+$headlessProjectFiles = Get-ChildItem -LiteralPath $Root -Recurse -File |
+    Where-Object {
+        $_.Extension -in @(".csproj", ".props") -and
+        $_.FullName -match '[\\/]Aetheria\.State' -and
+        $_.FullName -notmatch '[\\/](obj|bin)[\\/]'
+    } |
+    ForEach-Object FullName
 $rendererProjectReferences = if ($headlessProjectFiles) {
     Select-String -LiteralPath $headlessProjectFiles -Pattern 'EveUnityRoot|EveUnity[\\/]packages'
 } else {

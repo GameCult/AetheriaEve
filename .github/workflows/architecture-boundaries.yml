@@ -1,0 +1,31 @@
+name: Aetheria portable architecture boundaries
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static-contract:
+    name: ${{ matrix.os }} boundary and conformance shape
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+      - name: Check out AetheriaEve
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Reject duplicate or client-owned authority paths
+        shell: pwsh
+        run: ./scripts/verify-portable-game-framework.ps1
+
+      - name: Verify the static Eve contract pack
+        run: node scripts/verify-eve-conformance-pack.mjs
