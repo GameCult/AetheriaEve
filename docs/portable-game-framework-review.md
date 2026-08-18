@@ -163,6 +163,19 @@ The witness uses an isolated two-package npm consumer and runs in the Windows/
 Linux architecture matrix; it does not compile or pardon the obsolete RTS
 query/Electron shell.
 
+The generic provider sample no longer implements CultNet as application code.
+`CultNetOperationServer` owns operation route and envelope validation,
+MessagePack encoding, correlation, and portable framework-failure replies.
+The application handler receives one typed request plus its durable
+idempotency key and remains the sole owner of domain validation, mutation, and
+receipts. Both the C# and browser CultMesh clients turn the same correlated
+`gamecult.cultnet.operation_failure.v1` payload into a typed exception carrying
+stable status and code; neither waits for a timeout or parses diagnostic prose.
+The executable sample rejects any return of raw operation-envelope dispatch.
+After this cut the full clean-consumer plus real-network chronology passed with
+10,000 retained-session operations at 0.68 ms p99 and 272 KiB post-GC managed
+growth.
+
 ## Target authority map
 
 Owner:
