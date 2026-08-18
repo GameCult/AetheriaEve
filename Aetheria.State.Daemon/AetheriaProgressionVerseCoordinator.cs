@@ -179,11 +179,9 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
 
         try
         {
-            var target = RemoteTarget(source);
-            var hangar = await _remote.ReadAsync<AetheriaHangarState>(
-                target,
-                AetheriaStateNode.HangarKey.ToString(),
-                TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            var remote = await ResolveRemoteProgressionAsync(source, CancellationToken.None).ConfigureAwait(false);
+            var target = remote.Target;
+            var hangar = remote.Hangar;
             AetheriaLoadoutTemplate? loadout = null;
             var selected = hangar.Ships?.FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(selected?.LoadoutTemplateKey))
@@ -234,7 +232,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             throw new InvalidOperationException("Remote Hangar forwarding requires a selected remote Verse.");
         if (_remote == null)
             throw new InvalidOperationException("No Odin discovery endpoint is configured for the selected Verse.");
-        var target = RemoteTarget(source);
+        var remote = await ResolveRemoteProgressionAsync(source, cancellationToken).ConfigureAwait(false);
+        var target = remote.Target;
 
         await _remote.SubmitDocumentAsync(
             target,
@@ -345,19 +344,50 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         DiscoveryEndpoints = verse.DiscoveryEndpoints.ToArray()
     };
 
-    private static CultMeshSessionTarget RemoteTarget(AetheriaProgressionSourceDocument source)
+    private async Task<RemoteProgression> ResolveRemoteProgressionAsync(
+        AetheriaProgressionSourceDocument source,
+        CancellationToken cancellationToken)
     {
+        if (_remote == null)
+            throw new InvalidOperationException("No Odin discovery endpoint is configured for remote progression.");
         var selected = (source.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
             .FirstOrDefault(option => string.Equals(option.VerseId, source.SelectedVerseId, StringComparison.Ordinal));
-        var providerId = (selected?.AuthorityRuntimeIds ?? Array.Empty<string>())
+        var authorityRuntimeIds = (selected?.AuthorityRuntimeIds ?? Array.Empty<string>())
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())
+            .Distinct(StringComparer.Ordinal)
             .OrderBy(id => id, StringComparer.Ordinal)
-            .FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(providerId))
-            throw new InvalidOperationException($"Verse '{source.SelectedVerseId}' does not advertise an authoritative progression provider.");
-        return new CultMeshSessionTarget(source.SelectedVerseId, providerId);
+            .ToArray();
+        if (authorityRuntimeIds.Length == 0)
+            throw new InvalidOperationException(
+                $"Verse '{source.SelectedVerseId}' does not advertise an authority runtime that can be probed for progression.");
+
+        var failures = new List<string>();
+        foreach (var authorityRuntimeId in authorityRuntimeIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var target = new CultMeshSessionTarget(source.SelectedVerseId, authorityRuntimeId);
+            try
+            {
+                var hangar = await _remote.ReadAsync<AetheriaHangarState>(
+                    target,
+                    AetheriaStateNode.HangarKey.ToString(),
+                    TimeSpan.FromSeconds(2),
+                    cancellationToken).ConfigureAwait(false);
+                return new RemoteProgression(target, hangar);
+            }
+            catch (Exception error) when (error is TimeoutException || error is InvalidOperationException)
+            {
+                failures.Add($"{authorityRuntimeId}: {error.Message}");
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Verse '{source.SelectedVerseId}' advertises no reachable authority runtime serving " +
+            $"the typed Hangar progression record. Probes: {string.Join(" | ", failures)}");
     }
+
+    private sealed record RemoteProgression(CultMeshSessionTarget Target, AetheriaHangarState Hangar);
 
     private static AetheriaProgressionSourceDocument Clone(AetheriaProgressionSourceDocument source) => new()
     {

@@ -37,7 +37,7 @@ if (!host) throw new Error("The Aetheria browser witness host is missing.");
 try {
   const mesh = await CultMeshBrowserClient.connect({
     verseId: "aetheria.local",
-    providerId: "aetheria-daemon",
+    authorityRuntimeId: "aetheria-daemon",
     runtimeId: "aetheria.browser-witness",
     rendezvous: new CultMeshBrowserOdinRendezvous({
       endpoints: [endpoint],
