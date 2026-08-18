@@ -41,6 +41,30 @@ namespace GameCult.Aetheria.State.Verse
         public const string Lost = "lost";
     }
 
+    public static class AetheriaHangarViews
+    {
+        public const string Overview = "overview";
+        public const string Loadout = "loadout";
+
+        public static bool IsKnown(string? view) =>
+            string.Equals(view, Overview, StringComparison.Ordinal) ||
+            string.Equals(view, Loadout, StringComparison.Ordinal);
+    }
+
+    [CultDocument("gamecult.aetheria.hangar_draft", "gamecult.aetheria.hangar_draft.v1")]
+    [CultGlobal]
+    [MessagePackObject]
+    public sealed class AetheriaHangarDraftState
+    {
+        [Key(0), CultName] public string Name { get; set; } = "Hangar selection";
+        [Key(1)] public string PlayerKey { get; set; } = "";
+        [Key(2)] public string SelectedShipId { get; set; } = "";
+        [Key(3)] public string SelectedMode { get; set; } = AetheriaGameModes.Terminus;
+        [Key(4)] public string ActiveView { get; set; } = AetheriaHangarViews.Overview;
+        [Key(5)] public long Revision { get; set; }
+        [Key(6)] public string UpdatedAtUtc { get; set; } = "";
+    }
+
     [CultDocument("gamecult.aetheria.hangar", "gamecult.aetheria.hangar.v1")]
     [CultGlobal]
     [MessagePackObject]

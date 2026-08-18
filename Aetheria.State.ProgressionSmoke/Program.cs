@@ -158,7 +158,7 @@ try
             localTarget,
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
             (EveSurfaceDocument surface) =>
-                Find(surface.Surface.Root, "aetheria.hangar.launch").Props["enabled"] == "true" &&
+                Find(surface.Surface.Root, "aetheria.hangar.launch").Props["disabled"] == "false" &&
                 Find(surface.Surface.Root, "aetheria.hangar.launch").Props["expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),
             TimeSpan.FromSeconds(10));
         var launch = Find(launchSurface.Surface.Root, "aetheria.hangar.launch");
@@ -198,7 +198,7 @@ try
             localTarget,
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
             (EveSurfaceDocument surface) =>
-                Find(surface.Surface.Root, "aetheria.hangar.continue").Props["enabled"] == "true",
+                Find(surface.Surface.Root, "aetheria.hangar.continue").Props["disabled"] == "false",
             TimeSpan.FromSeconds(10));
         var resume = Find(continueSurface.Surface.Root, "aetheria.hangar.continue");
         var continueReceipt = await SubmitAsync(

@@ -15,6 +15,7 @@ internal sealed class AetheriaProgressionVerseView
 {
     public required AetheriaProgressionSourceDocument Source { get; init; }
     public required AetheriaHangarState Hangar { get; init; }
+    public required AetheriaHangarDraftState Draft { get; init; }
     public AetheriaLoadoutTemplate? Loadout { get; init; }
     public AetheriaRuntimeCatalogSnapshot? Catalog { get; init; }
 }
@@ -210,8 +211,10 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             var remote = await ResolveRemoteProgressionAsync(source, CancellationToken.None).ConfigureAwait(false);
             var target = remote.Target;
             var hangar = remote.Hangar;
+            var draft = remote.Draft;
             AetheriaLoadoutTemplate? loadout = null;
-            var selected = hangar.Ships?.FirstOrDefault();
+            var selected = (hangar.Ships ?? Array.Empty<AetheriaHangarShip>()).FirstOrDefault(ship =>
+                string.Equals(ship.ShipId, draft.SelectedShipId, StringComparison.Ordinal));
             if (!string.IsNullOrWhiteSpace(selected?.LoadoutTemplateKey))
                 loadout = await _remote.ReadAsync<AetheriaLoadoutTemplate>(
                     target,
@@ -233,6 +236,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             {
                 Source = source,
                 Hangar = hangar,
+                Draft = draft,
                 Loadout = loadout,
                 Catalog = catalog
             };
@@ -304,8 +308,11 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
     {
         var hangar = await _node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
             .ReadAsync().ConfigureAwait(false) ?? new AetheriaHangarState();
+        var draft = await AetheriaDaemonHangarCoordinator.EnsureDraftAsync(_node, hangar, DateTimeOffset.UtcNow.ToString("O"))
+            .ConfigureAwait(false);
         AetheriaLoadoutTemplate? loadout = null;
-        var selected = hangar.Ships?.FirstOrDefault();
+        var selected = (hangar.Ships ?? Array.Empty<AetheriaHangarShip>()).FirstOrDefault(ship =>
+            string.Equals(ship.ShipId, draft.SelectedShipId, StringComparison.Ordinal));
         if (!string.IsNullOrWhiteSpace(selected?.LoadoutTemplateKey))
             loadout = await _node.MutableDocument<AetheriaLoadoutTemplate>(new(selected.LoadoutTemplateKey))
                 .ReadAsync().ConfigureAwait(false);
@@ -313,6 +320,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         {
             Source = source,
             Hangar = hangar,
+            Draft = draft,
             Loadout = loadout,
             Catalog = _node.RuntimeCatalog().Latest()
         };
@@ -345,6 +353,12 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         {
             HangarId = source.SelectedVerseId,
             Ships = Array.Empty<AetheriaHangarShip>(),
+            UpdatedAtUtc = source.UpdatedAtUtc
+        },
+        Draft = new AetheriaHangarDraftState
+        {
+            SelectedMode = AetheriaGameModes.Terminus,
+            ActiveView = AetheriaHangarViews.Overview,
             UpdatedAtUtc = source.UpdatedAtUtc
         }
     };
@@ -402,7 +416,12 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     AetheriaStateNode.HangarKey.ToString(),
                     TimeSpan.FromSeconds(2),
                     cancellationToken).ConfigureAwait(false);
-                return new RemoteProgression(target, hangar);
+                var draft = await _remote.ReadAsync<AetheriaHangarDraftState>(
+                    target,
+                    AetheriaStateNode.HangarDraftKey.ToString(),
+                    TimeSpan.FromSeconds(2),
+                    cancellationToken).ConfigureAwait(false);
+                return new RemoteProgression(target, hangar, draft);
             }
             catch (Exception error) when (IsRemoteAvailabilityFailure(error))
             {
@@ -415,7 +434,10 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             $"the typed Hangar progression record. Probes: {string.Join(" | ", failures)}");
     }
 
-    private sealed record RemoteProgression(CultMeshSessionTarget Target, AetheriaHangarState Hangar);
+    private sealed record RemoteProgression(
+        CultMeshSessionTarget Target,
+        AetheriaHangarState Hangar,
+        AetheriaHangarDraftState Draft);
 
     private static bool IsRemoteAvailabilityFailure(Exception error) =>
         error is TimeoutException or InvalidOperationException or CultMeshSessionException;

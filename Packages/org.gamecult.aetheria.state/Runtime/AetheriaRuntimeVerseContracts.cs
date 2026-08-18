@@ -44,6 +44,7 @@ namespace GameCult.Aetheria.State.Verse
         public static CultRecordKey MapMenuSurface { get; } = new("eve:surface:aetheria.map.zone_details");
         public static CultRecordKey TradeMenuSurface { get; } = new("eve:surface:aetheria.trade.menu");
         public static CultRecordKey HangarSurface { get; } = new("eve:surface:aetheria.hangar");
+        public static CultRecordKey HangarDraft { get; } = new("global:gamecult.aetheria.hangar_draft.v1");
         public static CultRecordKey ProgressionSource { get; } = new(AetheriaProgressionSourceDocument.DocumentKey);
 
         public static CultRecordKey DaemonCommand(string commandId) =>
@@ -104,6 +105,8 @@ namespace GameCult.Aetheria.State.Verse
             typeof(AetheriaRuntimePlayerSettingsDocument),
             typeof(AetheriaRuntimeVerseHostSettingsDocument),
             typeof(AetheriaProgressionSourceDocument),
+            typeof(AetheriaHangarState),
+            typeof(AetheriaHangarDraftState),
             typeof(EveSurfaceDocument),
             typeof(EveProviderAdvertisementDocument),
             typeof(EveSurfaceCommandRequest),

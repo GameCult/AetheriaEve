@@ -5,6 +5,7 @@ using GameCult.Caching;
 
 public static class AetheriaDaemonHangarCoordinator
 {
+    private static readonly SemaphoreSlim DraftGate = new(1, 1);
     public const string LocalPlayerKey = "player:local";
     public const string StarterShipId = "ship:local:vanguard";
     public const string StarterLoadoutName = "Vanguard One";
@@ -17,7 +18,10 @@ public static class AetheriaDaemonHangarCoordinator
         var existing = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
             .ReadAsync().ConfigureAwait(false);
         if (existing != null)
+        {
+            await EnsureDraftAsync(node, existing, now).ConfigureAwait(false);
             return;
+        }
 
         var factionKey = (catalog.Corporations ?? [])
             .Select(value => value.CorporationKey)
@@ -72,50 +76,155 @@ public static class AetheriaDaemonHangarCoordinator
             LoadoutTemplateKeys = [loadoutKey.ToString()],
             UpdatedAtUtc = now
         }).ConfigureAwait(false);
+        await node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey).ReplaceAsync(new AetheriaHangarDraftState
+        {
+            PlayerKey = LocalPlayerKey,
+            SelectedShipId = StarterShipId,
+            SelectedMode = AetheriaGameModes.Terminus,
+            ActiveView = AetheriaHangarViews.Overview,
+            Revision = 1,
+            UpdatedAtUtc = now
+        }).ConfigureAwait(false);
         await node.FlushAsync().ConfigureAwait(false);
     }
 
-    public static async Task<AetheriaDeploymentReceipt> LaunchTerminusAsync(
+    public static async Task<AetheriaHangarDraftState> EnsureDraftAsync(
+        AetheriaStateNode node,
+        AetheriaHangarState hangar,
+        string now)
+    {
+        await DraftGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            return await EnsureDraftCoreAsync(node, hangar, now).ConfigureAwait(false);
+        }
+        finally
+        {
+            DraftGate.Release();
+        }
+    }
+
+    private static async Task<AetheriaHangarDraftState> EnsureDraftCoreAsync(
+        AetheriaStateNode node,
+        AetheriaHangarState hangar,
+        string now)
+    {
+        var pointer = node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey);
+        var existing = await pointer.ReadAsync().ConfigureAwait(false);
+        var availableShipIds = (hangar.Ships ?? []).Select(ship => ship.ShipId).ToHashSet(StringComparer.Ordinal);
+        var selectedShipId = existing != null && availableShipIds.Contains(existing.SelectedShipId)
+            ? existing.SelectedShipId
+            : (hangar.Ships ?? []).FirstOrDefault()?.ShipId ?? "";
+        var selectedMode = existing != null && AetheriaGameModes.IsKnown(existing.SelectedMode)
+            ? existing.SelectedMode
+            : AetheriaGameModes.Terminus;
+        var activeView = existing != null && AetheriaHangarViews.IsKnown(existing.ActiveView)
+            ? existing.ActiveView
+            : AetheriaHangarViews.Overview;
+        if (existing != null &&
+            string.Equals(existing.PlayerKey, hangar.PlayerKey, StringComparison.Ordinal) &&
+            string.Equals(existing.SelectedShipId, selectedShipId, StringComparison.Ordinal) &&
+            string.Equals(existing.SelectedMode, selectedMode, StringComparison.Ordinal) &&
+            string.Equals(existing.ActiveView, activeView, StringComparison.Ordinal))
+            return existing;
+
+        var next = new AetheriaHangarDraftState
+        {
+            PlayerKey = hangar.PlayerKey,
+            SelectedShipId = selectedShipId,
+            SelectedMode = selectedMode,
+            ActiveView = activeView,
+            Revision = Math.Max(0, existing?.Revision ?? 0) + 1,
+            UpdatedAtUtc = now
+        };
+        await pointer.ReplaceAsync(next).ConfigureAwait(false);
+        await node.FlushAsync().ConfigureAwait(false);
+        return next;
+    }
+
+    public static Task<AetheriaHangarDraftState> SelectShipAsync(
+        AetheriaStateNode node,
+        string shipId,
+        string now) => MutateDraftAsync(node, now, (draft, hangar) =>
+    {
+        if (!(hangar.Ships ?? []).Any(ship => string.Equals(ship.ShipId, shipId, StringComparison.Ordinal)))
+            throw new InvalidOperationException("Selected ship is not owned by this Hangar.");
+        draft.SelectedShipId = shipId;
+    });
+
+    public static Task<AetheriaHangarDraftState> SelectModeAsync(
+        AetheriaStateNode node,
+        string mode,
+        string now) => MutateDraftAsync(node, now, (draft, _) =>
+    {
+        if (!AetheriaGameModes.IsKnown(mode))
+            throw new InvalidOperationException("Selected game mode is unknown.");
+        draft.SelectedMode = mode;
+    });
+
+    public static Task<AetheriaHangarDraftState> SelectViewAsync(
+        AetheriaStateNode node,
+        string view,
+        string now) => MutateDraftAsync(node, now, (draft, _) =>
+    {
+        if (!AetheriaHangarViews.IsKnown(view))
+            throw new InvalidOperationException("Selected Hangar view is unknown.");
+        draft.ActiveView = view;
+    });
+
+    public static async Task<AetheriaDeploymentReceipt> LaunchAsync(
         AetheriaStateNode node,
         AetheriaRuntimeCatalogSnapshot catalog,
         string requestId,
-        string shipId,
         long expectedRevision,
         string now)
     {
-        var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
-            .ReadAsync().ConfigureAwait(false)
-            ?? throw new InvalidOperationException("The canonical Hangar document does not exist.");
-        var ship = (hangar.Ships ?? []).SingleOrDefault(value => string.Equals(value.ShipId, shipId, StringComparison.Ordinal));
-        var receipt = await AetheriaHangar.AdmitAsync(node, new AetheriaDeploymentRequest
+        await DraftGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            RequestId = requestId,
-            PlayerKey = hangar.PlayerKey,
-            Mode = AetheriaGameModes.Terminus,
-            ShipId = shipId,
-            LoadoutTemplateKey = ship?.LoadoutTemplateKey ?? "",
-            ExpectedHangarRevision = expectedRevision,
-            ModePolicyId = AetheriaModePolicies.TerminusLocal
-        }, now).ConfigureAwait(false);
-        if (!receipt.Accepted)
-            return receipt;
+            var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                .ReadAsync().ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The canonical Hangar document does not exist.");
+            var draft = await EnsureDraftCoreAsync(node, hangar, now).ConfigureAwait(false);
+            var shipId = draft.SelectedShipId;
+            var ship = (hangar.Ships ?? []).SingleOrDefault(value => string.Equals(value.ShipId, shipId, StringComparison.Ordinal));
+            var receipt = await AetheriaHangar.AdmitAsync(node, new AetheriaDeploymentRequest
+            {
+                RequestId = requestId,
+                PlayerKey = hangar.PlayerKey,
+                Mode = draft.SelectedMode,
+                ShipId = shipId,
+                LoadoutTemplateKey = ship?.LoadoutTemplateKey ?? "",
+                ExpectedHangarRevision = expectedRevision,
+                ModePolicyId = AetheriaModePolicies.ForMode(draft.SelectedMode)
+            }, now).ConfigureAwait(false);
+            if (!receipt.Accepted)
+                return receipt;
 
-        await AetheriaDaemonZoneGenerator.WritePlayableRunAsync(
-            node,
-            catalog,
-            now,
-            AetheriaDaemonTerminusScenarios.Standard,
-            receipt).ConfigureAwait(false);
-        return receipt;
+            await AetheriaDaemonZoneGenerator.WritePlayableRunAsync(
+                node,
+                catalog,
+                now,
+                AetheriaDaemonTerminusScenarios.Standard,
+                receipt).ConfigureAwait(false);
+            return receipt;
+        }
+        finally
+        {
+            DraftGate.Release();
+        }
     }
 
-    public static async Task<bool> CanContinueTerminusAsync(
+    public static async Task<bool> CanContinueAsync(
         AetheriaStateNode node,
-        string shipId,
         string deploymentId)
     {
         var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
             .ReadAsync().ConfigureAwait(false);
+        if (hangar == null)
+            return false;
+        var draft = await EnsureDraftAsync(node, hangar, DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
+        var shipId = draft.SelectedShipId;
         var ship = (hangar?.Ships ?? []).SingleOrDefault(value =>
             string.Equals(value.ShipId, shipId, StringComparison.Ordinal) &&
             string.Equals(value.ActiveDeploymentId, deploymentId, StringComparison.Ordinal) &&
@@ -125,12 +234,46 @@ public static class AetheriaDaemonHangarCoordinator
         var deployment = (hangar!.Deployments ?? []).SingleOrDefault(value =>
             value.Accepted &&
             string.Equals(value.DeploymentId, deploymentId, StringComparison.Ordinal) &&
-            string.Equals(value.Mode, AetheriaGameModes.Terminus, StringComparison.Ordinal));
+            string.Equals(value.Mode, draft.SelectedMode, StringComparison.Ordinal));
         if (deployment == null)
             return false;
         var settings = await node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
             .ReadAsync().ConfigureAwait(false);
         return !string.IsNullOrWhiteSpace(settings?.ActiveRunKey);
+    }
+
+    private static async Task<AetheriaHangarDraftState> MutateDraftAsync(
+        AetheriaStateNode node,
+        string now,
+        Action<AetheriaHangarDraftState, AetheriaHangarState> mutate)
+    {
+        await DraftGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                .ReadAsync().ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The canonical Hangar document does not exist.");
+            var current = await EnsureDraftCoreAsync(node, hangar, now).ConfigureAwait(false);
+            var next = new AetheriaHangarDraftState
+            {
+                Name = current.Name,
+                PlayerKey = current.PlayerKey,
+                SelectedShipId = current.SelectedShipId,
+                SelectedMode = current.SelectedMode,
+                ActiveView = current.ActiveView,
+                Revision = checked(current.Revision + 1),
+                UpdatedAtUtc = now
+            };
+            mutate(next, hangar);
+            await node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
+                .ReplaceAsync(next).ConfigureAwait(false);
+            await node.FlushAsync().ConfigureAwait(false);
+            return next;
+        }
+        finally
+        {
+            DraftGate.Release();
+        }
     }
 
     private static AetheriaRuntimeEntityLoadoutCommit ToRuntimeLoadout(

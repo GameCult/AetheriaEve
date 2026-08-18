@@ -1,6 +1,6 @@
 # Aetheria Game Modes And Progression
 
-Status: adopted design; the first daemon-owned Hangar/Terminus deployment slice is implemented
+Status: adopted design; the daemon-owned Hangar and minimal three-mode deployment slice are implemented
 
 ## Product Modes
 
@@ -178,8 +178,9 @@ a parallel gameplay path.
 ## Current Migration Seam
 
 The daemon now owns one typed progression-source selection plus the local
-Hangar, starter ship, stored equipment, saved loadout template, Hangar revision,
-and immutable Terminus deployment receipt. It publishes `aetheria.hangar` as
+Hangar and a separate typed Hangar draft. Durable Hangar state owns ships,
+equipment, templates, deployments, and revision; the draft owns only the
+currently selected ship, mode, and Hangar view. It publishes `aetheria.hangar` as
 the ordinary entry surface. Its Eve `control.select` lists **Local** first and
 then every stable Verse identity discovered through the configured Odin
 rendezvous endpoints. Discovery refreshes while the daemon is ready in the
@@ -189,31 +190,36 @@ which Verse supplies Hangar and progression truth.
 
 Local selection reads and writes the daemon's moddable `.cc` state. A remote
 selection reads that Verse's typed Hangar/catalog documents and forwards equip,
-remove, launch, and continue operations to that Verse's authority. Launch
-instantiates the current committed loadout into a newly identified Terminus
-run; continue reopens the deployed run selected by the existing checkpoint.
+remove, selection, launch, and continue operations to that Verse's authority.
+Launch consumes the daemon-owned draft and instantiates its selected committed
+loadout into a newly identified Terminus, Starbridge, or Arena session; continue
+reopens only a deployment matching both selected ship and mode. The three modes
+already share this minimal headless deployment boundary. Their deeper rules,
+network admission, and settlement remain mode-owned work.
 The accepted Eve receipt carries the selected Verse, its Odin-discovered
 rendezvous route, and `aetheria.pilot` as a renderer-neutral navigation target.
-EveUnity rediscoveries and remounts that provider; Aetheria's Unity shell has no
-Verse, Hangar, or navigation code.
+EveUnity prepares the destination beside the mounted Hangar, tries every
+receipt-carried Odin endpoint, and swaps only after the destination is ready.
+A failed route therefore cannot destroy the usable Hangar. Aetheria's Unity
+shell has no Verse, Hangar, or navigation policy code.
 
 This is the first vertical slice, not the completed cross-mode progression
-machine. Remote authentication/account binding, Settlement, currencies/unlocks,
-multiple owned ships, richer fitting interaction, Starbridge admission, and
-Arena admission still need to enter the same Hangar boundary. The old main-menu
+machine. Remote account binding, Settlement, currencies/unlocks, richer fitting
+interaction, and complete Starbridge/Arena admission policy still need to enter
+the same Hangar boundary. The old main-menu
 `New Game` writer is no longer a product run-creation authority. Explicit
 Terminus proof profiles remain verification-only inputs.
 
-Arena does not yet have a named server/session/admission/score document family
-or a preserved headless controller harness. Shared simulation smokes are useful
-substrate, but they do not constitute the Arena mode. Starbridge's existing
-documents also do not by themselves prove mixed-authority convergence.
+Arena still lacks its complete server/session/admission/score document family
+and preserved headless controller harness. Its minimal daemon session is a real
+shared-loadout bootstrap, not proof of the Arena authority model. Starbridge's
+minimal session bootstrap likewise does not by itself prove pilot-veto
+convergence.
 
-The next state-architecture cut is to carry this Hangar and Deployment boundary
-through Starbridge and Arena admission, then add exactly-once Settlement. Until
-those cuts land, documentation and verification must not describe the local
-starter Hangar as completed cross-mode progression, or generic simulation
-smokes as Arena product proof.
+The next state-architecture cut is exactly-once Settlement plus the mode-specific
+Starbridge and Arena admission contracts. Until those cuts land, documentation
+and verification must not describe the local starter Hangar as completed
+cross-mode progression, or a generic simulation smoke as Arena authority proof.
 
 ## Required Proofs
 

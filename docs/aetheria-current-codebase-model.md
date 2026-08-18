@@ -184,6 +184,20 @@ certificate setup fell from 153 ms of RSA generation to 27 ms of PFX loading,
 and total client-host startup fell from about 319 ms to 183 ms. The first boot
 still pays certificate creation once.
 
+Loopback publication advertises the development TCP content/document routes.
+Non-loopback publication is a distinct authenticated deployment: the operator
+must provide an explicit CA-trusted PFX, provider P-256 private key and key id,
+and an Odin-issued typed authority-route grant. The daemon then advertises only
+the grant's WSS documents, HTTPS content, and pinned QUIC realtime routes and
+proves possession of the certified provider key during session open. The TLS
+certificate password is read from `AETHERIA_CLIENT_TLS_CERTIFICATE_PASSWORD`;
+the provider key uses `--provider-signing-key-pem` and `--provider-key-id`, and
+`--authority-route-grant` names the MessagePack-encoded CultNet Verse descriptor
+issued by Odin. The daemon never receives an Odin private key. A non-loopback daemon
+fails before publication when any credential is absent; unsigned TCP is never
+an advertised remote fallback. Odin owns signing and distributing the descriptor
+and its public root to consumers.
+
 ### Provider-owned CDN bodies
 
 - **Owner:** the Aetheria bundle artifact set owns the immutable packed chunks

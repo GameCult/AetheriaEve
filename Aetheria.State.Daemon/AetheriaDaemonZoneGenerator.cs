@@ -36,11 +36,16 @@ internal static class AetheriaDaemonZoneGenerator
         AetheriaDeploymentReceipt? deployment = null)
     {
         scenario = AetheriaDaemonTerminusScenarios.Parse(scenario);
-        if (deployment != null && (!deployment.Accepted || !string.Equals(deployment.Mode, AetheriaGameModes.Terminus, StringComparison.Ordinal)))
-            throw new InvalidOperationException("A product Terminus run requires an accepted Terminus deployment.");
+        if (deployment != null && (!deployment.Accepted || !AetheriaGameModes.IsKnown(deployment.Mode)))
+            throw new InvalidOperationException("A product run requires an accepted deployment for a known mode.");
+        if (deployment != null &&
+            !string.Equals(deployment.Mode, AetheriaGameModes.Terminus, StringComparison.Ordinal) &&
+            !string.Equals(scenario, AetheriaDaemonTerminusScenarios.Standard, StringComparison.Ordinal))
+            throw new InvalidOperationException("Terminus proof scenarios cannot impersonate another product mode.");
+        var mode = deployment?.Mode ?? AetheriaGameModes.Terminus;
         var runId = deployment == null
             ? RunIdFor(scenario)
-            : $"terminus-{StableToken(deployment.DeploymentId)}";
+            : $"{mode}-{StableToken(deployment.DeploymentId)}";
         var generationSeed = deployment == null
             ? GenerationSeed
             : AetheriaDaemonRunFactory.StableSeed(deployment.DeploymentId);
@@ -88,7 +93,7 @@ internal static class AetheriaDaemonZoneGenerator
             .ReadAsync()
             .ConfigureAwait(false) ?? new AetheriaPlayerSettings();
         settings.ActiveRunKey = runKey.ToString();
-        settings.PlayerName = string.IsNullOrWhiteSpace(settings.PlayerName) ? "Terminus Pilot" : settings.PlayerName;
+        settings.PlayerName = string.IsNullOrWhiteSpace(settings.PlayerName) ? "Aetheria Pilot" : settings.PlayerName;
         settings.LastUpdatedAtUtc = now;
         await node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
             .ReplaceAsync(settings)
@@ -106,13 +111,13 @@ internal static class AetheriaDaemonZoneGenerator
             CurrentEntityKey = entityKeys[1],
             LifecyclePhase = AetheriaRuntimeRunLifecycle.Active,
             TerminalFrameId = -1,
-            GameMode = AetheriaGameSessionState.TerminusMode,
+            GameMode = mode,
             UpdatedAtUtc = now
         }).ConfigureAwait(false);
 
         await node.MutableDocument<AetheriaZoneState>(zoneKey).ReplaceAsync(new AetheriaZoneState
         {
-            Name = "Daemon Generated Terminus",
+            Name = $"Daemon Generated {char.ToUpperInvariant(mode[0])}{mode.Substring(1)}",
             Position = Vec2(0, 0),
             EntityKeys = entityKeys,
             FactionIndices = [0, 1, 2],

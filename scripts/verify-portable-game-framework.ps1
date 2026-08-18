@@ -135,7 +135,7 @@ foreach ($required in @($progressionDocument, $progressionCoordinator)) {
     }
 }
 $progressionCoordinatorSource = Get-Content -LiteralPath $progressionCoordinator -Raw
-if ($progressionCoordinatorSource -notmatch 'new\s+CultMeshSessionTarget\s*\(\s*source\.SelectedVerseId\s*,\s*providerId\s*\)' -or
+if ($progressionCoordinatorSource -notmatch 'new\s+CultMeshSessionTarget\s*\(\s*source\.SelectedVerseId\s*,\s*authorityRuntimeId\s*\)' -or
     $progressionCoordinatorSource -notmatch 'AuthorityRuntimeIds') {
     throw "The Hangar daemon must derive an explicit Verse/provider session target from the selected Odin descriptor."
 }
@@ -152,6 +152,36 @@ if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'EveInve
     -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'dropCommand.equipment') -or
     -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'payload.expectedHangarRevision')) {
     throw "The Hangar loadout must be a daemon-published Eve inventory grid with revision-bound typed drops."
+}
+
+$hangarDocuments = Get-Content -LiteralPath (Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeHangarDocuments.cs") -Raw
+$hangarCoordinator = Get-Content -LiteralPath (Join-Path $Root "Aetheria.State.Daemon\AetheriaDaemonHangarCoordinator.cs") -Raw
+if ($hangarDocuments -notmatch 'class\s+AetheriaHangarDraftState' -or
+    $hangarCoordinator -notmatch 'SelectShipAsync' -or
+    $hangarCoordinator -notmatch 'SelectModeAsync' -or
+    $hangarCoordinator -notmatch 'SelectViewAsync' -or
+    $hangarCoordinator -notmatch 'LaunchAsync' -or
+    $daemonSource -notmatch 'AetheriaRuntimeHangarCommands\.ShowOverview' -or
+    $daemonSource -match 'LaunchTerminusAsync|CanContinueTerminusAsync') {
+    throw "Ship, mode, and view selection must have one typed daemon Hangar draft consumed by the generic admission path."
+}
+$hangarBuilderSource = Get-Content -LiteralPath $hangarBuilder -Raw
+if ($hangarBuilderSource -match 'gridTemplate|gridArea|Component\([^\r\n]+,\s*"panel"' -or
+    $hangarBuilderSource -match '\("enabled",\s*can(Launch|Continue)') {
+    throw "The Hangar Eve graph must use portable partition/min-max geometry and semantic disabled state."
+}
+foreach ($modeCommand in @("SelectTerminus", "SelectStarbridge", "SelectArena")) {
+    if ($daemonSource -notmatch "case\s+AetheriaRuntimeHangarCommands\.$modeCommand[\s\S]{0,300}AetheriaDaemonHangarCoordinator\.SelectModeAsync") {
+        throw "Every advertised Hangar mode must mutate the daemon-owned draft."
+    }
+}
+if ($daemonSource -notmatch 'LoadAuthorityRouteGrant' -or
+    $daemonSource -notmatch 'MessagePackSerializer\.Deserialize<CultMeshVerseDescriptorMessage>' -or
+    $daemonSource -match 'OdinSigningKey|odin-signing-key|CreateSignedRoute' -or
+    $daemonSource -notmatch 'wss://' -or
+    $daemonSource -notmatch 'https://' -or
+    $daemonSource -notmatch 'requireExisting:\s*remotePublication') {
+    throw "Non-loopback Aetheria publication must consume an Odin-issued typed grant and advertise its WSS/HTTPS/QUIC routes without possessing the Odin signing key."
 }
 
 Write-Host "Portable game framework boundary verification passed."

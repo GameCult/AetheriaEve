@@ -144,6 +144,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
             TradeValuePolicyKey.ToString(),
             PlayerSettingsKey.ToString(),
             HangarKey.ToString(),
+            HangarDraftKey.ToString(),
             ProgressionSourceKey.ToString(),
             VerseHostSettingsKey.ToString(),
             GameSessionStateKey.ToString(),
@@ -428,6 +429,9 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
 
     public static CultRecordKey HangarKey { get; } =
         new("global:gamecult.aetheria.hangar.v1");
+
+    public static CultRecordKey HangarDraftKey { get; } =
+        AetheriaRuntimeVerseRecordKeys.HangarDraft;
 
     public static CultRecordKey ProgressionSourceKey { get; } =
         new(AetheriaProgressionSourceDocument.DocumentKey);

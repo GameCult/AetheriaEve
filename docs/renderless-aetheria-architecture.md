@@ -111,10 +111,13 @@ The local daemon owns a typed progression-source document and publishes its
 selector inside the Hangar Eve surface. Its inputs are the Local Verse and
 stable Verse descriptors discovered from configured Odin endpoints. Local
 selection uses the local moddable `.cc` Hangar; remote selection reads and
-invokes the selected Verse's authoritative Hangar. An accepted launch or
+invokes the selected Verse's authoritative Hangar. A separate typed Hangar
+draft owns the current ship, mode, and view selection; button payloads and
+renderers do not. An accepted launch or
 continue receipt carries a renderer-neutral navigation target: stable Verse,
-provider, surface, kind, and discovered rendezvous routes. Eve lowerers follow
-that target through generic rediscovery. Renderer-local preferences, Unity
+provider, surface, kind, and discovered rendezvous routes. Eve lowerers prepare
+the target through the complete endpoint list and replace the mounted provider
+only after preparation succeeds. Renderer-local preferences, Unity
 sidecars, and hard-coded remote endpoints cannot select progression truth.
 
 Deletion line:

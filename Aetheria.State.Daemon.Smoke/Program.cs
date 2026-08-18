@@ -104,7 +104,11 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
 
     public void RunCombatLock() => RunCheck(InstantWeaponRequestSurvivesLockAcquisition);
 
-    public void RunHangar() => RunCheck(HangarLaunchUsesConfiguredLoadoutAndContinuesSavedRun);
+    public void RunHangar()
+    {
+        RunCheck(HangarLaunchUsesConfiguredLoadoutAndContinuesSavedRun);
+        RunCheck(EveryAdvertisedModeUsesTheSharedDeploymentBoundary);
+    }
 
     public void RunCommandScale() => RunCheck(FrameSizeDoesNotGrowWithCommandChronology);
 
@@ -179,10 +183,29 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 Require(mutation.Accepted, "Hangar loadout customization must commit through the canonical Hangar owner");
                 hangar = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
                     .ReadAsync().GetAwaiter().GetResult()!;
+                var selectedShipId = "ship:local:vanguard-two";
+                hangar.Ships = hangar.Ships.Append(new AetheriaHangarShip
+                {
+                    ShipId = selectedShipId,
+                    HullItemKey = ship.HullItemKey,
+                    LoadoutTemplateKey = ship.LoadoutTemplateKey,
+                    Status = AetheriaHangarShipStatuses.Available
+                }).ToArray();
+                hangar.Revision++;
+                node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                    .ReplaceAsync(hangar).GetAwaiter().GetResult();
+                var draft = AetheriaDaemonHangarCoordinator.SelectShipAsync(node, selectedShipId, "2026-08-08T00:00:01Z")
+                    .GetAwaiter().GetResult();
+                draft = AetheriaDaemonHangarCoordinator.SelectModeAsync(node, AetheriaGameModes.Arena, "2026-08-08T00:00:01Z")
+                    .GetAwaiter().GetResult();
+                Require(draft.SelectedShipId == selectedShipId && draft.SelectedMode == AetheriaGameModes.Arena,
+                    "ship and mode controls must mutate the one daemon-owned Hangar draft");
+                draft = AetheriaDaemonHangarCoordinator.SelectModeAsync(node, AetheriaGameModes.Terminus, "2026-08-08T00:00:01Z")
+                    .GetAwaiter().GetResult();
                 template = node.MutableDocument<AetheriaLoadoutTemplate>(new CultRecordKey(ship.LoadoutTemplateKey))
                     .ReadAsync().GetAwaiter().GetResult()!;
                 var surface = AetheriaRuntimeHangarSurfaceBuilder.Build(
-                    hangar, ship.ShipId, AetheriaGameModes.Terminus, "2026-08-08T00:00:01Z", 1,
+                    hangar, draft.SelectedShipId, draft.SelectedMode, "2026-08-08T00:00:01Z", 1,
                     AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(template), runtimeCatalog,
                     new AetheriaProgressionSourceDocument
                     {
@@ -202,10 +225,12 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             }
                         ]
                     });
-                var world = surface.Surface.Root.Children.Single(component => component.Kind == "world.scene3d");
-                var launcher = surface.Surface.Root.Children.Single(component => component.Id == "aetheria.hangar.launcher");
+                var world = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.world");
+                var launcher = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.launcher");
                 var verse = launcher.Children.Single(component => component.Id == "aetheria.hangar.verse");
                 Require(surface.Surface.Id == AetheriaRuntimeHangarCommands.SurfaceId &&
+                        surface.Surface.Root.Props["selectedMode"] == AetheriaGameModes.Terminus &&
+                        Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.ship.id").Props["value"] == selectedShipId &&
                         world.Props.Any(prop => prop.Key == "entityViewPointerId" && !string.IsNullOrWhiteSpace(prop.Value)) &&
                         world.Props.Any(prop => prop.Key == "entityBodyId" && !string.IsNullOrWhiteSpace(prop.Value)) &&
                         verse.Kind == "control.select" &&
@@ -218,11 +243,26 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Launch) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Continue),
                     "the daemon-owned Hangar surface must advertise Verse selection, loadout, launch, and continuation operations");
+                Require(!Flatten(surface.Surface.Root).Any(component => component.Kind == "panel" ||
+                            component.Layout.Keys.Any(key => key.StartsWith("grid", StringComparison.OrdinalIgnoreCase))) &&
+                        Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.launch").Props["disabled"] == "false",
+                    "the Hangar must use portable partition/min-max geometry and semantic disabled state");
+                var loadoutSurface = AetheriaRuntimeHangarSurfaceBuilder.Build(
+                    hangar, draft.SelectedShipId, draft.SelectedMode, "2026-08-08T00:00:01Z", 2,
+                    AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(template), runtimeCatalog,
+                    activeView: AetheriaHangarViews.Loadout);
+                Require(loadoutSurface.Surface.Root.Props["activeView"] == AetheriaHangarViews.Loadout &&
+                        !Flatten(loadoutSurface.Surface.Root).Any(component => component.Id == "aetheria.hangar.world") &&
+                        Flatten(loadoutSurface.Surface.Root).Any(component =>
+                            component.Id == "aetheria.hangar.fit.edit" &&
+                            component.Props["command"] == AetheriaRuntimeHangarCommands.ShowOverview),
+                    "Edit Loadout must publish a distinct configuration view with a typed route back to the Hangar overview");
 
-                var receipt = AetheriaDaemonHangarCoordinator.LaunchTerminusAsync(
-                        node, runtimeCatalog, "launch-configured", ship.ShipId, mutation.HangarRevision, "2026-08-08T00:00:02Z")
+                var receipt = AetheriaDaemonHangarCoordinator.LaunchAsync(
+                        node, runtimeCatalog, "launch-configured", hangar.Revision, "2026-08-08T00:00:02Z")
                     .GetAwaiter().GetResult();
-                Require(receipt.Accepted, "a valid configured Hangar deployment must launch Terminus");
+                Require(receipt.Accepted && receipt.ShipId == selectedShipId && receipt.Mode == AetheriaGameModes.Terminus,
+                    "a valid configured Hangar deployment must consume the selected ship and mode");
                 deploymentId = receipt.DeploymentId;
                 var settings = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
                     .ReadAsync().GetAwaiter().GetResult()!;
@@ -240,8 +280,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
 
             using (var reopened = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult())
             {
-                var canContinue = AetheriaDaemonHangarCoordinator.CanContinueTerminusAsync(
-                        reopened, AetheriaDaemonHangarCoordinator.StarterShipId, deploymentId)
+                var canContinue = AetheriaDaemonHangarCoordinator.CanContinueAsync(reopened, deploymentId)
                     .GetAwaiter().GetResult();
                 var settings = reopened.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
                     .ReadAsync().GetAwaiter().GetResult();
@@ -254,6 +293,45 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         finally
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void EveryAdvertisedModeUsesTheSharedDeploymentBoundary()
+    {
+        var runtimeCatalog = TutorialPopulationCatalog(out _);
+        runtimeCatalog.Items.Single(item => string.Equals(item.HullType, "Station", StringComparison.Ordinal)).ItemKey =
+            AetheriaDaemonNativeCatalog.DockyardHullItemKey;
+        foreach (var mode in new[] { AetheriaGameModes.Starbridge, AetheriaGameModes.Arena })
+        {
+            var root = Path.Combine(Path.GetTempPath(), $"aetheria-hangar-{mode}-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(root);
+            try
+            {
+                using var node = AetheriaStateNode.OpenAsync(Path.Combine(root, "aetheria.cc")).GetAwaiter().GetResult();
+                AetheriaDaemonHangarCoordinator.EnsureAsync(node, runtimeCatalog, "2026-08-18T00:00:00Z")
+                    .GetAwaiter().GetResult();
+                var draft = AetheriaDaemonHangarCoordinator.SelectModeAsync(node, mode, "2026-08-18T00:00:01Z")
+                    .GetAwaiter().GetResult();
+                var hangar = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                var receipt = AetheriaDaemonHangarCoordinator.LaunchAsync(
+                        node,
+                        runtimeCatalog,
+                        $"launch-{mode}",
+                        hangar.Revision,
+                        "2026-08-18T00:00:02Z")
+                    .GetAwaiter().GetResult();
+                var settings = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                var run = node.MutableDocument<AetheriaRunState>(new CultRecordKey(settings.ActiveRunKey))
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                Require(draft.SelectedMode == mode && receipt.Accepted && receipt.Mode == mode && run.GameMode == mode,
+                    $"{mode} must launch headlessly through the same Hangar deployment and loadout boundary");
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            }
         }
     }
 

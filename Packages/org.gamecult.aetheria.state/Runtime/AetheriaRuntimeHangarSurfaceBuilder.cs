@@ -17,6 +17,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string SelectArena = "aetheria.hangar.select_mode.arena";
         public const string SelectVerse = "aetheria.hangar.select_verse";
         public const string EditLoadout = "aetheria.hangar.edit_loadout";
+        public const string ShowOverview = "aetheria.hangar.show_overview";
         public const string EquipItem = "aetheria.hangar.loadout.equip";
         public const string RemoveItem = "aetheria.hangar.loadout.remove";
         public const string Launch = "aetheria.hangar.launch";
@@ -33,7 +34,8 @@ namespace GameCult.Aetheria.State.Verse
             long version = 1,
             AetheriaRuntimeLoadoutTemplateCommit? loadout = null,
             AetheriaRuntimeCatalogSnapshot? catalog = null,
-            AetheriaProgressionSourceDocument? progressionSource = null)
+            AetheriaProgressionSourceDocument? progressionSource = null,
+            string activeView = AetheriaHangarViews.Overview)
         {
             if (hangar == null) throw new ArgumentNullException(nameof(hangar));
             var ships = hangar.Ships ?? Array.Empty<AetheriaHangarShip>();
@@ -41,9 +43,16 @@ namespace GameCult.Aetheria.State.Verse
                 ?? ships.FirstOrDefault();
             var mode = AetheriaGameModes.IsKnown(selectedMode) ? selectedMode : AetheriaGameModes.Terminus;
             var canLaunch = selected != null && loadout != null && string.Equals(selected.Status, AetheriaHangarShipStatuses.Available, StringComparison.Ordinal);
-            var canContinue = selected != null && string.Equals(selected.Status, AetheriaHangarShipStatuses.Deployed, StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(selected.ActiveDeploymentId);
+            var canContinue = selected != null &&
+                string.Equals(selected.Status, AetheriaHangarShipStatuses.Deployed, StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(selected.ActiveDeploymentId) &&
+                (hangar.Deployments ?? Array.Empty<AetheriaDeploymentReceipt>()).Any(deployment =>
+                    deployment.Accepted &&
+                    string.Equals(deployment.DeploymentId, selected.ActiveDeploymentId, StringComparison.Ordinal) &&
+                    string.Equals(deployment.Mode, mode, StringComparison.Ordinal));
             var equipment = loadout?.RootEntity?.Equipment ?? Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>();
             var inventory = hangar.Inventory ?? Array.Empty<AetheriaHangarItemStack>();
+            var loadoutView = string.Equals(activeView, AetheriaHangarViews.Loadout, StringComparison.Ordinal);
             progressionSource ??= new AetheriaProgressionSourceDocument
             {
                 AvailableVerses = new[]
@@ -59,59 +68,13 @@ namespace GameCult.Aetheria.State.Verse
             var root = Component(
                 "aetheria.hangar.root",
                 "surface",
-                Props(("title", "HANGAR"), ("selectedMode", mode), ("hangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture))),
+                Props(
+                    ("title", "HANGAR"),
+                    ("selectedMode", mode),
+                    ("activeView", AetheriaHangarViews.IsKnown(activeView) ? activeView : AetheriaHangarViews.Overview),
+                    ("hangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture))),
                 new[]
                 {
-                    Component("aetheria.hangar.world", "world.scene3d", Props(
-                        ("statePointerId", AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString()),
-                        ("entityViewPointerId", AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString()),
-                        ("entityViewSchema", GameCult.Eve.Surface.EveEntitySoaViewDocument.SchemaId),
-                        ("entityBodyId", AetheriaRuntimeDaemonSoaFramePublisher.BodyId),
-                        ("zoneRenderPointerId", AetheriaRuntimeVerseRecordKeys.ZoneRenderLatest.ToString()),
-                        ("zoneRenderSchema", AetheriaRuntimeDaemonSchemas.ZoneRender),
-                        ("assetManifest", AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString()),
-                        ("cameraRig", "hangar-static"),
-                        ("viewId", "aetheria.hangar")), Array.Empty<EveSurfaceComponent>()),
-                    Panel("aetheria.hangar.ship_summary", "SHIP", selected == null
-                        ? new[] { Text("aetheria.hangar.ship.none", "No ship selected") }
-                        : new[]
-                        {
-                            Metric("aetheria.hangar.ship.id", "Ship", selected.ShipId),
-                            Metric("aetheria.hangar.ship.hull", "Hull", selected.HullItemKey),
-                            Metric("aetheria.hangar.ship.status", "Status", selected.Status),
-                            Metric("aetheria.hangar.ship.loadout", "Loadout", selected.LoadoutTemplateKey)
-                        }, "summary"),
-                    Panel("aetheria.hangar.preview", "SHIP PREVIEW", new[]
-                    {
-                        Component("aetheria.hangar.preview.slot", "asset.preview", Props(
-                            ("assetRole", "ship.preview"),
-                            ("subjectKey", selected?.ShipId ?? "")), Array.Empty<EveSurfaceComponent>())
-                    }, "preview"),
-                    Panel("aetheria.hangar.fit", "FIT SUMMARY", new[]
-                    {
-                        Metric("aetheria.hangar.fit.hull", "Hull", selected?.HullItemKey ?? "-"),
-                        Metric("aetheria.hangar.fit.template", "Template", selected?.LoadoutTemplateKey ?? "-"),
-                        Metric("aetheria.hangar.fit.policy", "Authority", AetheriaModePolicies.ForMode(mode)),
-                        Button("aetheria.hangar.fit.edit", "EDIT LOADOUT", AetheriaRuntimeHangarCommands.EditLoadout,
-                            ("targetSurfaceId", AetheriaRuntimeInventoryPanelSurfaceBuilder.SurfaceId))
-                    }, "fit"),
-                    Panel("aetheria.hangar.loadout", "LOADOUT", new[]
-                    {
-                        LoadoutGrid(selected, equipment, hangar.Revision, catalog)
-                    }, "loadout"),
-                    Panel("aetheria.hangar.inventory", "HANGAR INVENTORY", new[]
-                    {
-                        HangarInventoryGrid(selected, inventory, hangar.Revision, catalog)
-                    }, "inventory"),
-                    Component("aetheria.hangar.bays", "row", Props(("label", "OWNED SHIPS")),
-                        ships.Select(ship => Button(
-                            "aetheria.hangar.bay." + StableToken(ship.ShipId),
-                            ship.ShipId,
-                            AetheriaRuntimeHangarCommands.SelectShip,
-                            ("shipId", ship.ShipId),
-                            ("selected", string.Equals(ship.ShipId, selected?.ShipId, StringComparison.Ordinal) ? "true" : "false"),
-                            ("status", ship.Status))).ToArray(),
-                        Layout(("gridArea", "bays"), ("display", "flex"), ("overflowX", "auto"), ("gap", "8"))),
                     Component("aetheria.hangar.launcher", "row", Props(), new[]
                     {
                         VerseSelect(progressionSource),
@@ -122,23 +85,105 @@ namespace GameCult.Aetheria.State.Verse
                         Button("aetheria.hangar.mode.arena", "ARENA", AetheriaRuntimeHangarCommands.SelectArena,
                             ("selected", (mode == AetheriaGameModes.Arena).ToString().ToLowerInvariant())),
                         Button("aetheria.hangar.launch", "LAUNCH", AetheriaRuntimeHangarCommands.Launch,
-                            ("enabled", canLaunch.ToString().ToLowerInvariant()),
+                            ("disabled", (!canLaunch).ToString().ToLowerInvariant()),
                             ("shipId", selected?.ShipId ?? ""),
                             ("mode", mode),
                             ("expectedHangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture))),
                         Button("aetheria.hangar.continue", "CONTINUE", AetheriaRuntimeHangarCommands.Continue,
-                            ("enabled", canContinue.ToString().ToLowerInvariant()),
+                            ("disabled", (!canContinue).ToString().ToLowerInvariant()),
                             ("shipId", selected?.ShipId ?? ""),
                             ("deploymentId", selected?.ActiveDeploymentId ?? ""))
-                    }, Layout(("gridArea", "launch"), ("display", "flex"), ("justifyContent", "flex-end"), ("gap", "8")))
+                    }, Layout(("direction", "horizontal"), ("justifyContent", "flex-end"), ("minHeight", "44"), ("padding", "6"))),
+                    Component("aetheria.hangar.body", "partition", Props(("split", "x")), new[]
+                    {
+                        Component("aetheria.hangar.left", "partition", Props(("split", "y")), new[]
+                        {
+                            Panel("aetheria.hangar.ship_summary", "SHIP", selected == null
+                                ? new[] { Text("aetheria.hangar.ship.none", "No ship selected") }
+                                : new[]
+                                {
+                                    Metric("aetheria.hangar.ship.id", "Ship", selected.ShipId),
+                                    Metric("aetheria.hangar.ship.hull", "Hull", selected.HullItemKey),
+                                    Metric("aetheria.hangar.ship.status", "Status", selected.Status),
+                                    Metric("aetheria.hangar.ship.loadout", "Loadout", selected.LoadoutTemplateKey)
+                                }),
+                            Panel("aetheria.hangar.inventory", "HANGAR INVENTORY", new[]
+                            {
+                                Component("aetheria.hangar.inventory.scroll", "scroll", Props(), new[]
+                                {
+                                    HangarInventoryGrid(selected, inventory, hangar.Revision, catalog)
+                                }, Layout(("flexGrow", "1"), ("overflowY", "auto")))
+                            })
+                        }, Layout(("minWidth", "260"), ("maxWidth", "360"), ("height", "100%"), ("overflow", "hidden"))),
+                        Component("aetheria.hangar.center", "partition", Props(("split", "y")),
+                            loadoutView
+                            ? new[]
+                            {
+                                Panel("aetheria.hangar.loadout", "LOADOUT CONFIGURATION", new[]
+                                {
+                                    Text("aetheria.hangar.loadout.help", "Drag equipment between the Hangar inventory and valid ship cells."),
+                                    Component("aetheria.hangar.loadout.scroll", "scroll", Props(), new[]
+                                    {
+                                        LoadoutGrid(selected, equipment, hangar.Revision, catalog)
+                                    }, Layout(("flexGrow", "1"), ("overflowY", "auto")))
+                                })
+                            }
+                            : new[]
+                            {
+                                Panel("aetheria.hangar.preview", "SHIP PREVIEW", new[]
+                                {
+                                    Component("aetheria.hangar.world", "world.scene3d", Props(
+                                        ("statePointerId", AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString()),
+                                        ("entityViewPointerId", AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString()),
+                                        ("entityViewSchema", GameCult.Eve.Surface.EveEntitySoaViewDocument.SchemaId),
+                                        ("entityBodyId", AetheriaRuntimeDaemonSoaFramePublisher.BodyId),
+                                        ("zoneRenderPointerId", AetheriaRuntimeVerseRecordKeys.ZoneRenderLatest.ToString()),
+                                        ("zoneRenderSchema", AetheriaRuntimeDaemonSchemas.ZoneRender),
+                                        ("assetManifest", AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString()),
+                                        ("cameraRig", "hangar-static"),
+                                        ("viewId", "aetheria.hangar")), Array.Empty<EveSurfaceComponent>()),
+                                    Component("aetheria.hangar.preview.slot", "asset.preview", Props(
+                                        ("assetRole", "ship.preview"),
+                                        ("subjectKey", selected?.ShipId ?? "")), Array.Empty<EveSurfaceComponent>())
+                                }),
+                                Panel("aetheria.hangar.loadout", "LOADOUT", new[]
+                                {
+                                    Component("aetheria.hangar.loadout.scroll", "scroll", Props(), new[]
+                                    {
+                                        LoadoutGrid(selected, equipment, hangar.Revision, catalog)
+                                    }, Layout(("flexGrow", "1"), ("overflowY", "auto")))
+                                })
+                            },
+                            Layout(("minWidth", "480"), ("flexGrow", "1"), ("height", "100%"), ("overflow", "hidden"))),
+                        Component("aetheria.hangar.right", "partition", Props(("split", "y")), new[]
+                        {
+                            Panel("aetheria.hangar.fit", "FIT SUMMARY", new[]
+                            {
+                                Metric("aetheria.hangar.fit.hull", "Hull", selected?.HullItemKey ?? "-"),
+                                Metric("aetheria.hangar.fit.template", "Template", selected?.LoadoutTemplateKey ?? "-"),
+                                Metric("aetheria.hangar.fit.policy", "Authority", AetheriaModePolicies.ForMode(mode)),
+                                Button("aetheria.hangar.fit.edit", loadoutView ? "DONE" : "EDIT LOADOUT",
+                                    loadoutView ? AetheriaRuntimeHangarCommands.ShowOverview : AetheriaRuntimeHangarCommands.EditLoadout,
+                                    ("targetSurfaceId", AetheriaRuntimeHangarCommands.SurfaceId))
+                            })
+                        }, Layout(("minWidth", "280"), ("maxWidth", "360"), ("height", "100%")))
+                    }, Layout(("flexGrow", "1"), ("minHeight", "420"), ("overflow", "hidden"))),
+                    Component("aetheria.hangar.bays", "row", Props(("label", "OWNED SHIPS")),
+                        ships.Select(ship => Button(
+                            "aetheria.hangar.bay." + StableToken(ship.ShipId),
+                            ship.ShipId,
+                            AetheriaRuntimeHangarCommands.SelectShip,
+                            ("shipId", ship.ShipId),
+                            ("selected", string.Equals(ship.ShipId, selected?.ShipId, StringComparison.Ordinal) ? "true" : "false"),
+                            ("status", ship.Status))).ToArray(),
+                        Layout(("direction", "horizontal"), ("minHeight", "92"), ("overflow", "hidden"), ("padding", "6")))
                 },
                 Layout(
-                    ("display", "grid"),
-                    ("gridTemplateColumns", "minmax(260px, 0.75fr) minmax(480px, 1.6fr) minmax(280px, 0.8fr)"),
-                    ("gridTemplateRows", "auto minmax(300px, 1fr) minmax(180px, 0.65fr) auto"),
-                    ("gridTemplateAreas", "\"launch launch launch\" \"summary preview fit\" \"inventory loadout loadout\" \"bays bays bays\""),
-                    ("gap", "10"),
-                    ("height", "100%")),
+                    ("direction", "vertical"),
+                    ("height", "100%"),
+                    ("minWidth", "1024"),
+                    ("minHeight", "640"),
+                    ("overflow", "hidden")),
                 Style(("background", "#070b0d"), ("color", "#d8eef2")));
 
             return new EveSurfaceDocument(
@@ -156,6 +201,7 @@ namespace GameCult.Aetheria.State.Verse
                     Command(AetheriaRuntimeHangarCommands.SelectArena, "Select Arena"),
                     Command(AetheriaRuntimeHangarCommands.SelectVerse, "Select Verse"),
                     Command(AetheriaRuntimeHangarCommands.EditLoadout, "Edit Loadout"),
+                    Command(AetheriaRuntimeHangarCommands.ShowOverview, "Show Hangar Overview"),
                     Command(AetheriaRuntimeHangarCommands.EquipItem, "Equip Item"),
                     Command(AetheriaRuntimeHangarCommands.RemoveItem, "Remove Item"),
                     Command(AetheriaRuntimeHangarCommands.Launch, "Launch"),
@@ -302,8 +348,8 @@ namespace GameCult.Aetheria.State.Verse
             string.Join(";", cells.Select(cell =>
                 cell.X.ToString(CultureInfo.InvariantCulture) + "," + cell.Y.ToString(CultureInfo.InvariantCulture)));
 
-        private static EveSurfaceComponent Panel(string id, string title, IReadOnlyList<EveSurfaceComponent> children, string area) =>
-            Component(id, "panel", Props(("title", title)), children, Layout(("gridArea", area)), Style(("background", "#11181c"), ("border", "1px solid #60737a"), ("padding", "12")));
+        private static EveSurfaceComponent Panel(string id, string title, IReadOnlyList<EveSurfaceComponent> children) =>
+            Component(id, "pane", Props(("title", title)), children, Layout(("flexGrow", "1"), ("minHeight", "120"), ("padding", "12"), ("overflow", "hidden")), Style(("background", "#11181c"), ("borderWidth", "1"), ("borderColor", "#60737a")));
 
         private static EveSurfaceComponent Metric(string id, string label, string value) =>
             Component(id, "metric", Props(("label", label), ("value", value)), Array.Empty<EveSurfaceComponent>());
