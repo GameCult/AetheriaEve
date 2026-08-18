@@ -78,7 +78,11 @@ public static class AetheriaHangar
         string itemKey,
         long expectedRevision,
         AetheriaRuntimeCatalogSnapshot catalog,
-        string now)
+        string now,
+        int destinationX = 0,
+        int destinationY = 0,
+        bool hasDestinationPosition = false,
+        string rotation = "None")
     {
         await AdmissionGate.WaitAsync().ConfigureAwait(false);
         try
@@ -109,7 +113,8 @@ public static class AetheriaHangar
                             Quality = 1,
                             Durability = 1,
                             Enabled = true
-                        }
+                        },
+                        Rotation = string.IsNullOrWhiteSpace(rotation) ? "None" : rotation
                     }
                 ]
             };
@@ -121,9 +126,9 @@ public static class AetheriaHangar
                     0,
                     destination,
                     itemKey,
-                    0,
-                    0,
-                    false,
+                    destinationX,
+                    destinationY,
+                    hasDestinationPosition,
                     catalog,
                     out rejection))
                 return new(false, rejection, hangar.Revision);

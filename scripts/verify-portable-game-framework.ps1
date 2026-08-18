@@ -138,5 +138,11 @@ if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch '"contro
     -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'AetheriaRuntimeHangarCommands.SelectVerse')) {
     throw "The Hangar must publish the daemon-owned progression Verse selector as an Eve control.select."
 }
+if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'EveInventoryInteraction.GridKind') -or
+    -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'dropCommand.hangar') -or
+    -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'dropCommand.equipment') -or
+    -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'payload.expectedHangarRevision')) {
+    throw "The Hangar loadout must be a daemon-published Eve inventory grid with revision-bound typed drops."
+}
 
 Write-Host "Portable game framework boundary verification passed."

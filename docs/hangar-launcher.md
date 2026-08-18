@@ -1,8 +1,8 @@
 # Hangar Launcher
 
-Status: the shared Hangar, deployment admission, and portable Hangar surface
-contracts exist. Mode session bootstrap still has to consume accepted deployment
-receipts; the old generic New Game path remains live until that cut is complete.
+Status: the shared Hangar, deployment admission, portable Hangar surface, and
+Terminus launch/continue path exist. Starbridge and Arena session admission are
+the remaining mode bootstrap cuts.
 The state assembly and viewport queries compile against CultMath `0.1.2`, whose
 canonical `rect` stores normalized `min`/`max` bounds.
 
@@ -29,11 +29,19 @@ template, mode, policy id, and expected Hangar revision as one deployment
 request. The Hangar owner validates and commits the immutable deployment before
 any mode session may instantiate live state.
 
-`Edit Loadout` opens the existing spatial inventory/refit interaction shape.
-The left/source inventory behaves like the trade menu's stock or cargo source;
-the ship equipment and cargo grids are the target. Drag, rotate, equip, remove,
-buy, sell, and transfer remain typed refit/trade operations. The Hangar screen
-does not own a second fitting model.
+The Hangar Eve document publishes stored equipment and the selected ship fit as
+`inventory.grid` / `inventory.item` components. The source inventory behaves
+like the trade menu's stock or cargo source; the ship equipment grid is the
+target. Eve lowerers may derive shaped drag ghosts and obvious occupancy
+warnings from the published cells. They submit only a revision-bound typed drop;
+the Hangar daemon validates placement and commits the loadout. Buy, sell, rotate,
+and richer inspection remain extensions of these same refit/trade operations,
+not a second fitting model.
+
+The Verse selector is part of this same daemon-published Hangar surface. It
+offers Local plus the Verses discovered through the configured Odin. Switching
+the selection changes which Verse owns Hangar progression; it does not move
+progression authority into the renderer.
 
 ## Authority Map
 
@@ -41,12 +49,13 @@ Owner: the canonical `gamecult.aetheria.hangar.v1` document owns durable ships,
 inventory, currencies, unlocks, template references, revision, and accepted
 deployment receipts.
 
-Inputs: authenticated player identity, a typed deployment request, the expected
-Hangar revision, one owned ship, one owned loadout template, and the exact mode
-policy id.
+Inputs: authenticated player identity, revision-bound typed refit operations, a
+typed deployment request, one owned ship, one owned loadout template, the
+selected progression Verse, and the exact mode policy id.
 
-Outputs: one immutable accepted deployment receipt embedded atomically in the
-new Hangar revision, or a typed rejection that does not mutate the Hangar.
+Outputs: committed Hangar/loadout revisions and one immutable accepted
+deployment receipt embedded atomically in the new Hangar revision, or a typed
+rejection that does not mutate the Hangar.
 
 Derived state: selected bay, selected mode, preview, fit metrics, affordability,
 compatibility warnings, and launch readiness are UI projections. The preview
@@ -62,10 +71,9 @@ orchestration all submit the same deployment request and consume the same
 receipt. Terminus, Starbridge, and Arena differ by policy and session owner, not
 by Hangar schema.
 
-Cut line: replace `MainMenuNewGame -> AetheriaDaemonRunFactory.WriteAsync` with
-`Hangar launch operation -> deployment admission -> mode session bootstrap`.
-Delete generic New Game as a gameplay-state writer after all three mode
-bootstraps consume deployment receipts.
+Cut line: Starbridge and Arena must follow the established
+`Hangar launch operation -> deployment admission -> mode session bootstrap`
+path. Generic New Game must not return as a gameplay-state writer.
 
 ## Verification
 
@@ -77,6 +85,9 @@ bootstraps consume deployment receipts.
 - all three modes pass through the same admission primitive;
 - flush/reopen preserves the Hangar revision, ship deployment state, and
   receipts;
+- a published Eve drag can remove an installed item, restore it at explicit
+  cells, launch Terminus from that loadout, and continue the saved run through a
+  remote Odin-discovered progression Verse;
 - the portable surface exposes owned bays, ship preview, fit summary, existing
   inventory/refit entry, three mode selectors, and Launch;
 - attaching a renderer does not change admission output.

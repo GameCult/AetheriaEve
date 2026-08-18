@@ -144,37 +144,37 @@
       "hash": "c5a4a75c1b727499b16c2dae1895f29e2a9f72f0"
     },
     "org.gamecult.eve.surface": {
-      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#eve-surface-v0.3.1",
+      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#eve-surface-v0.3.2",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "org.gamecult.cultlib": "1.0.45"
       },
-      "hash": "0c486796ab38d6dbad99c9e724d1f1eb7c6b8c6d"
+      "hash": "2c4a9adb05fdce316e922f08b6e2070a691d62fa"
     },
     "org.gamecult.eve.unity-scene": {
-      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#c6b7ecebc56cf3adcb77e41c7f5f6fa36f8e2bdb",
+      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#83f9d2e0cc7fec6049104f6a7a7e5235d4868696",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "org.gamecult.cultlib": "1.0.46",
         "org.gamecult.eve.plugin-fields": "0.2.3",
-        "org.gamecult.eve.surface": "0.3.1",
-        "org.gamecult.eve.unity-uitoolkit": "0.1.3",
+        "org.gamecult.eve.surface": "0.3.2",
+        "org.gamecult.eve.unity-uitoolkit": "0.1.4",
         "com.unity.mathematics": "1.3.2",
         "com.unity.render-pipelines.universal": "17.4.0",
         "com.unity.modules.particlesystem": "1.0.0"
       },
-      "hash": "c6b7ecebc56cf3adcb77e41c7f5f6fa36f8e2bdb"
+      "hash": "83f9d2e0cc7fec6049104f6a7a7e5235d4868696"
     },
     "org.gamecult.eve.unity-uitoolkit": {
-      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#c6b7ecebc56cf3adcb77e41c7f5f6fa36f8e2bdb",
+      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#83f9d2e0cc7fec6049104f6a7a7e5235d4868696",
       "depth": 0,
       "source": "git",
       "dependencies": {
-        "org.gamecult.eve.surface": "0.3.1"
+        "org.gamecult.eve.surface": "0.3.2"
       },
-      "hash": "c6b7ecebc56cf3adcb77e41c7f5f6fa36f8e2bdb"
+      "hash": "83f9d2e0cc7fec6049104f6a7a7e5235d4868696"
     },
     "com.unity.modules.assetbundle": {
       "version": "1.0.0",

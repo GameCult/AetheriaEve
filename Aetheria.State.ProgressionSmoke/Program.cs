@@ -87,20 +87,62 @@ try
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
             (EveSurfaceDocument surface) =>
                 Find(surface.Surface.Root, "aetheria.hangar.verse").Props["value"] == remoteVerse &&
-                Find(surface.Surface.Root, "aetheria.hangar.loadout").Children.Count > 0,
+                Find(surface.Surface.Root, "aetheria.hangar.loadout.grid").Children.Count > 0,
             TimeSpan.FromSeconds(10));
-        var remove = Find(remoteSurface.Surface.Root, "aetheria.hangar.loadout").Children.First();
-        await SubmitAsync(
-            client,
-            localVerse,
-            remoteSurface,
-            AetheriaRuntimeHangarCommands.RemoveItem,
-            new Dictionary<string, string>(remove.Props, StringComparer.Ordinal));
+        var loadoutGrid = Find(remoteSurface.Surface.Root, "aetheria.hangar.loadout.grid");
+        var inventoryGrid = Find(remoteSurface.Surface.Root, "aetheria.hangar.inventory.grid");
+        var remove = loadoutGrid.Children.First();
+        var removedItemKey = remove.Props["itemKey"];
+        var originalX = int.Parse(remove.Props["x"]);
+        var originalY = int.Parse(remove.Props["y"]);
+        Require(EveInventoryInteraction.TryCreateDropRequest(
+                remoteSurface,
+                remove,
+                inventoryGrid,
+                0,
+                0,
+                "progression-verse-smoke",
+                out var removeRequest),
+            "The Hangar Eve surface must translate loadout-to-storage drag into a typed remove operation.");
+        var removeReceipt = await SubmitRequestAsync(client, localVerse, removeRequest!);
+        Require(removeReceipt.State == "accepted",
+            "The remote progression Verse must accept the Eve loadout-to-storage drop.");
         var updatedRemoteHangar = await ReadUntilAsync(
             remoteClient,
             remoteVerse,
             AetheriaStateNode.HangarKey.ToString(),
             (AetheriaHangarState hangar) => hangar.Revision > remoteRevision,
+            TimeSpan.FromSeconds(10));
+
+        var refitSurface = await ReadUntilAsync(
+            client,
+            localVerse,
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
+            (EveSurfaceDocument surface) =>
+                Find(surface.Surface.Root, "aetheria.hangar.inventory.grid").Children
+                    .Any(item => item.Props["itemKey"] == removedItemKey) &&
+                Find(surface.Surface.Root, "aetheria.hangar.loadout.grid").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),
+            TimeSpan.FromSeconds(10));
+        var refitInventory = Find(refitSurface.Surface.Root, "aetheria.hangar.inventory.grid");
+        var refitLoadout = Find(refitSurface.Surface.Root, "aetheria.hangar.loadout.grid");
+        var equip = refitInventory.Children.First(item => item.Props["itemKey"] == removedItemKey);
+        Require(EveInventoryInteraction.TryCreateDropRequest(
+                refitSurface,
+                equip,
+                refitLoadout,
+                originalX,
+                originalY,
+                "progression-verse-smoke",
+                out var equipRequest),
+            "The Hangar Eve surface must translate storage-to-loadout drag into a typed positioned equip operation.");
+        var equipReceipt = await SubmitRequestAsync(client, localVerse, equipRequest!);
+        Require(equipReceipt.State == "accepted",
+            "The remote progression Verse must accept the Eve storage-to-loadout drop at the requested cells.");
+        updatedRemoteHangar = await ReadUntilAsync(
+            remoteClient,
+            remoteVerse,
+            AetheriaStateNode.HangarKey.ToString(),
+            (AetheriaHangarState hangar) => hangar.Revision > updatedRemoteHangar.Revision,
             TimeSpan.FromSeconds(10));
 
         var launchSurface = await ReadUntilAsync(
@@ -168,7 +210,7 @@ try
             "Daemon restart must preserve the selected progression Verse by stable identity.");
     }
 
-    Console.WriteLine("Aetheria Hangar live Verse discovery, switch, remote loadout, Terminus launch/continue navigation, and restart smoke passed.");
+    Console.WriteLine("Aetheria Hangar Verse discovery, remote spatial refit, Terminus launch/continue navigation, and restart smoke passed.");
 }
 finally
 {
@@ -204,6 +246,14 @@ static async Task<EveCommandReceiptDocument> SubmitAsync(
         CultMesh.OperationPayload(payload),
         DateTimeOffset.UtcNow,
         "progression-verse-smoke");
+    return await SubmitRequestAsync(client, verseId, request);
+}
+
+static async Task<EveCommandReceiptDocument> SubmitRequestAsync(
+    CultMeshClient client,
+    string verseId,
+    EveSurfaceCommandRequest request)
+{
     var requestRecordKey = AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + request.CommandId;
     await client.SubmitDocumentAsync(
         verseId,
@@ -239,7 +289,8 @@ static async Task RequireDeletedAsync<T>(
         {
             await client.ReadAsync<T>(verseId, recordKey, TimeSpan.FromMilliseconds(500));
         }
-        catch (Exception error) when (error is TimeoutException || error is InvalidOperationException || error is SocketException)
+        catch (Exception error) when (error is TimeoutException || error is InvalidOperationException ||
+            error is SocketException || error is CultMeshSessionException)
         {
             return;
         }
@@ -265,7 +316,8 @@ static async Task<T> ReadUntilAsync<T>(
             var value = await client.ReadAsync<T>(verseId, recordKey, TimeSpan.FromMilliseconds(750));
             if (predicate(value)) return value;
         }
-        catch (Exception error) when (error is TimeoutException || error is InvalidOperationException || error is SocketException)
+        catch (Exception error) when (error is TimeoutException || error is InvalidOperationException ||
+            error is SocketException || error is CultMeshSessionException)
         {
             last = error;
         }

@@ -2476,13 +2476,20 @@ static async Task<bool> AcceptHangarInvocationAsync(
                 break;
             case AetheriaRuntimeHangarCommands.EquipItem:
             {
+                var rotation = Payload(request, "destinationRotation");
+                if (string.IsNullOrWhiteSpace(rotation))
+                    rotation = Payload(request, "sourceRotation");
                 var result = await AetheriaHangar.EquipAsync(
                     node,
                     shipId,
                     Payload(request, "itemKey"),
                     expectedRevision,
                     node.RuntimeCatalog().Latest(),
-                    now).ConfigureAwait(false);
+                    now,
+                    (int)PayloadLong(request, "destinationX", 0),
+                    (int)PayloadLong(request, "destinationY", 0),
+                    string.Equals(Payload(request, "hasDestinationPosition"), "true", StringComparison.OrdinalIgnoreCase),
+                    string.IsNullOrWhiteSpace(rotation) ? "None" : rotation).ConfigureAwait(false);
                 accepted = result.Accepted;
                 diagnostic = result.Diagnostic;
                 if (accepted) await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
@@ -2493,7 +2500,7 @@ static async Task<bool> AcceptHangarInvocationAsync(
                 var result = await AetheriaHangar.RemoveAsync(
                     node,
                     shipId,
-                    (int)PayloadLong(request, "equipmentIndex", -1),
+                    (int)PayloadLong(request, "equipmentIndex", PayloadLong(request, "originIndex", -1)),
                     expectedRevision,
                     now).ConfigureAwait(false);
                 accepted = result.Accepted;

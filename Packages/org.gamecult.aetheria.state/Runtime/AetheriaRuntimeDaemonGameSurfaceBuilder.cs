@@ -407,6 +407,11 @@ namespace GameCult.Aetheria.State.Verse
                         ("rotation", slot.Rotation ?? "None"),
                         ("shapeWidth", Math.Max(1, item?.ShapeWidth ?? 1).ToString(CultureInfo.InvariantCulture)),
                         ("shapeHeight", Math.Max(1, item?.ShapeHeight ?? 1).ToString(CultureInfo.InvariantCulture)),
+                        ("shapeCells", item == null ? "0,0" : string.Join(";",
+                            AetheriaRuntimeEquipmentGridGeometry.RotatedCells(
+                                item,
+                                AetheriaRuntimeEquipmentGridGeometry.ParseRotation(slot.Rotation))
+                                .Select(cell => cell.X.ToString(CultureInfo.InvariantCulture) + "," + cell.Y.ToString(CultureInfo.InvariantCulture)))),
                         ("draggable", "true")
                     }));
             }

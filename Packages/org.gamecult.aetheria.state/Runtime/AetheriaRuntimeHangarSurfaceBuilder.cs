@@ -95,22 +95,14 @@ namespace GameCult.Aetheria.State.Verse
                         Button("aetheria.hangar.fit.edit", "EDIT LOADOUT", AetheriaRuntimeHangarCommands.EditLoadout,
                             ("targetSurfaceId", AetheriaRuntimeInventoryPanelSurfaceBuilder.SurfaceId))
                     }, "fit"),
-                    Panel("aetheria.hangar.loadout", "LOADOUT", equipment.Select((slot, index) =>
-                        Button(
-                            $"aetheria.hangar.loadout.item.{index}",
-                            $"{ItemName(catalog, slot.Item?.ItemKey)} [{slot.X},{slot.Y}]  REMOVE",
-                            AetheriaRuntimeHangarCommands.RemoveItem,
-                            ("shipId", selected?.ShipId ?? ""),
-                            ("equipmentIndex", index.ToString(CultureInfo.InvariantCulture)),
-                            ("expectedHangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture)))).ToArray(), "loadout"),
-                    Panel("aetheria.hangar.inventory", "HANGAR INVENTORY", inventory.Select(stack =>
-                        Button(
-                            "aetheria.hangar.inventory." + StableToken(stack.ItemKey),
-                            $"{ItemName(catalog, stack.ItemKey)} x{stack.Quantity}  EQUIP",
-                            AetheriaRuntimeHangarCommands.EquipItem,
-                            ("shipId", selected?.ShipId ?? ""),
-                            ("itemKey", stack.ItemKey),
-                            ("expectedHangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture)))).ToArray(), "inventory"),
+                    Panel("aetheria.hangar.loadout", "LOADOUT", new[]
+                    {
+                        LoadoutGrid(selected, equipment, hangar.Revision, catalog)
+                    }, "loadout"),
+                    Panel("aetheria.hangar.inventory", "HANGAR INVENTORY", new[]
+                    {
+                        HangarInventoryGrid(selected, inventory, hangar.Revision, catalog)
+                    }, "inventory"),
                     Component("aetheria.hangar.bays", "row", Props(("label", "OWNED SHIPS")),
                         ships.Select(ship => Button(
                             "aetheria.hangar.bay." + StableToken(ship.ShipId),
@@ -173,6 +165,142 @@ namespace GameCult.Aetheria.State.Verse
 
         private static string ItemName(AetheriaRuntimeCatalogSnapshot? catalog, string? itemKey) =>
             catalog?.FindItem(itemKey ?? "")?.Name ?? (string.IsNullOrWhiteSpace(itemKey) ? "Unknown" : itemKey);
+
+        private static EveSurfaceComponent LoadoutGrid(
+            AetheriaHangarShip? ship,
+            IReadOnlyList<AetheriaRuntimeLoadoutItemSlotCommit> equipment,
+            long hangarRevision,
+            AetheriaRuntimeCatalogSnapshot? catalog)
+        {
+            var hull = catalog?.FindItem(ship?.HullItemKey ?? "");
+            var children = (equipment ?? Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>())
+                .Select((slot, index) => InventoryItem(
+                    "aetheria.hangar.loadout.item." + index.ToString(CultureInfo.InvariantCulture),
+                    slot.Item?.ItemKey ?? "",
+                    Math.Max(1, slot.Item?.Quantity ?? 1),
+                    AetheriaRuntimeRefitSourceKinds.Equipment,
+                    ship?.ShipId ?? "",
+                    index,
+                    slot.X,
+                    slot.Y,
+                    slot.Rotation,
+                    catalog))
+                .ToArray();
+            var validCells = (hull?.InteriorShapeCells ?? Array.Empty<AetheriaRuntimeShapeCell>())
+                .Select(cell => (X: cell.X, Y: cell.Y))
+                .Concat((hull?.Hardpoints ?? Array.Empty<AetheriaRuntimeHardpoint>())
+                    .SelectMany(hardpoint => (hardpoint.ShapeCells ?? Array.Empty<AetheriaRuntimeShapeCell>())
+                        .Select(cell => (X: hardpoint.PositionX + cell.X, Y: hardpoint.PositionY + cell.Y))))
+                .Distinct()
+                .OrderBy(cell => cell.Y)
+                .ThenBy(cell => cell.X);
+            return Component(
+                "aetheria.hangar.loadout.grid",
+                EveInventoryInteraction.GridKind,
+                Props(
+                    ("title", "Installed Equipment"),
+                    ("targetKind", AetheriaRuntimeRefitSourceKinds.Equipment),
+                    ("targetEntityKey", ship?.ShipId ?? ""),
+                    ("columns", Math.Max(1, hull?.InteriorShapeWidth ?? 1).ToString(CultureInfo.InvariantCulture)),
+                    ("rows", Math.Max(1, hull?.InteriorShapeHeight ?? 1).ToString(CultureInfo.InvariantCulture)),
+                    ("cellSize", "36"),
+                    ("cellGap", "2"),
+                    ("validCells", Cells(validCells)),
+                    ("dropCommand.hangar", AetheriaRuntimeHangarCommands.EquipItem),
+                    ("payload.shipId", ship?.ShipId ?? ""),
+                    ("payload.expectedHangarRevision", hangarRevision.ToString(CultureInfo.InvariantCulture))),
+                children);
+        }
+
+        private static EveSurfaceComponent HangarInventoryGrid(
+            AetheriaHangarShip? ship,
+            IReadOnlyList<AetheriaHangarItemStack> inventory,
+            long hangarRevision,
+            AetheriaRuntimeCatalogSnapshot? catalog)
+        {
+            const int minimumColumns = 8;
+            var children = new List<EveSurfaceComponent>();
+            var y = 0;
+            var columns = minimumColumns;
+            var stacks = inventory ?? Array.Empty<AetheriaHangarItemStack>();
+            for (var index = 0; index < stacks.Count; index++)
+            {
+                var stack = stacks[index];
+                var item = catalog?.FindItem(stack.ItemKey);
+                columns = Math.Max(columns, Math.Max(1, item?.ShapeWidth ?? 1));
+                children.Add(InventoryItem(
+                    "aetheria.hangar.inventory.item." + index.ToString(CultureInfo.InvariantCulture),
+                    stack.ItemKey,
+                    stack.Quantity,
+                    "hangar",
+                    "hangar",
+                    index,
+                    0,
+                    y,
+                    "None",
+                    catalog));
+                y += Math.Max(1, item?.ShapeHeight ?? 1);
+            }
+
+            return Component(
+                "aetheria.hangar.inventory.grid",
+                EveInventoryInteraction.GridKind,
+                Props(
+                    ("title", "Stored Equipment"),
+                    ("targetKind", "hangar"),
+                    ("targetEntityKey", "hangar"),
+                    ("columns", columns.ToString(CultureInfo.InvariantCulture)),
+                    ("rows", Math.Max(1, y).ToString(CultureInfo.InvariantCulture)),
+                    ("cellSize", "36"),
+                    ("cellGap", "2"),
+                    ("dropCommand.equipment", AetheriaRuntimeHangarCommands.RemoveItem),
+                    ("payload.shipId", ship?.ShipId ?? ""),
+                    ("payload.expectedHangarRevision", hangarRevision.ToString(CultureInfo.InvariantCulture))),
+                children);
+        }
+
+        private static EveSurfaceComponent InventoryItem(
+            string id,
+            string itemKey,
+            long quantity,
+            string sourceKind,
+            string sourceEntityKey,
+            int sourceIndex,
+            int x,
+            int y,
+            string? rotation,
+            AetheriaRuntimeCatalogSnapshot? catalog)
+        {
+            var item = catalog?.FindItem(itemKey);
+            var normalizedRotation = string.IsNullOrWhiteSpace(rotation) ? "None" : rotation!;
+            var cells = item == null
+                ? new[] { (X: 0, Y: 0) }
+                : AetheriaRuntimeEquipmentGridGeometry.RotatedCells(
+                    item,
+                    AetheriaRuntimeEquipmentGridGeometry.ParseRotation(normalizedRotation)).ToArray();
+            return Component(
+                id,
+                EveInventoryInteraction.ItemKind,
+                Props(
+                    ("label", ItemName(catalog, itemKey)),
+                    ("itemKey", itemKey),
+                    ("quantity", Math.Max(1L, quantity).ToString(CultureInfo.InvariantCulture)),
+                    ("sourceKind", sourceKind),
+                    ("sourceEntityKey", sourceEntityKey),
+                    ("sourceIndex", sourceIndex.ToString(CultureInfo.InvariantCulture)),
+                    ("x", x.ToString(CultureInfo.InvariantCulture)),
+                    ("y", y.ToString(CultureInfo.InvariantCulture)),
+                    ("rotation", normalizedRotation),
+                    ("shapeWidth", Math.Max(1, item?.ShapeWidth ?? 1).ToString(CultureInfo.InvariantCulture)),
+                    ("shapeHeight", Math.Max(1, item?.ShapeHeight ?? 1).ToString(CultureInfo.InvariantCulture)),
+                    ("shapeCells", Cells(cells)),
+                    ("draggable", "true")),
+                Array.Empty<EveSurfaceComponent>());
+        }
+
+        private static string Cells(IEnumerable<(int X, int Y)> cells) =>
+            string.Join(";", cells.Select(cell =>
+                cell.X.ToString(CultureInfo.InvariantCulture) + "," + cell.Y.ToString(CultureInfo.InvariantCulture)));
 
         private static EveSurfaceComponent Panel(string id, string title, IReadOnlyList<EveSurfaceComponent> children, string area) =>
             Component(id, "panel", Props(("title", title)), children, Layout(("gridArea", area)), Style(("background", "#11181c"), ("border", "1px solid #60737a"), ("padding", "12")));
