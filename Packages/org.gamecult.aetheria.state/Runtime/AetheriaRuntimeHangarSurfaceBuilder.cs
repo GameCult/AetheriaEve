@@ -94,13 +94,13 @@ namespace GameCult.Aetheria.State.Verse
                             ("selected", (mode == AetheriaGameModes.Arena).ToString().ToLowerInvariant())),
                         Button("aetheria.hangar.launch", "LAUNCH", AetheriaRuntimeHangarCommands.Launch, progressionSource, progressionAuthorityRuntimeId, version,
                             ("disabled", (!canLaunch).ToString().ToLowerInvariant()),
-                            ("shipId", selected?.ShipId ?? ""),
-                            ("mode", mode),
-                            ("expectedHangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture))),
+                            ("payload.shipId", selected?.ShipId ?? ""),
+                            ("payload.mode", mode),
+                            ("payload.expectedHangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture))),
                         Button("aetheria.hangar.continue", "CONTINUE", AetheriaRuntimeHangarCommands.Continue, progressionSource, progressionAuthorityRuntimeId, version,
                             ("disabled", (!canContinue).ToString().ToLowerInvariant()),
-                            ("shipId", selected?.ShipId ?? ""),
-                            ("deploymentId", selected?.ActiveDeploymentId ?? ""))
+                            ("payload.shipId", selected?.ShipId ?? ""),
+                            ("payload.deploymentId", selected?.ActiveDeploymentId ?? ""))
                     }, Layout(("direction", "horizontal"), ("justifyContent", "flex-end"), ("minHeight", "44"), ("padding", "6"))),
                     Component("aetheria.hangar.body", "partition", Props(("split", "x")), new[]
                     {
@@ -192,7 +192,7 @@ namespace GameCult.Aetheria.State.Verse
                             progressionSource,
                             progressionAuthorityRuntimeId,
                             version,
-                            ("shipId", ship.ShipId),
+                            ("payload.shipId", ship.ShipId),
                             ("selected", string.Equals(ship.ShipId, selected?.ShipId, StringComparison.Ordinal) ? "true" : "false"),
                             ("status", ship.Status))).ToArray(),
                         Layout(("direction", "horizontal"), ("minHeight", "92"), ("overflow", "hidden"), ("padding", "6")))

@@ -155,6 +155,9 @@ verifies the named authority and adds the Odin route set without consulting the
 dropdown or choosing a sibling authority. The target Verse's own daemon
 executes the command locally instead of recursively forwarding it. Retries do
 not follow later dropdown changes. Route grants are verified against configured Odin roots.
+Provider controls declare handler operands with `payload.*`; renderer-facing
+props such as labels, disabled state, and selection styling never become an
+implicit command channel.
 This proves provider-route identity, not player identity: the Aetheria daemon
 currently refuses non-loopback publication, and production remote progression
 remains closed until its Verse binds an authenticated

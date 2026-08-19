@@ -249,6 +249,10 @@ projection, rejects stale versions or altered hints, and only then preserves
 that provider-owned binding in the immutable command journal. Verse selection
 validates the same projection but remains a local routing operation; it cannot
 be delegated to the selected progression Verse.
+Semantic operands such as ship, deployment, mode, and expected Hangar revision
+are explicit `payload.*` properties in that Eve projection. Labels, selected
+state, disabled state, and status remain presentation properties; lowerers do
+not infer command payloads from them.
 Classification and route creation read that envelope, never the dropdown's
 current value. A command targeting `Local` executes against the routing
 daemon's local store; a command targeting the daemon's own Verse executes

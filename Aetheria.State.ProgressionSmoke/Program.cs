@@ -117,24 +117,41 @@ try
                 verseSelect.Props["value"] == AetheriaProgressionSources.Local &&
                 verseSelect.Children.Any(option => option.Props["value"] == remoteVerse),
             "The daemon-published Hangar surface must expose Local plus Odin-discovered Verses.");
+        var shipButton = Find(initialSurface.Surface.Root, "aetheria.hangar.bays").Children.First();
+        Require(shipButton.Props.ContainsKey("payload.shipId") && !shipButton.Props.ContainsKey("shipId"),
+            "The Hangar provider must declare ship selection as an Eve command payload, not a presentation prop.");
+        var selectShipReceipt = await SubmitAsync(
+            client,
+            localTarget,
+            initialSurface,
+            AetheriaRuntimeHangarCommands.SelectShip,
+            DeclaredPayload(shipButton));
+        Require(selectShipReceipt.State == "accepted",
+            "The actual Eve-declared ship-selection payload must reach daemon finality.");
+        var commandSurface = await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
+            (EveSurfaceDocument surface) => surface.Version > initialSurface.Version,
+            TimeSpan.FromSeconds(5));
 
         var poisonRequest = new EveSurfaceCommandRequest(
-            initialSurface.ProviderId,
-            initialSurface.Surface.Id,
+            commandSurface.ProviderId,
+            commandSurface.Surface.Id,
             CultMesh.OperationInvocation(
                 "aetheria.hangar.injected-failure",
                 idempotencyKey: poisonCommandId),
-            TargetedPayload(initialSurface),
+            TargetedPayload(commandSurface),
             DateTimeOffset.UtcNow,
             "progression-verse-smoke");
         const string validModeCommandId = "progression-smoke-valid-after-poison";
         var validModeRequest = new EveSurfaceCommandRequest(
-            initialSurface.ProviderId,
-            initialSurface.Surface.Id,
+            commandSurface.ProviderId,
+            commandSurface.Surface.Id,
             CultMesh.OperationInvocation(
-                initialSurface.Commands.Single(template => template.Command == AetheriaRuntimeHangarCommands.SelectArena).Operation,
+                commandSurface.Commands.Single(template => template.Command == AetheriaRuntimeHangarCommands.SelectArena).Operation,
                 idempotencyKey: validModeCommandId),
-            TargetedPayload(initialSurface),
+            TargetedPayload(commandSurface),
             DateTimeOffset.UtcNow.AddTicks(1),
             "progression-verse-smoke");
         await client.SubmitDocumentAsync(
@@ -173,7 +190,7 @@ try
             localTarget,
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
             (EveSurfaceDocument surface) =>
-                surface.Version > initialSurface.Version &&
+                surface.Version > commandSurface.Version &&
                 Find(surface.Surface.Root, "aetheria.hangar.verse").Props["value"] == AetheriaProgressionSources.Local,
             TimeSpan.FromSeconds(5));
         const string staleSelectorCommandId = "progression-smoke-stale-selector";
@@ -426,7 +443,7 @@ try
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
             (EveSurfaceDocument surface) =>
                 Find(surface.Surface.Root, "aetheria.hangar.launch").Props["disabled"] == "false" &&
-                Find(surface.Surface.Root, "aetheria.hangar.launch").Props["expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),
+                Find(surface.Surface.Root, "aetheria.hangar.launch").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),
             TimeSpan.FromSeconds(10));
         var launch = Find(launchSurface.Surface.Root, "aetheria.hangar.launch");
         var launchReceipt = await SubmitAsync(
@@ -434,7 +451,7 @@ try
             localTarget,
             launchSurface,
             AetheriaRuntimeHangarCommands.Launch,
-            new Dictionary<string, string>(launch.Props, StringComparer.Ordinal));
+            DeclaredPayload(launch));
         var launchNavigation = launchReceipt.Navigation;
         Require(launchReceipt.State == "accepted" && launchNavigation?.VerseId == remoteVerse,
             $"Remote Terminus launch must return an accepted Eve navigation target for the selected Verse; state='{launchReceipt.State}', message='{launchReceipt.Message}', navigation='{launchNavigation?.VerseId ?? "<none>"}'.");
@@ -510,7 +527,7 @@ try
             localTarget,
             continueSurface,
             AetheriaRuntimeHangarCommands.Continue,
-            new Dictionary<string, string>(resume.Props, StringComparer.Ordinal));
+            DeclaredPayload(resume));
         Require(continueReceipt.State == "accepted" &&
                 continueReceipt.Navigation?.VerseId == remoteVerse &&
                 continueReceipt.Navigation.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId &&
@@ -754,6 +771,14 @@ static CultMeshOperationPayload TargetedPayload(EveSurfaceDocument surface)
         (AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion,
             surface.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 }
+
+static IReadOnlyDictionary<string, string> DeclaredPayload(EveSurfaceComponent component) =>
+    component.Props
+        .Where(field => field.Key.StartsWith("payload.", StringComparison.Ordinal))
+        .ToDictionary(
+            field => field.Key["payload.".Length..],
+            field => field.Value,
+            StringComparer.Ordinal);
 
 static async Task RequireMissingAsync<T>(
     CultMeshClient client,

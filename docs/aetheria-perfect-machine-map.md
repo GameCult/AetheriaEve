@@ -61,6 +61,8 @@ Date: 2026-06-13
 > daemon's stored Hangar projection and rejects stale references or altered
 > hints before writing the immutable command envelope; client fields do not own
 > routing.
+> Hangar controls declare semantic command operands with `payload.*`; lowerers
+> never infer intent from presentation props.
 > Route resolution verifies that authority and adds the Odin route without
 > consulting mutable dropdown state or substituting another authority that
 > advertises the same Verse; a target
