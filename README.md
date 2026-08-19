@@ -79,7 +79,10 @@ Local Hangar progression is executable end to end; a production GameCult Verse
 must additionally bind an authenticated account principal to per-player Hangar
 and draft records before serving authoritative progression. The daemon therefore
 refuses non-loopback publication today rather than exposing the global starter
-Hangar as somebody's account. A session runtime ID is not an account credential.
+Hangar as somebody's account. For local play, the Unity launchers explicitly set
+`--hangar-principal-runtime-id aetheria-unity`; authenticated Arena controllers
+see a join-only lobby and never inherit that Hangar capability. A session
+runtime ID is not an account credential.
 
 ## Architecture
 

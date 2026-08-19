@@ -150,9 +150,18 @@ gameplay-state writer.
 - browser, Unity, and headless Eve commands require an established CultMesh
   session identity before journaling; outer and inner caller IDs must match it,
   and the journal derives `ClientId` from that established identity;
+- the local daemon binds Hangar mutation to the configured
+  `--hangar-principal-runtime-id` (`aetheria-unity` in the Unity launchers).
+  Arena controllers never inherit that progression capability: they discover a
+  separate lobby surface exposing only `Join Arena`, then receive their scoped
+  seat surface;
+- a routing daemon is accepted by a remote progression Verse only when that
+  Verse explicitly configures it as an authenticated progression gateway (or
+  later binds an account principal). Forwarding/delegation metadata preserves
+  provenance and never grants Hangar authority;
 - Arena deployment, active session, and authority policy carry the same
   nonempty policy id; one daemon-owned roster survives reopen, Continue cannot
-  steal a seat, and the Hangar `Join Arena` command assigns an authenticated
+  steal a seat, and the Arena lobby `Join Arena` command assigns an authenticated
   human or headless AI the next open actor. Admission uses exact operation kinds,
   so target/global administration cannot hide behind a coarse combat claim.
   Launch/join navigation points each controller at a roster-specific Eve pilot

@@ -66,6 +66,12 @@ internal static class AetheriaBrowserEveCommandIngress
                 : request.MessageId;
             var commandRecordKey = new CultRecordKey(
                 $"eve:command-invocations:{AetheriaRuntimeVerseRecordKeys.StableToken(commandId)}");
+            var commandRequest = ToCommandRequest(request, intent, commandId, establishedRuntimeId);
+            AetheriaPublicEveCommandAdmission.RequireAuthorized(
+                node,
+                options,
+                establishedRuntimeId,
+                commandRequest);
             var alreadyReceipted = await node.CommitAsync(async () =>
             {
                 var receipted = node.Cache.Get<EveCommandReceiptDocument>(
@@ -74,7 +80,7 @@ internal static class AetheriaBrowserEveCommandIngress
                 {
                     await node.Database.PutAsync(
                         commandRecordKey,
-                        ToCommandRequest(request, intent, commandId, establishedRuntimeId)).ConfigureAwait(false);
+                        commandRequest).ConfigureAwait(false);
                 }
                 return receipted;
             }).ConfigureAwait(false);

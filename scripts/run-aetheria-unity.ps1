@@ -109,6 +109,7 @@ $daemonArguments = @(
   $daemonDll,
   "--root", $root,
   "--state", $state,
+  "--hangar-principal-runtime-id", "aetheria-unity",
   "--client-cultmesh-host", "127.0.0.1",
   "--client-cultmesh-advertise-host", "127.0.0.1",
   "--client-cultmesh-port", $Port,

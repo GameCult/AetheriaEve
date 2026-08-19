@@ -22,7 +22,6 @@ namespace GameCult.Aetheria.State.Verse
         public const string RemoveItem = "aetheria.hangar.loadout.remove";
         public const string Launch = "aetheria.hangar.launch";
         public const string Continue = "aetheria.hangar.continue";
-        public const string JoinArena = "aetheria.hangar.join_arena";
         public const string ExpectedProgressionVerseId = "expectedProgressionVerseId";
         public const string ExpectedProgressionSourceRevision = "expectedProgressionSourceRevision";
         public const string ExpectedProgressionAuthorityRuntimeId = "expectedProgressionAuthorityRuntimeId";
@@ -109,9 +108,7 @@ namespace GameCult.Aetheria.State.Verse
                         Button("aetheria.hangar.continue", "CONTINUE", AetheriaRuntimeHangarCommands.Continue, progressionSource, progressionAuthorityRuntimeId, version,
                             ("disabled", (!canContinue).ToString().ToLowerInvariant()),
                             ("payload.shipId", selected?.ShipId ?? ""),
-                            ("payload.deploymentId", selected?.ActiveDeploymentId ?? "")),
-                        Button("aetheria.hangar.join_arena", "JOIN ARENA", AetheriaRuntimeHangarCommands.JoinArena, progressionSource, progressionAuthorityRuntimeId, version,
-                            ("disabled", (!(canContinue && mode == AetheriaGameModes.Arena)).ToString().ToLowerInvariant()))
+                            ("payload.deploymentId", selected?.ActiveDeploymentId ?? ""))
                     }, Layout(("direction", "horizontal"), ("justifyContent", "flex-end"), ("minHeight", "44"), ("padding", "6"))),
                     Component("aetheria.hangar.body", "partition", Props(("split", "x")), new[]
                     {
@@ -234,8 +231,7 @@ namespace GameCult.Aetheria.State.Verse
                     Command(AetheriaRuntimeHangarCommands.EquipItem, "Equip Item"),
                     Command(AetheriaRuntimeHangarCommands.RemoveItem, "Remove Item"),
                     Command(AetheriaRuntimeHangarCommands.Launch, "Launch"),
-                    Command(AetheriaRuntimeHangarCommands.Continue, "Continue"),
-                    Command(AetheriaRuntimeHangarCommands.JoinArena, "Join Arena")
+                    Command(AetheriaRuntimeHangarCommands.Continue, "Continue")
                 });
         }
 

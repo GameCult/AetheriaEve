@@ -348,7 +348,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.RemoveItem) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Launch) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Continue) &&
-                        surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.JoinArena),
+                        !surface.Commands.Any(command => command.Command == AetheriaRuntimeArenaLobbyCommands.Join),
                     "the daemon-owned Hangar surface must advertise Verse selection, loadout, launch, and continuation operations");
                 var alternatePreviewSurface = AetheriaRuntimeHangarSurfaceBuilder.Build(
                     hangar, ship.ShipId, draft.SelectedMode, "2026-08-08T00:00:01Z", 2,
@@ -668,6 +668,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             "ai-build-b", AetheriaRuntimeArenaRosterDocument.RecordKey(arenaSession.SessionId), observationRoster, seatRun) &&
                         AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
                             "ai-build-b", AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString(), observationRoster, seatRun) &&
+                        AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", AetheriaRuntimeVerseRecordKeys.ArenaLobbySurface.ToString(), observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(), observationRoster, seatRun) &&
                         AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
                             "ai-build-b", AetheriaRuntimeVerseRecordKeys.EveAssetCatalogGeneration(41).ToString(), observationRoster, seatRun) &&
                         AetheriaRuntimeArenaObservationAdmission.CanReadBody(
@@ -1042,18 +1046,26 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             AetheriaBrowserEveCommandIngress.Register(
                 server,
                 node,
-                new AetheriaDaemonHostOptions { DaemonId = daemonId },
+                new AetheriaDaemonHostOptions
+                {
+                    DaemonId = daemonId,
+                    HangarPrincipalRuntimeId = seatA
+                },
                 candidate => sessionIdentity.TryGetSourceRuntimeId(candidate, out var runtimeId) ? runtimeId : null);
 
-            CultNetOperationRequestMessage Request(string commandId, string assertedRuntimeId)
+            CultNetOperationRequestMessage Request(
+                string commandId,
+                string assertedRuntimeId,
+                string surfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
+                string command = AetheriaRuntimeHangarCommands.SelectTerminus)
             {
                 var intent = new AetheriaBrowserEveCommandIngress.BrowserEveCommandIntent
                 {
                     Type = "eve.command",
                     Schema = EveSurfaceCommandRequest.SchemaId,
                     ProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
-                    SurfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
-                    Command = AetheriaRuntimeHangarCommands.SelectTerminus,
+                    SurfaceId = surfaceId,
+                    Command = command,
                     CommandBoundary = "receipt",
                     ReceiptSchema = EveCommandReceiptDocument.SchemaId,
                     Payload = new Dictionary<string, object?>
@@ -1112,6 +1124,65 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             var accepted = Queued("seat-valid");
             Require(peer.LastResponse?.Status == "queued" && accepted?.ClientId == seatA,
                 "operation ingress must journal the established runtime identity for a matching request");
+
+            node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                .ReplaceAsync(new AetheriaGameSessionState
+                {
+                    SessionId = "arena:operation-ingress",
+                    Mode = AetheriaGameModes.Arena,
+                    RunId = "run:operation-ingress",
+                    RunRecordKey = "global:aetheria.run:operation-ingress"
+                }).GetAwaiter().GetResult();
+            var controllerPeer = new OperationIngressTestPeer();
+            server.DispatchAsync(new CultMeshSessionOpenMessage
+            {
+                MessageId = "session-open-b",
+                SourceRuntimeId = seatB,
+                VerseId = "verse:operation-ingress",
+                AuthorityRuntimeId = daemonId,
+                ProtocolId = CultMeshProtocols.Documents.Value,
+                RouteGeneration = "route:test",
+                ClientNonce = Convert.ToBase64String(Enumerable.Repeat((byte)1, 32).ToArray())
+            }, controllerPeer).GetAwaiter().GetResult();
+            Require(controllerPeer.LastSessionAcceptance?.Accepted == true,
+                "the Arena controller must establish its own transport session before command admission");
+
+            var forbiddenHangarCommands = new[]
+            {
+                AetheriaRuntimeHangarCommands.SelectTerminus,
+                AetheriaRuntimeHangarCommands.SelectVerse,
+                AetheriaRuntimeHangarCommands.EquipItem,
+                AetheriaRuntimeHangarCommands.Launch,
+                AetheriaRuntimeHangarCommands.Continue
+            };
+            foreach (var forbiddenCommand in forbiddenHangarCommands)
+            {
+                var commandId = "controller-hangar-" + AetheriaRuntimeVerseRecordKeys.StableToken(forbiddenCommand);
+                server.DispatchAsync(
+                    Request(commandId, seatB, AetheriaRuntimeHangarCommands.SurfaceId, forbiddenCommand),
+                    controllerPeer).GetAwaiter().GetResult();
+                Require(controllerPeer.LastResponse?.Status == "denied" && Queued(commandId) == null,
+                    $"an authenticated Arena controller must not inherit Hangar authority for {forbiddenCommand}");
+            }
+
+            server.DispatchAsync(Request(
+                "controller-join",
+                seatB,
+                AetheriaRuntimeArenaLobbyCommands.SurfaceId,
+                AetheriaRuntimeArenaLobbyCommands.Join), controllerPeer).GetAwaiter().GetResult();
+            var join = Queued("controller-join");
+            Require(controllerPeer.LastResponse?.Status == "queued" &&
+                    join?.SurfaceId == AetheriaRuntimeArenaLobbyCommands.SurfaceId &&
+                    join.ClientId == seatB,
+                "an authenticated Arena controller must retain the dedicated lobby join path");
+
+            var lobby = AetheriaRuntimeArenaLobbySurfaceBuilder.Build("2026-08-19T00:00:00Z");
+            Require(lobby.Commands.Count == 1 &&
+                    lobby.Commands[0].Command == AetheriaRuntimeArenaLobbyCommands.Join &&
+                    !AetheriaRuntimeHangarSurfaceBuilder.Build(
+                        new AetheriaHangarState(), "", AetheriaGameModes.Terminus, "2026-08-19T00:00:00Z")
+                        .Commands.Any(template => template.Command == AetheriaRuntimeArenaLobbyCommands.Join),
+                "Arena join must live only on the dedicated lobby surface, never on the progression Hangar");
         }
         finally
         {

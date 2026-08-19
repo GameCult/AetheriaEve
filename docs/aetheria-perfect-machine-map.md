@@ -93,9 +93,14 @@ Date: 2026-06-13
 > Provider-route authentication is implemented, but remote player/account
 > authentication and per-principal Hangar/draft keys are not. Local is the only
 > progression path currently proven end to end; the daemon refuses non-loopback
-> publication until that boundary exists. Arena deployment installs
+> publication until that boundary exists. Local launchers explicitly bind the
+> Hangar capability to `aetheria-unity`; both public command ingresses reject a
+> different established runtime before creating a journal record. Arena
+> controllers discover a separate lobby surface whose only operation is Join,
+> while the Hangar disappears from their advertisement and read boundary.
+> Arena deployment installs
 > `aetheria.mode.arena.server.v1` plus one daemon-owned session roster. Launch
-> assigns a seat once, Continue cannot reassign it, and the Hangar Eve command
+> assigns a seat once, Continue cannot reassign it, and the Arena lobby command
 > gives additional runtimes the next open seat. Each active seat has a
 > daemon-authored Eve pilot surface, and command ingress derives its actor from
 > authenticated runtime plus roster instead of trusting the global current ship

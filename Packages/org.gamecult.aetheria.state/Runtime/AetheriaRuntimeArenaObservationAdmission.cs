@@ -15,7 +15,7 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
             AetheriaRuntimeVerseRecordKeys.DaemonAssetManifest.ToString(),
             AetheriaRuntimeVerseRecordKeys.DaemonHealth.ToString(),
-            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString()
+            AetheriaRuntimeVerseRecordKeys.ArenaLobbySurface.ToString()
         };
 
         private static readonly string[] PublicRecordPrefixes =

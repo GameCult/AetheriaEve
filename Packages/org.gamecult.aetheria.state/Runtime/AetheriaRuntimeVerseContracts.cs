@@ -65,6 +65,7 @@ namespace GameCult.Aetheria.State.Verse
         public static CultRecordKey MapMenuSurface { get; } = new("eve:surface:aetheria.map.zone_details");
         public static CultRecordKey TradeMenuSurface { get; } = new("eve:surface:aetheria.trade.menu");
         public static CultRecordKey HangarSurface { get; } = new("eve:surface:aetheria.hangar");
+        public static CultRecordKey ArenaLobbySurface { get; } = new("eve:surface:aetheria.arena.lobby");
         public static CultRecordKey HangarProjection { get; } = new("global:gamecult.aetheria.hangar_projection.v1");
         public static CultRecordKey HangarDraft { get; } = new("global:gamecult.aetheria.hangar_draft.v1");
         public static CultRecordKey ProgressionSource { get; } = new(AetheriaProgressionSourceDocument.DocumentKey);

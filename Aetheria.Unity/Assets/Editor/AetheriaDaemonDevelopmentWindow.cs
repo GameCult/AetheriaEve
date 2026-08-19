@@ -590,6 +590,7 @@ namespace Aetheria.Editor
             var arguments =
                 $"--root {Quote(ProjectRoot)} " +
                 $"--state {Quote(StatePath)} " +
+                "--hangar-principal-runtime-id aetheria-unity " +
                 $"--lifecycle-pipe {Quote(lifecyclePipeName)} " +
                 "--client-cultmesh-host 127.0.0.1 " +
                 "--client-cultmesh-advertise-host 127.0.0.1 " +

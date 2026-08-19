@@ -113,7 +113,10 @@ The authority policy differs without changing the document model:
   activation. One daemon-owned roster assigns stable entity identities and exact operation kinds
   to controller runtimes. Launch may fill the first seat once; Continue cannot
   rewrite it. Additional humans and headless AIs request the next open seat
-  through the same Hangar Eve command, without choosing their own actor. Each
+  through a dedicated Arena lobby Eve surface, without choosing their own actor.
+  The lobby exposes only `Join Arena`; it is not a projection of progression.
+  The configured local Hangar principal remains the only runtime permitted to
+  change mode, Verse, loadout, deployment, or continuation. Each
   active seat receives a daemon-authored Eve pilot surface whose player,
   camera, controllable entity, hot entity body, visible contacts, zone-render
   document, and input capability are derived from that roster assignment. Each
@@ -127,9 +130,10 @@ The authority policy differs without changing the document model:
   controller can read only receipts whose immutable command envelope names
   that controller. Arena export is default-deny: canonical run, zone, entity,
   session, roster, player, and progression records stay inside the operational
-  cache. Only typed presentation assets, the provider advertisement, Hangar
-  surface, and the caller's exact seat/receipt records cross the public
-  CultMesh boundary. Arena realtime broadcast is disabled
+  cache. Only typed presentation assets, the provider advertisement, Arena
+  lobby, and the caller's exact seat/receipt records cross the controller's
+  CultMesh boundary. The Hangar surface crosses that boundary only for its
+  configured principal. Arena realtime broadcast is disabled
   until the QUIC path can identify and filter each receiving controller; local
   headless and rendered clients consume the same authenticated document/body
   boundary meanwhile.
@@ -351,7 +355,10 @@ operation-request ingress decode a typed `EveSurfaceCommandRequest` and bind
 message `SourceRuntimeId` is only a consistency assertion; it cannot select a
 seat, impersonate the host, or become canonical command provenance. No public
 path can apply arbitrary raw document puts to Hangar, draft, run, or policy
-state. Admission durably binds command ID and payload hash to the provider-owned
+state. Before either ingress creates a journal record, one shared admission
+owner permits Hangar commands only for the configured progression principal and
+permits non-owner Arena controllers only the lobby's join operation. Admission
+durably binds command ID and payload hash to the provider-owned
 Verse, exact authority runtime, and progression-source revision resolved from
 the referenced Eve surface; client payload strings are consistency hints, not
 route authority. Forwarding verifies that authority and pins the Odin endpoint set. A later dropdown

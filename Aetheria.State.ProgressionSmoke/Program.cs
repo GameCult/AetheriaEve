@@ -1063,6 +1063,16 @@ static Process StartDaemon(
         "--client-cultmesh-quic-port", "0",
         "--no-odin-announcements"
     };
+    // This witness makes authority explicit: the smoke client owns the local
+    // launcher, while the local daemon is the configured progression gateway
+    // for remote authorities. Forwarding metadata alone grants nothing.
+    arguments.AddRange(new[]
+    {
+        "--hangar-principal-runtime-id",
+        daemonId.StartsWith("progression-remote", StringComparison.Ordinal)
+            ? "progression-local"
+            : "progression-verse-smoke"
+    });
     var assetBundleRoot = Environment.GetEnvironmentVariable("AETHERIA_SMOKE_ASSET_BUNDLE_ROOT")
         ?? Path.Combine(root, "Build", "EveAssets");
     if (Directory.Exists(assetBundleRoot))
