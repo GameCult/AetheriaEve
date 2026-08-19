@@ -271,6 +271,18 @@ namespace GameCult.Aetheria.State.Verse
 
     public static class AetheriaRuntimeArenaOperationAdmission
     {
+        public static bool IsServerAuthorityActive(
+            string gameMode,
+            string modePolicyId,
+            AetheriaRuntimeVerseAuthorityPolicyDocument? factPolicy,
+            string hostRuntimeId) =>
+            string.Equals(gameMode, AetheriaGameModes.Arena, StringComparison.Ordinal) &&
+            string.Equals(modePolicyId, AetheriaModePolicies.ArenaServerAuthoritative, StringComparison.Ordinal) &&
+            factPolicy != null &&
+            string.Equals(factPolicy.PolicyId, modePolicyId, StringComparison.Ordinal) &&
+            string.Equals(factPolicy.DefaultMode, AetheriaRuntimeAuthorityModes.HostAuthoritative, StringComparison.Ordinal) &&
+            string.Equals(factPolicy.HostRuntimeId, hostRuntimeId ?? "", StringComparison.Ordinal);
+
         public static AetheriaRuntimeAuthorityDecision BindAuthenticatedSurfaceActor(
             AetheriaRuntimeDaemonCommandDocument command,
             string surfaceId,
@@ -333,12 +345,7 @@ namespace GameCult.Aetheria.State.Verse
                 ? command.ClientId ?? ""
                 : command.AuthorRuntimeId;
 
-            if (!string.Equals(gameMode, AetheriaGameModes.Arena, StringComparison.Ordinal) ||
-                !string.Equals(modePolicyId, AetheriaModePolicies.ArenaServerAuthoritative, StringComparison.Ordinal) ||
-                factPolicy == null ||
-                !string.Equals(factPolicy.PolicyId, modePolicyId, StringComparison.Ordinal) ||
-                !string.Equals(factPolicy.DefaultMode, AetheriaRuntimeAuthorityModes.HostAuthoritative, StringComparison.Ordinal) ||
-                !string.Equals(factPolicy.HostRuntimeId, hostRuntimeId ?? "", StringComparison.Ordinal))
+            if (!IsServerAuthorityActive(gameMode, modePolicyId, factPolicy, hostRuntimeId))
             {
                 return Denied("arena-server-authority-not-active", subjectKey, claimKind, proposerRuntimeId, "");
             }

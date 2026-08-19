@@ -103,7 +103,11 @@ Date: 2026-06-13
 > advertisement projection; the stored anonymous advertisement is not client truth.
 > One tri-state Arena exposure context owns provider projection and record/body
 > admission. `Inactive` is ordinary non-Arena play, `ActiveValid` requires an
-> exact session/roster/frame generation, and `ActiveInvalid` exports nothing.
+> exact session/server-authority-policy/roster/frame generation, and
+> `ActiveInvalid` exports nothing. The installed policy must match
+> `aetheria.mode.arena.server.v1`, host-authoritative default, and the daemon
+> host identity used by command admission. Seat publication consumes this same
+> resolved context rather than a separately cached roster.
 > Missing Arena truth can never widen authority by masquerading as inactivity.
 > CultMesh keeps a per-subscription delivered-record ledger. An exposure-generation
 > change reconciles that ledger, emits peer-specific removals and projection

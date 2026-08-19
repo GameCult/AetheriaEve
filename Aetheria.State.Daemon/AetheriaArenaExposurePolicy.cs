@@ -18,31 +18,37 @@ internal sealed class AetheriaArenaExposureContext
     private AetheriaArenaExposureContext(
         AetheriaArenaExposureKind kind,
         AetheriaGameSessionState? session,
+        AetheriaRuntimeVerseAuthorityPolicyDocument? authorityPolicy,
         AetheriaRuntimeArenaRosterDocument? roster,
         AetheriaRuntimeDaemonFrameDocument? frame)
     {
         Kind = kind;
         Session = session;
+        AuthorityPolicy = authorityPolicy;
         Roster = roster;
         Frame = frame;
     }
 
     public AetheriaArenaExposureKind Kind { get; }
     public AetheriaGameSessionState? Session { get; }
+    public AetheriaRuntimeVerseAuthorityPolicyDocument? AuthorityPolicy { get; }
     public AetheriaRuntimeArenaRosterDocument? Roster { get; }
     public AetheriaRuntimeDaemonFrameDocument? Frame { get; }
 
     public static AetheriaArenaExposureContext Inactive { get; } =
-        new(AetheriaArenaExposureKind.Inactive, null, null, null);
+        new(AetheriaArenaExposureKind.Inactive, null, null, null, null);
 
-    public static AetheriaArenaExposureContext Invalid(AetheriaGameSessionState session) =>
-        new(AetheriaArenaExposureKind.ActiveInvalid, session, null, null);
+    public static AetheriaArenaExposureContext Invalid(
+        AetheriaGameSessionState session,
+        AetheriaRuntimeVerseAuthorityPolicyDocument? authorityPolicy) =>
+        new(AetheriaArenaExposureKind.ActiveInvalid, session, authorityPolicy, null, null);
 
     public static AetheriaArenaExposureContext Active(
         AetheriaGameSessionState session,
+        AetheriaRuntimeVerseAuthorityPolicyDocument authorityPolicy,
         AetheriaRuntimeArenaRosterDocument roster,
         AetheriaRuntimeDaemonFrameDocument frame) =>
-        new(AetheriaArenaExposureKind.ActiveValid, session, roster, frame);
+        new(AetheriaArenaExposureKind.ActiveValid, session, authorityPolicy, roster, frame);
 }
 
 /// <summary>
@@ -60,38 +66,57 @@ internal static class AetheriaArenaExposurePolicy
                 "invalid",
                 context.Session?.SessionId ?? "",
                 context.Session?.RunId ?? "",
-                context.Session?.RunRecordKey ?? ""),
+                context.Session?.RunRecordKey ?? "",
+                context.Session?.ModePolicyId ?? "",
+                context.AuthorityPolicy?.PolicyId ?? "",
+                context.AuthorityPolicy?.HostRuntimeId ?? "",
+                context.AuthorityPolicy?.DefaultMode ?? ""),
             _ => string.Join(
                 "\u001f",
                 "active",
                 context.Session!.SessionId,
                 context.Session.RunId,
                 context.Session.RunRecordKey,
+                context.Session.ModePolicyId,
+                context.AuthorityPolicy!.PolicyId,
+                context.AuthorityPolicy.HostRuntimeId,
+                context.AuthorityPolicy.DefaultMode,
                 context.Roster!.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture))
         };
 
     public static AetheriaArenaExposureContext Resolve(
         AetheriaStateNode node,
-        AetheriaRuntimeDaemonFrameDocument? frame)
+        AetheriaRuntimeDaemonFrameDocument? frame,
+        string hostRuntimeId)
     {
         var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
         if (session == null || !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
             return AetheriaArenaExposureContext.Inactive;
+        var authorityPolicy = node.Cache.Get<AetheriaRuntimeVerseAuthorityPolicyDocument>(
+            AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy);
         var roster = node.Cache.Get<AetheriaRuntimeArenaRosterDocument>(
             new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(session.SessionId)));
-        return Resolve(session, roster, frame);
+        return Resolve(session, authorityPolicy, roster, frame, hostRuntimeId);
     }
 
     internal static AetheriaArenaExposureContext Resolve(
         AetheriaGameSessionState? session,
+        AetheriaRuntimeVerseAuthorityPolicyDocument? authorityPolicy,
         AetheriaRuntimeArenaRosterDocument? roster,
-        AetheriaRuntimeDaemonFrameDocument? frame)
+        AetheriaRuntimeDaemonFrameDocument? frame,
+        string hostRuntimeId)
     {
         if (session == null || !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
             return AetheriaArenaExposureContext.Inactive;
-        return roster?.IsActiveFor(session.SessionId, session.RunId) == true && FrameBelongsToSession(frame, session)
-            ? AetheriaArenaExposureContext.Active(session, roster, frame!)
-            : AetheriaArenaExposureContext.Invalid(session);
+        return AetheriaRuntimeArenaOperationAdmission.IsServerAuthorityActive(
+                session.Mode,
+                session.ModePolicyId,
+                authorityPolicy,
+                hostRuntimeId) &&
+            roster?.IsActiveFor(session.SessionId, session.RunId) == true &&
+            FrameBelongsToSession(frame, session)
+                ? AetheriaArenaExposureContext.Active(session, authorityPolicy!, roster, frame!)
+                : AetheriaArenaExposureContext.Invalid(session, authorityPolicy);
     }
 
     public static bool CanReadRecord(

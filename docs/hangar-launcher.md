@@ -182,7 +182,9 @@ gameplay-state writer.
   subscription snapshots, live subscription updates, and reconnect all use the
   same authenticated per-peer advertisement projector. One tri-state exposure
   resolver distinguishes non-Arena play, a complete active Arena generation,
-  and an active Arena whose session, roster, or frame disagree. That last state
+  and an active Arena whose session, installed server-authority policy, roster,
+  or frame disagree. The active form requires the same policy id, host identity,
+  and host-authoritative default as command admission. That invalid state
   fails closed for records, subscriptions, bodies, and provider projection; it
   can never inherit the non-Arena export boundary. The subscription server owns
   a delivered-record ledger for each peer. An Arena exposure-generation change
@@ -191,7 +193,9 @@ gameplay-state writer.
   next hot-body publication. The mapped-body publisher is retired before that
   reconciliation; any later regrant creates a fresh mapping capability and
   producer epoch. Retained cursors therefore remain frozen on the revoked
-  generation instead of becoming a side door into future frames. Arena does not
+  generation instead of becoming a side door into future frames. Seat
+  publication consumes this same resolved context rather than a separately
+  cached roster. Arena does not
   use global realtime broadcast until that transport has per-peer identity.
   Headless and graphical controllers therefore observe the same bounded world
   around the ship they can command. Resulting facts

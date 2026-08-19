@@ -143,14 +143,14 @@ using var clientSubscriptions = new CultNetDatabaseSubscriptionServer(
     {
         if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
             return false;
-        var context = AetheriaArenaExposurePolicy.Resolve(node, latestFrame);
+        var context = AetheriaArenaExposurePolicy.Resolve(node, latestFrame, options.DaemonId);
         return AetheriaArenaExposurePolicy.CanSubscribe(node, runtimeId, request, context, options.HangarPrincipalRuntimeId);
     },
     authorizeRecord: (_, peer, recordKey, _) =>
     {
         if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
             return false;
-        var context = AetheriaArenaExposurePolicy.Resolve(node, latestFrame);
+        var context = AetheriaArenaExposurePolicy.Resolve(node, latestFrame, options.DaemonId);
         return AetheriaArenaExposurePolicy.CanReadRecord(node, runtimeId, recordKey, context, options.HangarPrincipalRuntimeId);
     },
     projectRecord: (_, peer, record) =>
@@ -158,7 +158,7 @@ using var clientSubscriptions = new CultNetDatabaseSubscriptionServer(
         if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
             return null;
         return ProjectProviderAdvertisementRecord(
-            node, options, AetheriaArenaExposurePolicy.Resolve(node, latestFrame), runtimeId, record);
+            node, options, AetheriaArenaExposurePolicy.Resolve(node, latestFrame, options.DaemonId), runtimeId, record);
     });
 var playableWorldDemand = new AetheriaPlayableWorldDemandState();
 clientSubscriptions.DemandChanged += playableWorldDemand.Observe;
@@ -178,11 +178,10 @@ using var arenaSeatObservations = new AetheriaArenaSeatObservationPublishers(
     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
     bodyDemand);
 var reconciledArenaExposureGeneration = AetheriaArenaExposurePolicy.Generation(
-    AetheriaArenaExposurePolicy.Resolve(node, latestFrame));
-async Task ReconcileArenaExposureAsync()
+    AetheriaArenaExposurePolicy.Resolve(node, latestFrame, options.DaemonId));
+async Task ReconcileArenaExposureAsync(AetheriaArenaExposureContext context)
 {
-    var generation = AetheriaArenaExposurePolicy.Generation(
-        AetheriaArenaExposurePolicy.Resolve(node, latestFrame));
+    var generation = AetheriaArenaExposurePolicy.Generation(context);
     if (string.Equals(generation, reconciledArenaExposureGeneration, StringComparison.Ordinal))
         return;
 
@@ -307,7 +306,9 @@ while (!stopped.Task.IsCompleted)
                 hangarProjection,
                 progressionForwardingShutdown.Token).ConfigureAwait(false);
             await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
-            await ReconcileArenaExposureAsync().ConfigureAwait(false);
+            var idleArenaExposure = AetheriaArenaExposurePolicy.Resolve(
+                node, latestFrame, options.DaemonId);
+            await ReconcileArenaExposureAsync(idleArenaExposure).ConfigureAwait(false);
             if (options.OdinDiscoveryEndpoints.Count > 0 && DateTimeOffset.UtcNow >= nextProgressionRefreshUtc)
             {
                 hangarProjection.RequestRefresh();
@@ -376,7 +377,9 @@ while (!stopped.Task.IsCompleted)
             physicsPersistence);
         initialPublication = initialPrepared.Publication;
     }
-    await ReconcileArenaExposureAsync().ConfigureAwait(false);
+    var currentArenaExposure = AetheriaArenaExposurePolicy.Resolve(
+        node, latestFrame, options.DaemonId);
+    await ReconcileArenaExposureAsync(currentArenaExposure).ConfigureAwait(false);
     if (!publishRestoredFrame)
     {
         await node.CommitAsync(() => PublishClientGameplayDocumentsAsync(
@@ -397,7 +400,7 @@ while (!stopped.Task.IsCompleted)
         allowRealtime: !string.Equals(latestFrame!.GameMode, AetheriaGameModes.Arena, StringComparison.Ordinal))
         .ConfigureAwait(false);
     await PublishArenaSeatObservationsAsync(
-        node, arenaSeatObservations, latestFrame!, ingressState.ArenaRoster,
+        node, arenaSeatObservations, currentArenaExposure,
         ingressState.Catalog, cultMeshClientHost).ConfigureAwait(false);
     TraceStartup("hot-entity-state");
     if (publishRestoredFrame)
@@ -444,14 +447,16 @@ while (!stopped.Task.IsCompleted)
             progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token).ConfigureAwait(false);
         ThrowIfClientHostFaulted(cultMeshClientHost);
         latestFrame = tick.Frame;
-        await ReconcileArenaExposureAsync().ConfigureAwait(false);
+        currentArenaExposure = AetheriaArenaExposurePolicy.Resolve(
+            node, latestFrame, options.DaemonId);
+        await ReconcileArenaExposureAsync(currentArenaExposure).ConfigureAwait(false);
         await PublishHotEntityStateAsync(
             node, soaPublisher, hotState, tick.Frame, ingressState.Catalog, cultMeshClientHost,
             AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest,
             allowRealtime: !string.Equals(tick.Frame.GameMode, AetheriaGameModes.Arena, StringComparison.Ordinal))
             .ConfigureAwait(false);
         await PublishArenaSeatObservationsAsync(
-            node, arenaSeatObservations, tick.Frame, ingressState.ArenaRoster,
+            node, arenaSeatObservations, currentArenaExposure,
             ingressState.Catalog, cultMeshClientHost).ConfigureAwait(false);
         nextTickUtc += options.TickInterval;
         if (nextTickUtc < DateTimeOffset.UtcNow - options.TickInterval)
@@ -1232,7 +1237,7 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                     await InjectEveSurfaceSnapshotAsync(
                         node, options, request, response, scopedRecordKey, scopedSurfaceKind).ConfigureAwait(false);
                 }
-                var scopedContext = AetheriaArenaExposurePolicy.Resolve(node, latestFrame());
+                var scopedContext = AetheriaArenaExposurePolicy.Resolve(node, latestFrame(), options.DaemonId);
                 var scopedRuntimeId = sessionIdentity.TryGetSourceRuntimeId(peer, out var establishedRuntimeId)
                     ? establishedRuntimeId
                     : "";
@@ -1626,7 +1631,7 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                 bundleCdnManifests,
                 request,
                 response);
-            var exposureContext = AetheriaArenaExposurePolicy.Resolve(node, frame);
+            var exposureContext = AetheriaArenaExposurePolicy.Resolve(node, frame, options.DaemonId);
             var sourceRuntimeId = sessionIdentity.TryGetSourceRuntimeId(peer, out var establishedSourceRuntimeId)
                 ? establishedSourceRuntimeId
                 : "";
@@ -2413,11 +2418,17 @@ static async Task PublishHotEntityStateAsync(
 static async Task PublishArenaSeatObservationsAsync(
     AetheriaStateNode node,
     AetheriaArenaSeatObservationPublishers publishers,
-    AetheriaRuntimeDaemonFrameDocument frame,
-    AetheriaRuntimeArenaRosterDocument? roster,
+    AetheriaArenaExposureContext context,
     AetheriaRuntimeCatalogSnapshot? catalog,
     AetheriaClientCultMeshHost clientHost)
 {
+    if (context.Kind != AetheriaArenaExposureKind.ActiveValid)
+    {
+        publishers.Retain(Array.Empty<string>());
+        return;
+    }
+    var frame = context.Frame!;
+    var roster = context.Roster!;
     var active = (roster?.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
         .Where(seat => seat != null &&
             string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&

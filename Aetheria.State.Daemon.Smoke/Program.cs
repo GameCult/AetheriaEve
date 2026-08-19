@@ -483,33 +483,68 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     }
                 };
                 var missingRosterExposure = AetheriaArenaExposurePolicy.Resolve(
-                    arenaSession, null, matchingExposureFrame);
+                    arenaSession, arenaPolicy, null, matchingExposureFrame, "daemon-smoke");
                 var missingFrameExposure = AetheriaArenaExposurePolicy.Resolve(
-                    arenaSession, arenaRoster, null);
+                    arenaSession, arenaPolicy, arenaRoster, null, "daemon-smoke");
                 var staleFrameExposure = AetheriaArenaExposurePolicy.Resolve(
                     arenaSession,
+                    arenaPolicy,
                     arenaRoster,
                     new AetheriaRuntimeDaemonFrameDocument
                     {
                         GameMode = AetheriaGameModes.Arena,
                         RunRecordKey = "run:stale",
                         Run = matchingExposureFrame.Run
-                    });
+                    },
+                    "daemon-smoke");
+                var missingPolicyExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, null, arenaRoster, matchingExposureFrame, "daemon-smoke");
+                var wrongHostExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession,
+                    AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(
+                        "aetheria.local", "wrong-host"),
+                    arenaRoster,
+                    matchingExposureFrame,
+                    "daemon-smoke");
+                var wrongDefaultPolicy = MessagePackSerializer.Deserialize<AetheriaRuntimeVerseAuthorityPolicyDocument>(
+                    MessagePackSerializer.Serialize(arenaPolicy));
+                wrongDefaultPolicy.DefaultMode = AetheriaRuntimeAuthorityModes.AnyTrustedRuntime;
+                var wrongDefaultExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession,
+                    wrongDefaultPolicy,
+                    arenaRoster,
+                    matchingExposureFrame,
+                    "daemon-smoke");
+                var wrongModePolicySession = MessagePackSerializer.Deserialize<AetheriaGameSessionState>(
+                    MessagePackSerializer.Serialize(arenaSession));
+                wrongModePolicySession.ModePolicyId = "aetheria.mode.wrong.v1";
+                var wrongModePolicyExposure = AetheriaArenaExposurePolicy.Resolve(
+                    wrongModePolicySession,
+                    arenaPolicy,
+                    arenaRoster,
+                    matchingExposureFrame,
+                    "daemon-smoke");
                 var validExposure = AetheriaArenaExposurePolicy.Resolve(
-                    arenaSession, arenaRoster, matchingExposureFrame);
+                    arenaSession, arenaPolicy, arenaRoster, matchingExposureFrame, "daemon-smoke");
                 var revisedRoster = MessagePackSerializer.Deserialize<AetheriaRuntimeArenaRosterDocument>(
                     MessagePackSerializer.Serialize(arenaRoster));
                 revisedRoster.Revision++;
                 var revisedExposure = AetheriaArenaExposurePolicy.Resolve(
-                    arenaSession, revisedRoster, matchingExposureFrame);
+                    arenaSession, arenaPolicy, revisedRoster, matchingExposureFrame, "daemon-smoke");
                 Require(missingRosterExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
                         missingFrameExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
                         staleFrameExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        missingPolicyExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        wrongHostExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        wrongDefaultExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        wrongModePolicyExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
                         validExposure.Kind == AetheriaArenaExposureKind.ActiveValid &&
                         AetheriaArenaExposurePolicy.Generation(missingRosterExposure) !=
                             AetheriaArenaExposurePolicy.Generation(validExposure) &&
                         AetheriaArenaExposurePolicy.Generation(validExposure) !=
                             AetheriaArenaExposurePolicy.Generation(revisedExposure) &&
+                        AetheriaArenaExposurePolicy.Generation(validExposure) !=
+                            AetheriaArenaExposurePolicy.Generation(wrongHostExposure) &&
                         !AetheriaArenaExposurePolicy.CanReadRecord(
                             node,
                             "pilot-runtime",
