@@ -2617,7 +2617,26 @@ static Task<bool> AcceptCoreEveInvocationsAsync(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
     AetheriaRuntimeDaemonFrameDocument? currentFrame)
-    => node.CommitAsync(() => AcceptCoreEveInvocationsCoreAsync(node, options, currentFrame));
+    => AcceptCoreEveInvocationsTransactionAsync(node, options, currentFrame);
+
+static async Task<bool> AcceptCoreEveInvocationsTransactionAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    AetheriaRuntimeDaemonFrameDocument? currentFrame)
+{
+    try
+    {
+        return await node.CommitAsync(
+            () => AcceptCoreEveInvocationsCoreAsync(node, options, currentFrame)).ConfigureAwait(false);
+    }
+    catch (Exception error) when (error is not OperationCanceledException)
+    {
+        // The state-node transaction has already rolled back. Keep the request pending;
+        // an infrastructure or projection failure is not a player-authored denial.
+        Console.Error.WriteLine($"Aetheria Eve command batch rolled back and remains pending: {error}");
+        return false;
+    }
+}
 
 static async Task<bool> AcceptCoreEveInvocationsCoreAsync(
     AetheriaStateNode node,
@@ -2726,39 +2745,39 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
     var diagnostic = "";
     var activatesSession = false;
     EveSurfaceNavigationTarget? navigation = null;
-    try
+    using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
+    var pinnedRoute = await node.MutableDocument<AetheriaProgressionCommandRouteDocument>(
+            AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId))
+        .ReadAsync().ConfigureAwait(false);
+    var progressionSource = await node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
+        .ReadAsync().ConfigureAwait(false)
+        ?? await progressionVerses.EnsureAndRefreshAsync(now).ConfigureAwait(false);
+    if (string.Equals(command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal))
     {
-        using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
-        var pinnedRoute = await node.MutableDocument<AetheriaProgressionCommandRouteDocument>(
-                AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId))
-            .ReadAsync().ConfigureAwait(false);
-        var progressionSource = await node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
-            .ReadAsync().ConfigureAwait(false)
-            ?? await progressionVerses.EnsureAndRefreshAsync(now).ConfigureAwait(false);
-        if (string.Equals(command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal))
-        {
-            await progressionVerses.SelectAsync(Payload(request, "value"), now).ConfigureAwait(false);
-            await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
-            accepted = true;
-        }
-        else if (pinnedRoute != null || !progressionSource.UsesLocalProgression)
-        {
-            pinnedRoute ??= await progressionVerses.ResolveOrPinForwardingRouteAsync(
-                request,
-                payloadHash,
-                now).ConfigureAwait(false);
-            if (!string.Equals(pinnedRoute.PayloadHash, payloadHash, StringComparison.Ordinal))
-                throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different payload.");
-            var remoteReceipt = await progressionVerses.ForwardHangarInvocationAsync(request, pinnedRoute).ConfigureAwait(false);
-            await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), remoteReceipt)
-                .ConfigureAwait(false);
-            await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
-            return false;
-        }
+        await progressionVerses.SelectAsync(Payload(request, "value"), now).ConfigureAwait(false);
+        await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
+        accepted = true;
+    }
+    else if (pinnedRoute != null || !progressionSource.UsesLocalProgression)
+    {
+        pinnedRoute ??= await progressionVerses.ResolveOrPinForwardingRouteAsync(
+            request,
+            payloadHash,
+            now).ConfigureAwait(false);
+        if (!string.Equals(pinnedRoute.PayloadHash, payloadHash, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different payload.");
+        var remoteReceipt = await progressionVerses.ForwardHangarInvocationAsync(request, pinnedRoute).ConfigureAwait(false);
+        await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), remoteReceipt)
+            .ConfigureAwait(false);
+        await PublishStateSurfacesAsync(node, options, now).ConfigureAwait(false);
+        return false;
+    }
 
-        var shipId = Payload(request, "shipId");
-        var expectedRevision = PayloadLong(request, "expectedHangarRevision", -1);
-        if (!accepted) switch (command)
+    var shipId = Payload(request, "shipId");
+    var expectedRevision = PayloadLong(request, "expectedHangarRevision", -1);
+    if (!accepted)
+    {
+        switch (command)
         {
             case AetheriaRuntimeHangarCommands.SelectShip:
                 await AetheriaDaemonHangarCoordinator.SelectShipAsync(node, shipId, now).ConfigureAwait(false);
@@ -2881,11 +2900,6 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                 diagnostic = "Command is not advertised by the Hangar surface.";
                 break;
         }
-    }
-    catch (Exception error) when (error is not TimeoutException and not IOException)
-    {
-        accepted = false;
-        diagnostic = error.Message;
     }
 
     var receiptDocument = new EveCommandReceiptDocument(

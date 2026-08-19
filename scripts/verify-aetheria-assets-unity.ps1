@@ -34,12 +34,38 @@ if ($unexpected.Count -gt 0 -or $missing.Count -gt 0) {
   throw "Asset authoring source boundary failed. Unexpected: $($unexpected -join ', '); missing: $($missing -join ', ')."
 }
 
-$manifest = Get-Content (Join-Path $project "Packages\manifest.json") -Raw
-if ($manifest -notmatch 'file:\.\./\.\./Packages/org\.gamecult\.aetheria\.state') {
+$manifest = Get-Content (Join-Path $project "Packages\manifest.json") -Raw | ConvertFrom-Json
+$lock = Get-Content (Join-Path $project "Packages\packages-lock.json") -Raw | ConvertFrom-Json
+$statePackage = Get-Content (Join-Path $root "Packages\org.gamecult.aetheria.state\package.json") -Raw | ConvertFrom-Json
+$cultLibRef = "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#b9cbd7561d96b01a770273891ea9144d98a538bc"
+$surfaceRef = "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#27b56c85abc6ecf8fa1121b9e1e58cd17338edd4"
+if ($manifest.dependencies.'org.gamecult.aetheria.state' -ne 'file:../../Packages/org.gamecult.aetheria.state') {
   throw "Asset authoring must consume the repository-owned typed state package."
 }
+if ($manifest.dependencies.'org.gamecult.cultlib' -ne $cultLibRef -or
+    $lock.dependencies.'org.gamecult.cultlib'.version -ne $cultLibRef -or
+    $lock.dependencies.'org.gamecult.cultlib'.hash -ne 'b9cbd7561d96b01a770273891ea9144d98a538bc') {
+  throw "Asset authoring must resolve the CultLib 1.0.56 coherent-generation API commit."
+}
+if ($manifest.dependencies.'org.gamecult.eve.surface' -ne $surfaceRef -or
+    $lock.dependencies.'org.gamecult.eve.surface'.version -ne $surfaceRef -or
+    $lock.dependencies.'org.gamecult.eve.surface'.hash -ne '27b56c85abc6ecf8fa1121b9e1e58cd17338edd4') {
+  throw "Asset authoring must resolve the same Eve surface contract as the player client."
+}
+$requiredStateDependencies = @{
+  'org.gamecult.cultlib' = '1.0.56'
+  'org.gamecult.cultmath' = '0.1.2'
+  'org.gamecult.eve.plugin-fields' = '0.2.3'
+  'org.gamecult.eve.surface' = '0.3.3'
+}
+foreach ($dependencyName in $requiredStateDependencies.Keys) {
+  if ($statePackage.dependencies.$dependencyName -ne $requiredStateDependencies[$dependencyName] -or
+      $lock.dependencies.'org.gamecult.aetheria.state'.dependencies.$dependencyName -ne $requiredStateDependencies[$dependencyName]) {
+    throw "Typed state package dependency '$dependencyName' is missing or stale in the asset-authoring graph."
+  }
+}
 foreach ($forbidden in @("org.gamecult.aetheria.eve-runtime", "org.gamecult.eve.unity-scene", "org.gamecult.eve.unity-uitoolkit")) {
-  if ($manifest -match [regex]::Escape($forbidden)) {
+  if ($manifest.dependencies.PSObject.Properties.Name -contains $forbidden) {
     throw "Asset authoring gained a forbidden client/runtime dependency: $forbidden"
   }
 }

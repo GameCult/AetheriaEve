@@ -5,7 +5,10 @@
     "unity": "2021.3",
     "description": "Unity runtime boundary for Aetheria typed CultCache/CultMesh state.",
     "dependencies": {
-        "org.gamecult.eve.surface": "0.3.1"
+        "org.gamecult.cultlib": "1.0.56",
+        "org.gamecult.cultmath": "0.1.2",
+        "org.gamecult.eve.plugin-fields": "0.2.3",
+        "org.gamecult.eve.surface": "0.3.3"
     },
     "keywords": [
         "Aetheria",

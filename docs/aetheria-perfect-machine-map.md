@@ -26,7 +26,12 @@ Date: 2026-06-13
 > facts, receipts, inbox deletion, and the frame containing their effect share
 > one transaction. Runtime catalog compilation reads those typed cache records,
 > including the active transaction overlay; it does not reopen and reinterpret
-> the `.cc` persistence file as an alternate source of truth. CultCache v4 writes content-addressed record pages,
+> the `.cc` persistence file as an alternate source of truth. Catalog and name
+> corpus hydration happen before command mutation; CultCache rejects hydration
+> inside an ambient transaction and serializes concurrent hydration with the
+> transaction gate. Unexpected launch or projection exceptions escape and roll
+> back the batch, leaving the request pending rather than minting a denial
+> receipt over partial deployment state. CultCache v4 writes content-addressed record pages,
 > exposes the batch through one atomic manifest generation swap, and leases the
 > selected manifest generation until a reader has hydrated every referenced
 > page. Observer callbacks run only after that read lease is released.

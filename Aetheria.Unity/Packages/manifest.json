@@ -7,10 +7,10 @@
     "com.unity.modules.physics": "1.0.0",
     "com.unity.modules.uielements": "1.0.0",
     "com.unity.render-pipelines.universal": "17.4.0",
-    "org.gamecult.cultlib": "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#72153a46a21211ab41ec1c74653acf6abe6d95bf",
+    "org.gamecult.cultlib": "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#b9cbd7561d96b01a770273891ea9144d98a538bc",
     "org.gamecult.eve.plugin-fields": "https://github.com/GameCult/EvePlugins.git?path=/plugins/eve-plugin-fields/unity/org.gamecult.eve.plugin-fields#eve-plugin-fields-unity-v0.2.3",
     "org.gamecult.eve.surface": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#27b56c85abc6ecf8fa1121b9e1e58cd17338edd4",
-    "org.gamecult.eve.unity-scene": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#abfbb122ee13945b2467da388253279e079948e6",
-    "org.gamecult.eve.unity-uitoolkit": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#abfbb122ee13945b2467da388253279e079948e6"
+    "org.gamecult.eve.unity-scene": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#ef83ba78bbec75365e3dcbb94d7945b31a8f893b",
+    "org.gamecult.eve.unity-uitoolkit": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#ef83ba78bbec75365e3dcbb94d7945b31a8f893b"
   }
 }

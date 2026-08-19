@@ -198,8 +198,13 @@ Hangar mutation, receipt, immutable loadout snapshot, generated run, and active
 `GameSession` enter one staged batch under the state node's single
 mutation-and-commit boundary. The executing async flow reads its buffered
 overlay while every other reader and observer remains on the prior committed
-generation. Command ingress and periodic multi-document publication use that
-same owner and cannot flush the batch halfway through. Aetheria exposes only a
+generation. Catalog and name-corpus records are hydrated at daemon boot;
+backing-store hydration cannot run inside a mutation transaction and waits for
+any active transaction before publishing records or observers. Command ingress
+and periodic multi-document publication use that same owner and cannot flush
+the batch halfway through. Unexpected generation or surface-projection failure
+escapes the transaction, leaving the command pending; it cannot become a denial
+receipt around partially staged deployment state. Aetheria exposes only a
 snapshotting read facade for cache inspection, and its database rejects
 authoritative record writes outside the state-node transaction.
 CultCache directory storage writes immutable generation pages and exposes the

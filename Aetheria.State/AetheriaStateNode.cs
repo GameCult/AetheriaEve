@@ -192,6 +192,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
         {
             WorldKey.ToString(),
             RuntimeCatalogKey.ToString(),
+            RuntimeNameCorpusKey.ToString(),
             TradeValuePolicyKey.ToString(),
             PlayerSettingsKey.ToString(),
             HangarKey.ToString(),
@@ -297,12 +298,9 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
     {
         var catalog = RuntimeCatalog().Latest()
             ?? throw new InvalidDataException("The compiled Aetheria runtime catalog is missing.");
-        if (Cache.Get<AetheriaRuntimeNameCorpusSnapshot>(RuntimeNameCorpusKey) == null)
-        {
-            await RawCache.PullBackingStoreRecordsAsync(metadata =>
-                string.Equals(metadata.Key, RuntimeNameCorpusKey.ToString(), StringComparison.Ordinal)).ConfigureAwait(false);
-        }
-        var corpus = await RuntimeNameCorpus().LatestAsync().ConfigureAwait(false);
+        var corpus = Cache.Get<AetheriaRuntimeNameCorpusSnapshot>(RuntimeNameCorpusKey)
+            ?? throw new InvalidDataException(
+                "The compiled Aetheria runtime name corpus was not hydrated at daemon boot.");
         return new AetheriaRuntimeCatalogSnapshot(
             catalog.Items.ToArray(),
             catalog.Corporations.ToArray(),

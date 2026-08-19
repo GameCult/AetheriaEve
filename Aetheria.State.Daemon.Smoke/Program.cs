@@ -118,6 +118,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         RunCheck(EveryAdvertisedModeUsesTheSharedDeploymentBoundary);
         RunCheck(ConcurrentHangarCommandIdsAdmitOneImmutablePayload);
         RunCheck(StateNodeCommitScopeCannotBeFlushedHalfwayByCommandIngress);
+        RunCheck(FailedLaunchProjectionRollsBackTheWholeDeployment);
     }
 
     public void RunCommandScale() => RunCheck(FrameSizeDoesNotGrowWithCommandChronology);
@@ -510,6 +511,94 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     finalSource.Diagnostic == "same-generation" &&
                     finalEnvelope != null,
                 "the complete state transaction must commit before the queued ingress generation");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void FailedLaunchProjectionRollsBackTheWholeDeployment()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"aetheria-launch-rollback-{Guid.NewGuid():N}");
+        var statePath = Path.Combine(root, "aetheria.cc");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var runtimeCatalog = TutorialPopulationCatalog(out _);
+            runtimeCatalog.Items.Single(item => string.Equals(item.HullType, "Station", StringComparison.Ordinal)).ItemKey =
+                AetheriaDaemonNativeCatalog.DockyardHullItemKey;
+            const string commandId = "launch-projection-failure";
+            string requestRecordKey;
+            long originalRevision;
+            using (var node = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult())
+            {
+                AetheriaDaemonHangarCoordinator.EnsureAsync(node, runtimeCatalog, "2026-08-19T00:00:00Z")
+                    .GetAwaiter().GetResult();
+                var hangar = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                originalRevision = hangar.Revision;
+                requestRecordKey = AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + commandId;
+                var request = new EveSurfaceCommandRequest(
+                    AetheriaRuntimeProviderIdentity.ProviderId,
+                    AetheriaRuntimeHangarCommands.SurfaceId,
+                    new CultMeshOperationInvocationDescriptor(
+                        AetheriaRuntimeHangarCommands.Launch,
+                        idempotencyKey: commandId),
+                    CultMesh.OperationPayload(("expectedHangarRevision", originalRevision.ToString(CultureInfo.InvariantCulture))),
+                    DateTimeOffset.Parse("2026-08-19T00:00:01Z", CultureInfo.InvariantCulture),
+                    "pilot:rollback-smoke");
+                AetheriaHangarCommandJournal.AdmitAsync(
+                        node,
+                        new CultRecordKey(requestRecordKey),
+                        request,
+                        "2026-08-19T00:00:01Z")
+                    .GetAwaiter().GetResult();
+
+                var rolledBack = false;
+                try
+                {
+                    node.CommitAsync(async () =>
+                    {
+                        var receipt = await AetheriaDaemonHangarCoordinator.LaunchAsync(
+                            node,
+                            runtimeCatalog,
+                            commandId,
+                            "rollback-session",
+                            originalRevision,
+                            "2026-08-19T00:00:02Z").ConfigureAwait(false);
+                        Require(receipt.Accepted, "rollback probe requires an otherwise valid deployment");
+                        throw new InvalidOperationException("injected surface publication failure");
+                    }).GetAwaiter().GetResult();
+                }
+                catch (InvalidOperationException error) when (error.Message == "injected surface publication failure")
+                {
+                    rolledBack = true;
+                }
+                Require(rolledBack, "surface publication failure must escape the deployment transaction");
+            }
+
+            using var reopened = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
+            var durableHangar = reopened.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+                .ReadAsync().GetAwaiter().GetResult()!;
+            var durableSettings = reopened.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
+                .ReadAsync().GetAwaiter().GetResult();
+            var durableSession = reopened.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                .ReadAsync().GetAwaiter().GetResult();
+            var pendingRequest = reopened.MutableDocument<EveSurfaceCommandRequest>(new CultRecordKey(requestRecordKey))
+                .ReadAsync().GetAwaiter().GetResult();
+            var receiptDocument = reopened.MutableDocument<EveCommandReceiptDocument>(
+                    AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(commandId))
+                .ReadAsync().GetAwaiter().GetResult();
+            Require(durableHangar.Revision == originalRevision &&
+                    durableHangar.Deployments.Length == 0 &&
+                    durableHangar.Ships.All(ship => ship.Status == AetheriaHangarShipStatuses.Available) &&
+                    string.IsNullOrWhiteSpace(durableSettings?.ActiveRunKey) &&
+                    durableSession == null &&
+                    reopened.Documents<AetheriaRunState>().Count == 0 &&
+                    pendingRequest != null &&
+                    receiptDocument == null,
+                "a failed post-generation projection must leave no run, deployment, session, or denial receipt and keep the request pending");
         }
         finally
         {
