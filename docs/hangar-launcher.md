@@ -112,6 +112,11 @@ frame, entity-view, or zone-render pointers and does not create or load a run.
 Each authority publishes its asset manifest and Eve asset catalog during cold
 presentation boot, before serving its Hangar. Gameplay topology reuses the same
 publication primitive; the first gameplay tick is never a launcher dependency.
+Surface ordering and candidate lifecycle are separate: an older base surface
+cannot supersede the newest observed version, while a failed newest asset
+candidate retires its own attempt so replaying that same canonical surface can
+retry. A failure never forces the provider to mint a fictitious newer surface
+version merely to recover presentation.
 
 Forbidden writers: Unity, Electron, Eve lowerers, mode session checkpoints,
 witness seeders, and mode-local inventory stores cannot mutate Hangar assets or

@@ -20,8 +20,8 @@ $expected = @{
         "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#f7c79ee784aae57b090b8093967ad2d8f22fc19c",
         "f7c79ee784aae57b090b8093967ad2d8f22fc19c")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#47122fa53e0ff0a0dc8cf74afd8a61f7ee071443",
-        "47122fa53e0ff0a0dc8cf74afd8a61f7ee071443")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#da5bc22e16c1311519e780923f90173d05273d93",
+        "da5bc22e16c1311519e780923f90173d05273d93")
     "org.gamecult.eve.unity-uitoolkit" = @(
         "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#44923edc2275a15e3480d3a407673b8cf8c809d9",
         "44923edc2275a15e3480d3a407673b8cf8c809d9")
@@ -94,9 +94,9 @@ if ($receiptContractSource -notmatch [regex]::Escape("InvocationHash") -or
 
 $scenePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.unity-scene@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.132" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.133" } |
     Select-Object -First 1
-if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.132 package is missing from Library/PackageCache." }
+if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.133 package is missing from Library/PackageCache." }
 $advertisedInputSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityAdvertisedInputAction.cs") -Raw
 $inputDriverSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityPlayableWorldInputDriver.cs") -Raw
 $actionBarSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityInputActionBar.cs") -Raw
@@ -125,7 +125,8 @@ foreach ($requiredNavigation in @(
     "_ownedPresentation",
     "PresentationSurfaceVersion",
     "assetCatalogVersion",
-    "TryObserveBaseSurfaceVersion",
+    "TryBeginBaseSurfaceCandidate",
+    "RetireFailedBaseSurfaceCandidate",
     "RequiredCatalogVersion")) {
     if ($navigationSource -notmatch [regex]::Escape($requiredNavigation)) {
         throw "Resolved Eve Unity scene package is missing provider-owned navigation '$requiredNavigation'."
