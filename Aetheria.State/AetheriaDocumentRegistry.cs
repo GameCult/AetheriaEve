@@ -30,6 +30,7 @@ public static class AetheriaDocumentRegistry
         typeof(AetheriaPlayerProfile),
         typeof(AetheriaHangarState),
         typeof(AetheriaHangarDraftState),
+        typeof(AetheriaHangarProjectionDocument),
         typeof(AetheriaProgressionSourceDocument),
         typeof(AetheriaHangarCommandEnvelopeDocument),
         typeof(AetheriaProgressionCommandRouteDocument),

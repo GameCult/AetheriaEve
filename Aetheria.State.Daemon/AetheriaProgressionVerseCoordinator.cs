@@ -22,7 +22,7 @@ internal sealed class AetheriaProgressionVerseView
     public required string[] AssetRendezvousEndpoints { get; init; }
     public required AetheriaHangarState Hangar { get; init; }
     public required AetheriaHangarDraftState Draft { get; init; }
-    public AetheriaLoadoutTemplate? Loadout { get; init; }
+    public AetheriaRuntimeLoadoutTemplateCommit? Loadout { get; init; }
     public AetheriaRuntimeCatalogSnapshot? Catalog { get; init; }
 }
 
@@ -208,50 +208,19 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         {
             var remote = await ResolveRemoteProgressionAsync(source, CancellationToken.None).ConfigureAwait(false);
             var target = remote.Target;
-            var hangar = remote.Hangar;
-            var draft = remote.Draft;
-            AetheriaLoadoutTemplate? loadout = null;
-            var selected = (hangar.Ships ?? Array.Empty<AetheriaHangarShip>()).FirstOrDefault(ship =>
-                string.Equals(ship.ShipId, draft.SelectedShipId, StringComparison.Ordinal));
-            if (!string.IsNullOrWhiteSpace(selected?.LoadoutTemplateKey))
-                loadout = await _remote.ReadAsync<AetheriaLoadoutTemplate>(
-                    target,
-                    selected.LoadoutTemplateKey,
-                    TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-            AetheriaRuntimeCatalogSnapshot? catalog = null;
-            try
-            {
-                catalog = await _remote.ReadAsync<AetheriaRuntimeCatalogSnapshot>(
-                    target,
-                    AetheriaStateNode.RuntimeCatalogKey.ToString(),
-                    TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-            }
-            catch (InvalidOperationException)
-            {
-                // Catalog labels are derived presentation; the Hangar remains usable without them.
-            }
-            var provider = await _remote.ReadAsync<EveProviderAdvertisementDocument>(
-                target,
-                AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString(),
-                TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-            var assetManifestRecordRef = provider.Surfaces
-                .Select(surface => surface.WorldInteraction?.AssetManifestRecordRef ?? "")
-                .FirstOrDefault(recordRef => !string.IsNullOrWhiteSpace(recordRef)) ?? "";
-            if (string.IsNullOrWhiteSpace(assetManifestRecordRef))
-                throw new InvalidOperationException(
-                    $"Selected Verse provider '{provider.ProviderId}' does not advertise an asset catalog.");
+            var projection = remote.Projection;
             return new AetheriaProgressionVerseView
             {
                 Source = source,
                 AuthorityRuntimeId = target.AuthorityRuntimeId,
-                AssetVerseId = target.VerseId,
-                AssetProviderId = provider.ProviderId,
-                AssetManifestRecordRef = assetManifestRecordRef,
+                AssetVerseId = projection.AssetVerseId,
+                AssetProviderId = projection.AssetProviderId,
+                AssetManifestRecordRef = projection.AssetManifestRecordRef,
                 AssetRendezvousEndpoints = source.OdinDiscoveryEndpoints?.ToArray() ?? Array.Empty<string>(),
-                Hangar = hangar,
-                Draft = draft,
-                Loadout = loadout,
-                Catalog = catalog
+                Hangar = projection.Hangar,
+                Draft = projection.Draft,
+                Loadout = projection.Loadout,
+                Catalog = projection.Catalog
             };
         }
         catch (Exception error) when (IsRemoteAvailabilityFailure(error))
@@ -514,7 +483,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             AssetRendezvousEndpoints = Array.Empty<string>(),
             Hangar = hangar,
             Draft = draft,
-            Loadout = loadout,
+            Loadout = loadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(loadout),
             Catalog = _node.RuntimeCatalog().Latest()
         };
     }
@@ -638,17 +607,13 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             var target = new CultMeshSessionTarget(source.SelectedVerseId, authorityRuntimeId);
             try
             {
-                var hangar = await _remote.ReadAsync<AetheriaHangarState>(
+                var projection = await _remote.ReadAsync<AetheriaHangarProjectionDocument>(
                     target,
-                    AetheriaStateNode.HangarKey.ToString(),
+                    AetheriaRuntimeVerseRecordKeys.HangarProjection.ToString(),
                     TimeSpan.FromSeconds(2),
                     cancellationToken).ConfigureAwait(false);
-                var draft = await _remote.ReadAsync<AetheriaHangarDraftState>(
-                    target,
-                    AetheriaStateNode.HangarDraftKey.ToString(),
-                    TimeSpan.FromSeconds(2),
-                    cancellationToken).ConfigureAwait(false);
-                return new RemoteProgression(target, hangar, draft);
+                ValidateProjection(target, projection);
+                return new RemoteProgression(target, projection);
             }
             catch (Exception error) when (IsRemoteAvailabilityFailure(error))
             {
@@ -661,10 +626,24 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             $"the typed Hangar progression record. Probes: {string.Join(" | ", failures)}");
     }
 
+    private static void ValidateProjection(
+        CultMeshSessionTarget target,
+        AetheriaHangarProjectionDocument projection)
+    {
+        if (projection.Generation <= 0 ||
+            !string.Equals(projection.AuthorityRuntimeId, target.AuthorityRuntimeId, StringComparison.Ordinal) ||
+            !string.Equals(projection.AssetVerseId, target.VerseId, StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(projection.AssetProviderId) ||
+            string.IsNullOrWhiteSpace(projection.AssetManifestRecordRef))
+        {
+            throw new InvalidOperationException(
+                $"Verse '{target.VerseId}' authority '{target.AuthorityRuntimeId}' published an invalid Hangar projection.");
+        }
+    }
+
     private sealed record RemoteProgression(
         CultMeshSessionTarget Target,
-        AetheriaHangarState Hangar,
-        AetheriaHangarDraftState Draft);
+        AetheriaHangarProjectionDocument Projection);
 
     private static bool IsRemoteAvailabilityFailure(Exception error) =>
         error is TimeoutException or InvalidOperationException or CultMeshSessionException;

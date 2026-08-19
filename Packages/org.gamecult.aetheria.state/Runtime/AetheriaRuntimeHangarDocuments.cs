@@ -74,6 +74,24 @@ namespace GameCult.Aetheria.State.Verse
         [Key(10)] public string UpdatedAtUtc { get; set; } = "";
     }
 
+    [CultDocument("gamecult.aetheria.hangar_projection", "gamecult.aetheria.hangar_projection.v1")]
+    [CultGlobal]
+    [MessagePackObject]
+    public sealed class AetheriaHangarProjectionDocument
+    {
+        [Key(0), CultName] public string Name { get; set; } = "Aetheria Hangar projection";
+        [Key(1)] public long Generation { get; set; }
+        [Key(2)] public string AuthorityRuntimeId { get; set; } = "";
+        [Key(3)] public string AssetVerseId { get; set; } = "";
+        [Key(4)] public string AssetProviderId { get; set; } = "";
+        [Key(5)] public string AssetManifestRecordRef { get; set; } = "";
+        [Key(6)] public AetheriaHangarState Hangar { get; set; } = new AetheriaHangarState();
+        [Key(7)] public AetheriaHangarDraftState Draft { get; set; } = new AetheriaHangarDraftState();
+        [Key(8)] public AetheriaRuntimeLoadoutTemplateCommit? Loadout { get; set; }
+        [Key(9)] public AetheriaRuntimeCatalogSnapshot? Catalog { get; set; }
+        [Key(10)] public string UpdatedAtUtc { get; set; } = "";
+    }
+
     [MessagePackObject]
     public sealed class AetheriaHangarShip
     {

@@ -197,6 +197,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
             PlayerSettingsKey.ToString(),
             HangarKey.ToString(),
             HangarDraftKey.ToString(),
+            AetheriaRuntimeVerseRecordKeys.HangarProjection.ToString(),
             ProgressionSourceKey.ToString(),
             VerseHostSettingsKey.ToString(),
             GameSessionStateKey.ToString(),

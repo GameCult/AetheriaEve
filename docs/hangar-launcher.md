@@ -43,6 +43,13 @@ offers Local plus the Verses discovered through the configured Odin. Switching
 the selection changes which Verse owns Hangar progression; it does not move
 progression authority into the renderer.
 
+Each progression authority publishes one immutable typed Hangar projection
+generation containing the Hangar, draft selection, selected loadout, catalog,
+and qualified asset source. A routing daemon reads that single generation. It
+does not independently sample those records and join them into a surface; a
+surface may never combine a Hangar revision from before a refit with a loadout
+or catalog from after it.
+
 ## Authority Map
 
 Owner: the canonical `gamecult.aetheria.hangar.v1` document owns durable ships,
@@ -55,7 +62,10 @@ selected progression Verse, and the exact mode policy id.
 
 Outputs: committed Hangar/loadout revisions and one immutable accepted
 deployment receipt embedded atomically in the new Hangar revision, or a typed
-rejection that does not mutate the Hangar.
+rejection that does not mutate the Hangar. The progression authority also emits
+one `gamecult.aetheria.hangar_projection.v1` generation for routers and
+lowerers; this projection is derived from one committed state generation and
+owns no mutations.
 
 Derived state: selected bay, selected mode, preview, fit metrics, affordability,
 compatibility warnings, and launch readiness are UI projections. The preview
@@ -100,6 +110,9 @@ path. Generic New Game must not return as a gameplay-state writer.
 - a published Eve drag can remove an installed item, restore it at explicit
   cells, launch Terminus from that loadout, and continue the saved run through a
   remote Odin-discovered progression Verse;
+- a remote refit concurrent with projection refresh yields either the complete
+  earlier projection generation or the complete later generation, never a
+  Hangar/loadout/catalog mixture;
 - the portable surface exposes owned bays, ship preview, fit summary, existing
   inventory/refit entry, three mode selectors, and Launch;
 - on a fresh daemon with no run, the preview lowers one visible entity for the

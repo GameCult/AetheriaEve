@@ -3379,6 +3379,7 @@ static async Task PublishStateSurfacesCoreAsync(
     await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaStateNode.ProviderAdvertisementSurfaceKey)
         .ReplaceAsync(AetheriaEveSurfaceDocuments.BuildProviderAdvertisement(verseHost, node.StatePath, updatedAtUtc))
         .ConfigureAwait(false);
+    await PublishLocalHangarProjectionAsync(node, options, updatedAtUtc).ConfigureAwait(false);
     if (hangarView != null)
     {
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.HangarSurface)
@@ -3388,7 +3389,7 @@ static async Task PublishStateSurfacesCoreAsync(
                 hangarView.Draft.SelectedMode,
                 updatedAtUtc,
                 Math.Max(1, hangarView.Hangar.Revision + hangarView.Draft.Revision + hangarView.Source.Revision),
-                hangarView.Loadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(hangarView.Loadout),
+                hangarView.Loadout,
                 hangarView.Catalog,
                 hangarView.Source,
                 hangarView.Draft.ActiveView,
@@ -3400,6 +3401,42 @@ static async Task PublishStateSurfacesCoreAsync(
                 hangarView.AssetRendezvousEndpoints))
             .ConfigureAwait(false);
     }
+}
+
+static async Task PublishLocalHangarProjectionAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    string updatedAtUtc)
+{
+    var hangar = await node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
+        .ReadAsync().ConfigureAwait(false) ?? new AetheriaHangarState();
+    var draft = await node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
+        .ReadAsync().ConfigureAwait(false) ?? new AetheriaHangarDraftState();
+    var selected = (hangar.Ships ?? Array.Empty<AetheriaHangarShip>()).FirstOrDefault(ship =>
+        string.Equals(ship.ShipId, draft.SelectedShipId, StringComparison.Ordinal));
+    AetheriaRuntimeLoadoutTemplateCommit? loadout = null;
+    if (!string.IsNullOrWhiteSpace(selected?.LoadoutTemplateKey))
+    {
+        var stored = await node.MutableDocument<AetheriaLoadoutTemplate>(new CultRecordKey(selected.LoadoutTemplateKey))
+            .ReadAsync().ConfigureAwait(false);
+        if (stored != null)
+            loadout = AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(stored);
+    }
+    var pointer = node.MutableDocument<AetheriaHangarProjectionDocument>(AetheriaRuntimeVerseRecordKeys.HangarProjection);
+    var existing = await pointer.ReadAsync().ConfigureAwait(false);
+    await pointer.ReplaceAsync(new AetheriaHangarProjectionDocument
+    {
+        Generation = Math.Max(0, existing?.Generation ?? 0) + 1,
+        AuthorityRuntimeId = options.DaemonId,
+        AssetVerseId = options.VerseId,
+        AssetProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
+        AssetManifestRecordRef = AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
+        Hangar = hangar,
+        Draft = draft,
+        Loadout = loadout,
+        Catalog = node.RuntimeCatalog().Latest(),
+        UpdatedAtUtc = updatedAtUtc ?? ""
+    }).ConfigureAwait(false);
 }
 
 static AetheriaProgressionVerseCoordinator CreateProgressionVerseCoordinator(

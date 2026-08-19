@@ -114,6 +114,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
 
     public void RunHangar()
     {
+        RunCheck(HangarProjectionRoundTripsAsOneGeneration);
         RunCheck(HangarLaunchUsesConfiguredLoadoutAndContinuesSavedRun);
         RunCheck(EveryAdvertisedModeUsesTheSharedDeploymentBoundary);
         RunCheck(ConcurrentHangarCommandIdsAdmitOneImmutablePayload);
@@ -121,6 +122,64 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         RunCheck(FailedPostGenerationStepRollsBackTheWholeDeployment);
         RunCheck(RemoteHangarReceiptMustFinalizeThePinnedEnvelope);
         RunCheck(NewerHangarMutationDiscardsPreparedOlderProjection);
+    }
+
+    private static void HangarProjectionRoundTripsAsOneGeneration()
+    {
+        var projection = new AetheriaHangarProjectionDocument
+        {
+            Generation = 17,
+            AuthorityRuntimeId = "progression-authority",
+            AssetVerseId = "verse:modded",
+            AssetProviderId = "provider:modded",
+            AssetManifestRecordRef = "eve:assets:modded",
+            Hangar = new AetheriaHangarState
+            {
+                HangarId = "player:projection",
+                Revision = 9,
+                Ships =
+                [
+                    new AetheriaHangarShip
+                    {
+                        ShipId = "ship:projection",
+                        HullItemKey = "hull:projection",
+                        LoadoutTemplateKey = "loadout:projection"
+                    }
+                ]
+            },
+            Draft = new AetheriaHangarDraftState
+            {
+                SelectedShipId = "ship:projection",
+                SelectedMode = AetheriaGameModes.Terminus,
+                Revision = 4
+            },
+            Loadout = new AetheriaRuntimeLoadoutTemplateCommit
+            {
+                Name = "loadout:projection",
+                OwnerPlayerKey = "player:projection",
+                RootEntity = new AetheriaRuntimeEntityLoadoutCommit
+                {
+                    Name = "ship:projection",
+                    Kind = "ship"
+                }
+            },
+            Catalog = new AetheriaRuntimeCatalogSnapshot
+            {
+                CatalogId = "catalog:projection"
+            },
+            UpdatedAtUtc = "2026-08-19T00:00:00Z"
+        };
+
+        var restored = MessagePackSerializer.Deserialize<AetheriaHangarProjectionDocument>(
+            MessagePackSerializer.Serialize(projection));
+        Require(restored.Generation == projection.Generation &&
+                restored.AuthorityRuntimeId == projection.AuthorityRuntimeId &&
+                restored.AssetVerseId == projection.AssetVerseId &&
+                restored.Hangar.Revision == projection.Hangar.Revision &&
+                restored.Draft.Revision == projection.Draft.Revision &&
+                restored.Loadout?.RootEntity.Name == "ship:projection" &&
+                restored.Catalog?.CatalogId == projection.Catalog.CatalogId,
+            "one Hangar projection generation must round-trip with its Hangar, draft, loadout, catalog, and asset authority intact");
     }
 
     public void RunCommandScale() => RunCheck(FrameSizeDoesNotGrowWithCommandChronology);
