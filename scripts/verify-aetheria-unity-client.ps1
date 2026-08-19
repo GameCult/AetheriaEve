@@ -20,11 +20,11 @@ $expected = @{
         "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#3ede0799abde0bf21a4b691d99dae73ce2294f4b",
         "3ede0799abde0bf21a4b691d99dae73ce2294f4b")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#12637367e18f7b5f1a8df5025e00a10be86df3ca",
-        "12637367e18f7b5f1a8df5025e00a10be86df3ca")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#a11b8f7d45e4401d8bc8cf85ade3e8e8f03a76d1",
+        "a11b8f7d45e4401d8bc8cf85ade3e8e8f03a76d1")
     "org.gamecult.eve.unity-uitoolkit" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#12637367e18f7b5f1a8df5025e00a10be86df3ca",
-        "12637367e18f7b5f1a8df5025e00a10be86df3ca")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#a11b8f7d45e4401d8bc8cf85ade3e8e8f03a76d1",
+        "a11b8f7d45e4401d8bc8cf85ade3e8e8f03a76d1")
 }
 
 foreach ($packageName in $expected.Keys) {
@@ -93,9 +93,9 @@ if ($receiptContractSource -notmatch [regex]::Escape("InvocationHash") -or
 
 $scenePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.unity-scene@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.127" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.128" } |
     Select-Object -First 1
-if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.127 package is missing from Library/PackageCache." }
+if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.128 package is missing from Library/PackageCache." }
 $advertisedInputSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityAdvertisedInputAction.cs") -Raw
 $inputDriverSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityPlayableWorldInputDriver.cs") -Raw
 $actionBarSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityInputActionBar.cs") -Raw
