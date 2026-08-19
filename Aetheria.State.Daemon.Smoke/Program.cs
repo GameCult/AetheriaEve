@@ -653,11 +653,27 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             "ai-build-b", primaryFrameKey, observationRoster, seatRun) &&
                         !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
                             "ai-build-b", AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(), observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", AetheriaStateNode.GameSessionStateKey.ToString(), observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", "global:aetheria.run_state.secret.v1", observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", "global:aetheria.zone_state.secret.v1", observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", "global:aetheria.entity_snapshot.secret.v1", observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", AetheriaRuntimeArenaRosterDocument.RecordKey(arenaSession.SessionId), observationRoster, seatRun) &&
+                        AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString(), observationRoster, seatRun) &&
+                        AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", AetheriaRuntimeVerseRecordKeys.EveAssetCatalogGeneration(41).ToString(), observationRoster, seatRun) &&
                         AetheriaRuntimeArenaObservationAdmission.CanReadBody(
                             "ai-build-b", joinedBodyId, observationRoster, seatRun) &&
                         !AetheriaRuntimeArenaObservationAdmission.CanReadBody(
-                            "pilot-runtime", joinedBodyId, observationRoster, seatRun),
-                    "Arena observation admission must bind exact seat records and bodies to established runtime identity");
+                            "pilot-runtime", joinedBodyId, observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadBody(
+                            "ai-build-b", "unknown-public-body", observationRoster, seatRun),
+                    "Arena public export must default-deny canonical state and bind exact seat records/bodies to established identity");
 
                 var ordinarySeatRequest = new EveSurfaceCommandRequest(
                     AetheriaRuntimeProviderIdentity.ProviderId,

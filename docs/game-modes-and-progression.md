@@ -125,7 +125,11 @@ The authority policy differs without changing the document model:
   only the caller's seat. The full daemon frame, primary-pilot records, command
   journal, and global fact stream are not Arena controller observations; a
   controller can read only receipts whose immutable command envelope names
-  that controller. Arena realtime broadcast is disabled
+  that controller. Arena export is default-deny: canonical run, zone, entity,
+  session, roster, player, and progression records stay inside the operational
+  cache. Only typed presentation assets, the provider advertisement, Hangar
+  surface, and the caller's exact seat/receipt records cross the public
+  CultMesh boundary. Arena realtime broadcast is disabled
   until the QUIC path can identify and filter each receiving controller; local
   headless and rendered clients consume the same authenticated document/body
   boundary meanwhile.

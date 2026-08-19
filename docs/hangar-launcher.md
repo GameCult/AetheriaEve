@@ -162,6 +162,9 @@ gameplay-state writer.
   zone-render record, and input capability. The CultMesh read gate resolves the
   authenticated peer against the roster for snapshot, subscription, and body
   demand; exact keys for another seat and the global frame fail closed. The
+  Arena export boundary is an allowlist, so a canonical run/zone/entity/session
+  record or schema-wide subscription cannot escape merely because its key was
+  absent from a privacy list. The
   provider advertises only the requesting controller's seat, and Arena does not
   use global realtime broadcast until that transport has per-peer identity.
   Headless and graphical controllers therefore observe the same bounded world

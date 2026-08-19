@@ -9,27 +9,21 @@ namespace GameCult.Aetheria.State.Verse
 {
     public static class AetheriaRuntimeArenaObservationAdmission
     {
-        private static readonly string[] PrivateRecordPrefixes =
+        private static readonly string[] PublicRecordKeys =
         {
-            "daemon:aetheria.frame",
-            "eve:surface:aetheria.daemon.game",
-            "eve:surface:aetheria.starbridge.commander",
-            "eve:surface:aetheria.map.zone_details",
-            "eve:surface:aetheria.arena.pilot.",
-            "eve:entity-view:aetheria.daemon",
-            "daemon:aetheria.zone_render",
-            "eve:input:aetheria.pilot",
-            "eve:input:aetheria.arena.",
-            "mesh:body:eve:entity-soa:aetheria.daemon",
-            "aetheria.viewport.",
-            "aetheria.object.selected.",
-            "aetheria.inventory.",
-            "daemon:facts:",
-            "eve:commands:aetheria.daemon:",
-            "eve:receipts:aetheria.daemon:",
-            "hangar:command-envelopes:",
-            "hangar:command-routes:",
-            "daemon:commands:"
+            AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString(),
+            AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
+            AetheriaRuntimeVerseRecordKeys.DaemonAssetManifest.ToString(),
+            AetheriaRuntimeVerseRecordKeys.DaemonHealth.ToString(),
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString()
+        };
+
+        private static readonly string[] PublicRecordPrefixes =
+        {
+            "eve:assets:aetheria.daemon:version:",
+            "mesh:cdn:artifact:",
+            "mesh:cdn:chunk:",
+            "mesh:entity-prefab:"
         };
 
         public static bool CanSubscribe(
@@ -57,7 +51,7 @@ namespace GameCult.Aetheria.State.Verse
         {
             if (roster == null)
                 return true;
-            if (!IsPrivateRecord(recordKey))
+            if (IsPublicRecord(recordKey))
                 return true;
             if (run == null || !string.Equals(roster.RunId, run.RunId, StringComparison.Ordinal))
                 return false;
@@ -72,9 +66,6 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeRunCheckpointCommit? run)
         {
             if (roster == null)
-                return true;
-            if (!string.Equals(bodyId, AetheriaRuntimeDaemonSoaFramePublisher.BodyId, StringComparison.Ordinal) &&
-                !bodyId.StartsWith("eve:entity-soa:aetheria.daemon.arena.", StringComparison.Ordinal))
                 return true;
             if (run == null || !string.Equals(roster.RunId, run.RunId, StringComparison.Ordinal))
                 return false;
@@ -100,9 +91,10 @@ namespace GameCult.Aetheria.State.Verse
             return matches.Length == 1 ? matches[0] : null;
         }
 
-        private static bool IsPrivateRecord(string recordKey) =>
+        private static bool IsPublicRecord(string recordKey) =>
             !string.IsNullOrWhiteSpace(recordKey) &&
-            PrivateRecordPrefixes.Any(prefix => recordKey.StartsWith(prefix, StringComparison.Ordinal));
+            (PublicRecordKeys.Contains(recordKey, StringComparer.Ordinal) ||
+             PublicRecordPrefixes.Any(prefix => recordKey.StartsWith(prefix, StringComparison.Ordinal)));
 
         private static string[] SeatRecordKeys(string runtimeId)
         {

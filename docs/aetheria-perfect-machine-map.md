@@ -103,7 +103,9 @@ Date: 2026-06-13
 > body/view, zone-render record, and input capability. CultMesh snapshot,
 > subscription, and body-demand admission resolves the established peer runtime
 > through the current roster; another seat's known key and the full global frame
-> fail closed. Global advertisements omit Arena seat enumeration and a
+> fail closed. Arena public export is default-deny: canonical run, zone, entity,
+> session, roster, player, command-journal, and fact records remain operational
+> cache state, not public Verse state. Global advertisements omit Arena seat enumeration and a
 > peer-specific snapshot exposes only the caller's seat. Arena realtime
 > broadcast remains disabled until QUIC has per-peer identity and filtering. The
 > daemon remains the sole committed-fact author. Starbridge's
