@@ -435,13 +435,19 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             VerseId = "gamecult.aetheria",
             AuthorityRuntimeId = "aetheria-authority"
         };
+        var forwardedRequest = AetheriaProgressionVerseCoordinator.CreateForwardedRequest(
+            request,
+            route.PayloadHash,
+            "progression-router");
+        route.ForwardedInvocationHash = EveCommandInvocationHash.Compute(forwardedRequest);
 
         EveCommandReceiptDocument Receipt(
             string receiptCommandId = commandId,
             string providerId = AetheriaRuntimeProviderIdentity.ProviderId,
             string surfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
             string authority = "aetheria-authority",
-            string navigationVerse = "gamecult.aetheria") => new(
+            string navigationVerse = "gamecult.aetheria",
+            string? invocationHash = null) => new(
                 "receipt:" + receiptCommandId,
                 receiptCommandId,
                 AetheriaRuntimeHangarCommands.SelectShip,
@@ -458,18 +464,21 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     providerId,
                     AetheriaRuntimeHangarCommands.SurfaceId,
                     "interactive-world",
-                    authorityRuntimeId: authority));
+                    authorityRuntimeId: authority),
+                invocationHash ?? route.ForwardedInvocationHash);
 
         var remoteReceipt = Receipt();
         AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(request, route, remoteReceipt);
         var clientReceipt = AetheriaProgressionVerseCoordinator.ReEnvelopeForLocalClient(
             request,
             remoteReceipt,
+            route,
             "local-router");
         Require(clientReceipt.Authority == "local-router" &&
                 clientReceipt.CommandId == request.CommandId &&
                 clientReceipt.ProviderId == request.ProviderId &&
                 clientReceipt.SurfaceId == request.SurfaceId &&
+                clientReceipt.InvocationHash == route.PayloadHash &&
                 clientReceipt.Navigation?.AuthorityRuntimeId == route.AuthorityRuntimeId,
             "verified remote finality must be re-enveloped by the local router while navigation preserves the remote run authority");
 
@@ -495,8 +504,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
                     request, route, Receipt(authority: "another-authority"))) &&
                 Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
+                    request, route, Receipt(invocationHash: "sha256:another-envelope"))) &&
+                Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
                     request, route, Receipt(navigationVerse: "another-verse"))),
-            "a remote typed document under the expected key must not finalize a different command, provider, surface, authority, or Verse");
+            "a remote typed document under the expected key must not finalize a different command, payload, provider, surface, authority, or Verse");
     }
 
     private static void NewerHangarMutationDiscardsPreparedOlderProjection()

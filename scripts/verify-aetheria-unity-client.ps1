@@ -17,14 +17,14 @@ $expected = @{
         "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#b9cbd7561d96b01a770273891ea9144d98a538bc",
         "b9cbd7561d96b01a770273891ea9144d98a538bc")
     "org.gamecult.eve.surface" = @(
-        "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#351f70245bd27552ed1921861ddf36dbef32dcba",
-        "351f70245bd27552ed1921861ddf36dbef32dcba")
+        "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#3ede0799abde0bf21a4b691d99dae73ce2294f4b",
+        "3ede0799abde0bf21a4b691d99dae73ce2294f4b")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#baf9df618eb25e132e0a2e883e68910a66ed25c8",
-        "baf9df618eb25e132e0a2e883e68910a66ed25c8")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#6fe5a789fe260989acbe06c08cbc1ed0596cbc7b",
+        "6fe5a789fe260989acbe06c08cbc1ed0596cbc7b")
     "org.gamecult.eve.unity-uitoolkit" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#baf9df618eb25e132e0a2e883e68910a66ed25c8",
-        "baf9df618eb25e132e0a2e883e68910a66ed25c8")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#6fe5a789fe260989acbe06c08cbc1ed0596cbc7b",
+        "6fe5a789fe260989acbe06c08cbc1ed0596cbc7b")
 }
 
 foreach ($packageName in $expected.Keys) {
@@ -73,9 +73,9 @@ foreach ($apiName in $requiredMeshApiNames) {
 
 $surfacePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.surface@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.3" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.5" } |
     Select-Object -First 1
-if (-not $surfacePackage) { throw "Resolved Eve surface 0.3.3 package is missing from Library/PackageCache." }
+if (-not $surfacePackage) { throw "Resolved Eve surface 0.3.5 package is missing from Library/PackageCache." }
 $inputContractSource = Get-Content (Join-Path $surfacePackage.FullName "Runtime/EveInputCapabilityDocument.cs") -Raw
 foreach ($requiredInputContract in @("PayloadKeys", "CurrentValue", "ActionBar", "IconRef")) {
     if ($inputContractSource -notmatch $requiredInputContract) {
@@ -86,12 +86,16 @@ $receiptContractSource = Get-Content (Join-Path $surfacePackage.FullName "Runtim
 if ($receiptContractSource -notmatch [regex]::Escape("AuthorityRuntimeId")) {
     throw "Resolved Eve surface package cannot preserve navigation authority identity."
 }
+if ($receiptContractSource -notmatch [regex]::Escape("InvocationHash") -or
+    -not (Test-Path (Join-Path $surfacePackage.FullName "Runtime/EveCommandInvocationHash.cs"))) {
+    throw "Resolved Eve surface package cannot bind receipts to immutable command invocations."
+}
 
 $scenePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.unity-scene@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.122" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.124" } |
     Select-Object -First 1
-if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.122 package is missing from Library/PackageCache." }
+if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.124 package is missing from Library/PackageCache." }
 $advertisedInputSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityAdvertisedInputAction.cs") -Raw
 $inputDriverSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityPlayableWorldInputDriver.cs") -Raw
 $actionBarSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityInputActionBar.cs") -Raw
@@ -169,15 +173,15 @@ if ($editorBootstrapSource -notmatch [regex]::Escape('SetEnvironmentVariable("EV
 
 $uiToolkitPackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.unity-uitoolkit@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.1.7" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.1.9" } |
     Select-Object -First 1
-if (-not $uiToolkitPackage) { throw "Resolved Eve Unity UI Toolkit 0.1.7 package is missing from Library/PackageCache." }
+if (-not $uiToolkitPackage) { throw "Resolved Eve Unity UI Toolkit 0.1.9 package is missing from Library/PackageCache." }
 $uiToolkitLowererSource = Get-Content (Join-Path $uiToolkitPackage.FullName "Runtime/EveUiToolkitSurfaceLowerer.cs") -Raw
 if ($uiToolkitLowererSource -notmatch 'unity-uitoolkit-.*Guid\.NewGuid') {
     throw "Resolved Eve Unity UI Toolkit commands do not mint invocation-scoped idempotency keys."
 }
 $receiptTransportSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/CultMesh/EveUnityCultMeshLiveProviderTransport.cs") -Raw
-foreach ($requiredReceiptFinality in @("_pendingCommands", "IsTerminalReceiptState", 'string.Equals(state, "pending"')) {
+foreach ($requiredReceiptFinality in @("_pendingCommands", "IsTerminalReceiptState", 'string.Equals(state, "pending"', "EveCommandInvocationHash.Compute(request)")) {
     if ($receiptTransportSource -notmatch [regex]::Escape($requiredReceiptFinality)) {
         throw "Resolved Eve Unity scene package is missing receipt finality boundary '$requiredReceiptFinality'."
     }

@@ -62,7 +62,7 @@ app.whenReady().then(async () => {
       mkdirSync(runtimeRoot, { recursive: true });
     }
 
-    eveHost = await startEveElectronProviderHost({
+    const startedEveHost = await startEveElectronProviderHost({
       electron: { app, BrowserWindow, ipcMain, protocol, shell },
       dependencies: { CultMesh, encode },
       providerTarget: {
@@ -82,7 +82,8 @@ app.whenReady().then(async () => {
         title: "Aetheria Starbridge",
       },
     });
-    mainWindow = eveHost.window;
+    eveHost = startedEveHost;
+    mainWindow = startedEveHost.window;
     writeElectronSmokeResult({ ok: false, stage: "renderer-loaded" });
     if (electronSmoke) {
       await withTimeout(mainWindow.webContents.executeJavaScript("window.eveProvider.providerAdvertisement()"), 10000, "provider advertisement smoke");
@@ -97,7 +98,7 @@ app.whenReady().then(async () => {
       const result = await runElectronSmoke(mainWindow);
       writeElectronSmokeResult({ ok: true, result });
       console.log(JSON.stringify(result, null, 2));
-      exitElectronSmoke(0);
+      await exitElectronSmoke(0);
     }
   } catch (error) {
     if (electronSmoke) {
@@ -106,16 +107,20 @@ app.whenReady().then(async () => {
         error: error instanceof Error ? error.stack ?? error.message : String(error),
       });
       console.error(error instanceof Error ? error.stack ?? error.message : String(error));
-      exitElectronSmoke(1);
+      await exitElectronSmoke(1);
     } else {
       console.error(error instanceof Error ? error.stack ?? error.message : String(error));
     }
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", event => {
+  if (isQuitting)
+    return;
+
+  event.preventDefault();
   isQuitting = true;
-  stopChild(daemonProcess);
+  void shutdownOwnedRuntime().finally(() => app.quit());
 });
 
 async function runElectronSmoke(window: BrowserWindow): Promise<Record<string, unknown>> {
@@ -263,15 +268,28 @@ function writeElectronSmokeResult(result: Record<string, unknown>): void {
   writeFileSync(electronSmokeResultPath, JSON.stringify(result, null, 2), "utf8");
 }
 
-function exitElectronSmoke(exitCode: number): void {
+async function exitElectronSmoke(exitCode: number): Promise<void> {
   isQuitting = true;
-  void eveHost?.close();
-  eveHost = null;
-  stopChild(daemonProcess);
-  daemonProcess = null;
+  await shutdownOwnedRuntime();
   mainWindow?.destroy();
   mainWindow = null;
   app.exit(exitCode);
+}
+
+async function shutdownOwnedRuntime(): Promise<void> {
+  const ownedHost = eveHost;
+  eveHost = null;
+  if (ownedHost) {
+    try {
+      await withTimeout(ownedHost.close(), 5000, "Eve host shutdown");
+    } catch (error) {
+      console.error(`Failed to close the Eve host cleanly: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const ownedDaemon = daemonProcess;
+  daemonProcess = null;
+  await stopChildGracefully(ownedDaemon);
 }
 
 function withTimeout<T>(work: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -367,11 +385,34 @@ function pipeChildLogs(name: string, child: ChildProcessWithoutNullStreams): voi
   child.stderr.pipe(stderr);
 }
 
-function stopChild(child: ChildProcessWithoutNullStreams | null): void {
-  if (!child || child.killed)
+async function stopChildGracefully(child: ChildProcessWithoutNullStreams | null): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null)
+    return;
+
+  const exited = new Promise<void>(resolvePromise => child.once("exit", () => resolvePromise()));
+  try {
+    if (!child.stdin.destroyed && child.stdin.writable)
+      child.stdin.write("shutdown\n");
+  } catch (error) {
+    console.error(`Failed to request graceful daemon shutdown: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (await waitForExit(exited, 5000))
     return;
 
   child.kill();
+  await waitForExit(exited, 2000);
+}
+
+async function waitForExit(exited: Promise<void>, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<false>(resolvePromise => {
+    timer = setTimeout(() => resolvePromise(false), timeoutMs);
+  });
+  const result = await Promise.race([exited.then(() => true as const), timedOut]);
+  if (timer)
+    clearTimeout(timer);
+  return result;
 }
 
 function delay(milliseconds: number): Promise<void> {

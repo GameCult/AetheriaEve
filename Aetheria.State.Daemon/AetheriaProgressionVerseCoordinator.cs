@@ -240,11 +240,14 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         ThrowIfDisposed();
         if (request == null) throw new ArgumentNullException(nameof(request));
         var routeKey = AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId);
+        var forwardedRequest = CreateForwardedRequest(request, payloadHash, _runtimeId);
+        var forwardedInvocationHash = EveCommandInvocationHash.Compute(forwardedRequest);
         var existing = await _node.MutableDocument<AetheriaProgressionCommandRouteDocument>(routeKey)
             .ReadAsync().ConfigureAwait(false);
         if (existing != null)
         {
-            if (!string.Equals(existing.PayloadHash, payloadHash, StringComparison.Ordinal))
+            if (!string.Equals(existing.PayloadHash, payloadHash, StringComparison.Ordinal) ||
+                !string.Equals(existing.ForwardedInvocationHash, forwardedInvocationHash, StringComparison.Ordinal))
                 throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different payload.");
             return existing;
         }
@@ -260,6 +263,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         {
             CommandId = request.CommandId,
             PayloadHash = payloadHash,
+            ForwardedInvocationHash = forwardedInvocationHash,
             VerseId = remote.Target.VerseId,
             AuthorityRuntimeId = remote.Target.AuthorityRuntimeId,
             ProgressionSourceRevision = source.Revision,
@@ -272,7 +276,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                 .ReadAsync().ConfigureAwait(false);
             if (committed != null)
             {
-                if (!string.Equals(committed.PayloadHash, payloadHash, StringComparison.Ordinal))
+                if (!string.Equals(committed.PayloadHash, payloadHash, StringComparison.Ordinal) ||
+                    !string.Equals(committed.ForwardedInvocationHash, forwardedInvocationHash, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Hangar command id '{request.CommandId}' was reused with a different payload.");
                 return committed;
             }
@@ -295,16 +300,9 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         if (_remote == null)
             throw new InvalidOperationException("No Odin discovery endpoint is configured for the pinned Verse.");
         var target = new CultMeshSessionTarget(route.VerseId, route.AuthorityRuntimeId);
-        var forwardedRequest = new EveSurfaceCommandRequest(
-            request.Schema,
-            request.ProviderId,
-            request.SurfaceId,
-            request.OperationRecord,
-            request.PayloadFields,
-            request.IssuedAt,
-            _runtimeId,
-            request.CommandBoundary,
-            request.ReceiptSchema);
+        var forwardedRequest = CreateForwardedRequest(request, route.PayloadHash, _runtimeId);
+        if (!string.Equals(EveCommandInvocationHash.Compute(forwardedRequest), route.ForwardedInvocationHash, StringComparison.Ordinal))
+            throw new InvalidOperationException("Pinned progression route does not describe the forwarded command envelope.");
 
         await _remote.SubmitDocumentAsync(
             target,
@@ -362,6 +360,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             !string.Equals(receipt.ProviderId, request.ProviderId, StringComparison.Ordinal) ||
             !string.Equals(receipt.SurfaceId, request.SurfaceId, StringComparison.Ordinal) ||
             !string.Equals(receipt.Authority, route.AuthorityRuntimeId, StringComparison.Ordinal) ||
+            !string.Equals(receipt.InvocationHash, route.ForwardedInvocationHash, StringComparison.Ordinal) ||
             !(string.Equals(receipt.State, "accepted", StringComparison.Ordinal) ||
               string.Equals(receipt.State, "denied", StringComparison.Ordinal)))
         {
@@ -384,6 +383,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
     internal static EveCommandReceiptDocument ReEnvelopeForLocalClient(
         EveSurfaceCommandRequest request,
         EveCommandReceiptDocument remoteReceipt,
+        AetheriaProgressionCommandRouteDocument route,
         string localAuthorityRuntimeId)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
@@ -403,7 +403,35 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             remoteReceipt.Message,
             remoteReceipt.IssuedAtUtc,
             remoteReceipt.SourceVersion,
-            remoteReceipt.Navigation);
+            remoteReceipt.Navigation,
+            route.PayloadHash);
+    }
+
+    internal static EveSurfaceCommandRequest CreateForwardedRequest(
+        EveSurfaceCommandRequest request,
+        string originalInvocationHash,
+        string delegatingRuntimeId)
+    {
+        if (request == null) throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(originalInvocationHash))
+            throw new ArgumentException("The original invocation hash is required.", nameof(originalInvocationHash));
+        if (string.IsNullOrWhiteSpace(delegatingRuntimeId))
+            throw new ArgumentException("The delegating runtime is required.", nameof(delegatingRuntimeId));
+        var runtimeId = delegatingRuntimeId.Trim();
+        return new EveSurfaceCommandRequest(
+            request.Schema,
+            request.ProviderId,
+            request.SurfaceId,
+            request.OperationRecord,
+            request.PayloadFields,
+            request.IssuedAt,
+            runtimeId,
+            request.CommandBoundary,
+            request.ReceiptSchema,
+            new EveCommandDelegationRecord(
+                originalInvocationHash,
+                request.ClientId,
+                runtimeId));
     }
 
     public void Dispose()
@@ -683,7 +711,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                 receipt.Navigation.SurfaceId,
                 receipt.Navigation.SurfaceKind,
                 endpoints,
-                route.AuthorityRuntimeId));
+                route.AuthorityRuntimeId),
+            receipt.InvocationHash);
     }
 
     private void ThrowIfDisposed()

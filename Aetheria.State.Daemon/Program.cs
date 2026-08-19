@@ -161,6 +161,25 @@ Console.CancelKeyPress += (_, eventArgs) =>
     progressionForwardingShutdown.Cancel();
     stopped.TrySetResult(null);
 };
+_ = Task.Run(async () =>
+{
+    try
+    {
+        while (!stopped.Task.IsCompleted)
+        {
+            var line = await Console.In.ReadLineAsync().ConfigureAwait(false);
+            if (line == null) return;
+            if (!string.Equals(line.Trim(), "shutdown", StringComparison.OrdinalIgnoreCase)) continue;
+            progressionForwardingShutdown.Cancel();
+            stopped.TrySetResult(null);
+            return;
+        }
+    }
+    catch (Exception error) when (!stopped.Task.IsCompleted)
+    {
+        Console.Error.WriteLine($"Aetheria daemon shutdown input failed: {error.Message}");
+    }
+});
 
 while (!stopped.Task.IsCompleted)
 {
@@ -348,13 +367,13 @@ while (!stopped.Task.IsCompleted)
     }
 
     await publicationTask.ConfigureAwait(false);
-    if (!stopped.Task.IsCompleted && !options.UseTerminusFixture)
+    if (latestFrame != null)
     {
-        var checkpointRun = latestFrame?.Run ?? throw new InvalidOperationException("Aetheria cannot checkpoint an inactive playable session without its run.");
+        var checkpointRun = latestFrame.Run ?? throw new InvalidOperationException("Aetheria cannot checkpoint an active playable session without its run.");
         var checkpointTick = new AetheriaRuntimeDaemonTickResult(
             checkpointRun,
             new AetheriaRuntimeDaemonOperationResult(checkpointRun, [], []),
-            latestFrame!);
+            latestFrame);
         var checkpoint = PreparePublication(
             node.StatePath,
             options,
@@ -369,7 +388,10 @@ while (!stopped.Task.IsCompleted)
             initialTopology: false,
             unityBundles: unityBundles,
             reactiveSurfaceState: reactiveSurfaceState).ConfigureAwait(false);
-        Console.WriteLine($"Aetheria daemon saved frame {latestFrame!.FrameId} after the playable client disconnected.");
+        Console.WriteLine(
+            stopped.Task.IsCompleted
+                ? $"Aetheria daemon saved frame {latestFrame.FrameId} during graceful shutdown."
+                : $"Aetheria daemon saved frame {latestFrame.FrameId} after the playable client disconnected.");
     }
 }
 
@@ -2813,6 +2835,7 @@ static async Task ForwardProgressionCommandAsync(
         var clientReceipt = AetheriaProgressionVerseCoordinator.ReEnvelopeForLocalClient(
             request,
             remoteReceipt,
+            route,
             options.DaemonId);
 
         await using var mutation = await hangarProjection.EnterMutationAsync(cancellationToken).ConfigureAwait(false);
@@ -2927,7 +2950,8 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
             request.SurfaceId,
             "Command is not advertised by the Aetheria daemon surface.",
             DateTimeOffset.UtcNow.ToString("O"),
-            Math.Max(currentFrame?.FrameId ?? 0, 0));
+            Math.Max(currentFrame?.FrameId ?? 0, 0),
+            invocationHash: payloadHash);
         await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(denied.CommandId), denied)
             .ConfigureAwait(false);
         await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
@@ -3109,7 +3133,8 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
         diagnostic,
         now,
         0,
-        navigation);
+        navigation,
+        AetheriaHangarCommandJournal.PayloadHash(request));
     await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), receiptDocument)
         .ConfigureAwait(false);
     return activatesSession;
@@ -5087,30 +5112,7 @@ public static class AetheriaHangarCommandJournal
     }
 
     public static string PayloadHash(EveSurfaceCommandRequest request)
-    {
-        var canonical = new StringBuilder();
-        Append(request.Schema);
-        Append(request.ProviderId);
-        Append(request.SurfaceId);
-        Append(request.Command);
-        Append(request.ClientId);
-        Append(request.CommandBoundary);
-        Append(request.ReceiptSchema);
-        foreach (var field in request.PayloadFields.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            Append(field.Key);
-            Append(field.Value);
-        }
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))).ToLowerInvariant();
-
-        void Append(string? value)
-        {
-            value ??= "";
-            canonical.Append(value.Length.ToString(CultureInfo.InvariantCulture));
-            canonical.Append(':');
-            canonical.Append(value);
-        }
-    }
+        => EveCommandInvocationHash.Compute(request);
 
     private static AetheriaHangarCommandEnvelopeDocument NewEnvelope(
         EveSurfaceCommandRequest request,

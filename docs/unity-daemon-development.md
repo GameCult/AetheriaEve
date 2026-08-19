@@ -48,6 +48,12 @@ releases the active physics world, and returns to `ready`. A dropped client
 therefore leaves the daemon and saved world alive without making Unity Play
 Mode a lifecycle authority.
 
+A launcher that owns the daemon process shuts it down through the daemon's
+standard-input `shutdown` request and waits for exit before escalating to process
+termination. The daemon checkpoints the latest authoritative frame even while a
+playable subscription remains active. Ctrl+C uses the same checkpoint path;
+process killing is failure recovery, not the ordinary persistence mechanism.
+
 The editor connects through the daemon's `cultnet+tcp` control endpoint. The
 advertised session then selects the dedicated content and QUIC realtime planes;
 the editor bootstrap does not choose those planes or retain an RUDP fallback.

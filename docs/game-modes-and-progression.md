@@ -270,6 +270,11 @@ receipt against the pinned remote authority, then publishes a client-facing
 receipt under its own local authority. The navigation target retains the remote
 authority that owns the launched run; Unity does not relax its trust boundary
 to accept cross-authority receipts on a local subscription.
+The forwarded Eve invocation carries a typed delegation record containing the
+original client and invocation hash. The remote receipt binds finality to that
+delegated envelope; the local client-facing receipt restores the original
+invocation hash. The router rejects a same-ID receipt for either a different
+local payload or a different delegated envelope before re-enveloping it.
 
 The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and

@@ -75,5 +75,6 @@ namespace GameCult.Aetheria.State.Verse
         [Key(4)] public long ProgressionSourceRevision { get; set; }
         [Key(5)] public string[] OdinDiscoveryEndpoints { get; set; } = Array.Empty<string>();
         [Key(6)] public string CreatedAtUtc { get; set; } = "";
+        [Key(7)] public string ForwardedInvocationHash { get; set; } = "";
     }
 }

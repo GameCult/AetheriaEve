@@ -44,7 +44,8 @@ Process? local = null;
 Process? remote = null;
 try
 {
-    remote = StartDaemon(root, remoteState, "progression-remote", remoteVerse, remotePort);
+    remote = StartDaemon(root, remoteState, "progression-remote", remoteVerse, remotePort,
+        "--api-publication-interval-ms", "100000");
     await WaitForEndpointAsync(remote, remotePort, TimeSpan.FromSeconds(30));
     await WaitForVerseAdvertisementAsync(
         remoteEndpoint,
@@ -288,6 +289,8 @@ try
             $"Remote Terminus launch must return an accepted Eve navigation target for the selected Verse; state='{launchReceipt.State}', message='{launchReceipt.Message}', navigation='{launchNavigation?.VerseId ?? "<none>"}'.");
         Require(launchReceipt.Authority == localTarget.AuthorityRuntimeId,
             "The local progression router must own the client-facing receipt authority.");
+        Require(!string.IsNullOrWhiteSpace(launchReceipt.InvocationHash),
+            "The client-facing launch receipt must identify the immutable invocation it finalizes.");
         Require(launchNavigation!.SurfaceId == AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
             "Remote Terminus launch must navigate the generic client to the Pilot surface.");
         Require(launchNavigation.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
@@ -368,8 +371,15 @@ try
             AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(launchReceipt.CommandId).ToString());
         Require(pinnedLaunchRoute != null &&
                 pinnedLaunchRoute.VerseId == remoteVerse &&
-                pinnedLaunchRoute.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
+                pinnedLaunchRoute.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId &&
+                pinnedLaunchRoute.PayloadHash == launchReceipt.InvocationHash,
             "The first remote launch attempt must durably pin its Verse and authority target.");
+        var canonicalRemoteLaunchReceipt = await remoteClient.ReadAsync<EveCommandReceiptDocument>(
+            remoteTarget,
+            AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(launchReceipt.CommandId).ToString());
+        Require(canonicalRemoteLaunchReceipt.Authority == remoteTarget.AuthorityRuntimeId &&
+                canonicalRemoteLaunchReceipt.InvocationHash == pinnedLaunchRoute.ForwardedInvocationHash,
+            "Remote finality must bind the remote authority to the same immutable invocation digest pinned by the local router.");
 
         await SubmitAsync(
             client,
@@ -452,7 +462,37 @@ try
             "Daemon restart must preserve the selected progression Verse by stable identity.");
     }
 
-    Console.WriteLine("Aetheria Hangar Verse discovery, poison-command isolation, nonblocking pinned forwarding, remote spatial refit, Terminus launch/continue navigation, and restart smoke passed.");
+    long durableFrameBeforeShutdown;
+    using (var shutdownClient = Client(remoteEndpoint))
+    {
+        using var activeDemand = await shutdownClient.LeaseDocumentAsync<EveSurfaceDocument>(
+            remoteTarget,
+            AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString());
+        await ReadLiveUntilAsync(
+            activeDemand.Handle,
+            surface => string.Equals(surface.Surface.Id, AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId, StringComparison.Ordinal),
+            TimeSpan.FromSeconds(10));
+        durableFrameBeforeShutdown = (await shutdownClient.ReadAsync<AetheriaRuntimeDaemonFrameDocument>(
+            remoteTarget,
+            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString())).FrameId;
+        await Task.Delay(500);
+        if (!Stop(remote))
+            throw new InvalidOperationException("The remote daemon could not complete the graceful checkpoint witness.");
+        remote = null;
+    }
+    remote = StartDaemon(root, remoteState, "progression-remote", remoteVerse, remotePort,
+        "--api-publication-interval-ms", "100000");
+    await WaitForEndpointAsync(remote, remotePort, TimeSpan.FromSeconds(30));
+    using (var checkpointClient = Client(remoteEndpoint))
+    {
+        var restoredFrame = await checkpointClient.ReadAsync<AetheriaRuntimeDaemonFrameDocument>(
+            remoteTarget,
+            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString());
+        Require(restoredFrame.FrameId > durableFrameBeforeShutdown,
+            "Graceful shutdown must checkpoint the last authoritative frame even when periodic publication has not run.");
+    }
+
+    Console.WriteLine("Aetheria Hangar Verse discovery, poison-command isolation, nonblocking pinned forwarding, remote spatial refit, Terminus launch/continue navigation, and graceful restart smoke passed.");
 }
 catch
 {
@@ -721,6 +761,7 @@ static Process StartDaemon(
     var start = new ProcessStartInfo("dotnet", string.Join(" ", arguments))
     {
         WorkingDirectory = root,
+        RedirectStandardInput = true,
         RedirectStandardOutput = true,
         RedirectStandardError = true,
         UseShellExecute = false,
@@ -821,8 +862,11 @@ static bool Stop(Process? process, bool forceEscalationForTest = false)
     if (process == null) return true;
     try
     {
-        if (!process.HasExited)
-            process.Kill(entireProcessTree: true);
+        if (!process.HasExited && !forceEscalationForTest && process.StartInfo.RedirectStandardInput)
+        {
+            process.StandardInput.WriteLine("shutdown");
+            process.StandardInput.Flush();
+        }
         var exitedAfterFirstWait = !forceEscalationForTest && process.WaitForExit(5000);
         if (!exitedAfterFirstWait && !process.HasExited)
         {
