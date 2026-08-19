@@ -160,17 +160,6 @@ using var clientSubscriptions = new CultNetDatabaseSubscriptionServer(
         return ProjectProviderAdvertisementRecord(
             node, options, AetheriaArenaExposurePolicy.Resolve(node, latestFrame), runtimeId, record);
     });
-var reconciledArenaExposureGeneration = AetheriaArenaExposurePolicy.Generation(
-    AetheriaArenaExposurePolicy.Resolve(node, latestFrame));
-void ReconcileArenaExposure()
-{
-    var generation = AetheriaArenaExposurePolicy.Generation(
-        AetheriaArenaExposurePolicy.Resolve(node, latestFrame));
-    if (string.Equals(generation, reconciledArenaExposureGeneration, StringComparison.Ordinal))
-        return;
-    clientSubscriptions.Reconcile();
-    reconciledArenaExposureGeneration = generation;
-}
 var playableWorldDemand = new AetheriaPlayableWorldDemandState();
 clientSubscriptions.DemandChanged += playableWorldDemand.Observe;
 var managedViewportDemand = new AetheriaManagedViewportDemandState();
@@ -188,6 +177,40 @@ using var soaPublisher = new AetheriaRuntimeDaemonSoaFramePublisher(
 using var arenaSeatObservations = new AetheriaArenaSeatObservationPublishers(
     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
     bodyDemand);
+var reconciledArenaExposureGeneration = AetheriaArenaExposurePolicy.Generation(
+    AetheriaArenaExposurePolicy.Resolve(node, latestFrame));
+async Task ReconcileArenaExposureAsync()
+{
+    var generation = AetheriaArenaExposurePolicy.Generation(
+        AetheriaArenaExposurePolicy.Resolve(node, latestFrame));
+    if (string.Equals(generation, reconciledArenaExposureGeneration, StringComparison.Ordinal))
+        return;
+
+    var retiredControllerRuntimeIds = arenaSeatObservations.ControllerRuntimeIds.ToArray();
+    soaPublisher.RotateCapabilityGeneration();
+    arenaSeatObservations.RotateCapabilityGeneration();
+    await node.CommitAsync(async () =>
+    {
+        await node.Database.Cache.DeleteAsync(new CultRecordHandle<CultMeshBodyPublicationDocument>(
+                CultMeshBodyPublicationDocument.CreateLatestRecordKey(soaPublisher.PublishedBodyId)))
+            .ConfigureAwait(false);
+        await node.Database.Cache.DeleteAsync(new CultRecordHandle<EveEntitySoaViewDocument>(
+                AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest))
+            .ConfigureAwait(false);
+        foreach (var controllerRuntimeId in retiredControllerRuntimeIds)
+        {
+            await node.Database.Cache.DeleteAsync(new CultRecordHandle<CultMeshBodyPublicationDocument>(
+                    CultMeshBodyPublicationDocument.CreateLatestRecordKey(
+                        AetheriaRuntimeVerseRecordKeys.ArenaPilotBodyId(controllerRuntimeId))))
+                .ConfigureAwait(false);
+            await node.Database.Cache.DeleteAsync(new CultRecordHandle<EveEntitySoaViewDocument>(
+                    AetheriaRuntimeVerseRecordKeys.ArenaPilotEntitySoaView(controllerRuntimeId)))
+                .ConfigureAwait(false);
+        }
+    }).ConfigureAwait(false);
+    clientSubscriptions.Reconcile();
+    reconciledArenaExposureGeneration = generation;
+}
 var stopped = new TaskCompletionSource<object?>();
 var progressionForwardingTasks = new ConcurrentDictionary<string, Task>();
 using var progressionForwardingShutdown = new CancellationTokenSource();
@@ -284,7 +307,7 @@ while (!stopped.Task.IsCompleted)
                 hangarProjection,
                 progressionForwardingShutdown.Token).ConfigureAwait(false);
             await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
-            ReconcileArenaExposure();
+            await ReconcileArenaExposureAsync().ConfigureAwait(false);
             if (options.OdinDiscoveryEndpoints.Count > 0 && DateTimeOffset.UtcNow >= nextProgressionRefreshUtc)
             {
                 hangarProjection.RequestRefresh();
@@ -353,7 +376,7 @@ while (!stopped.Task.IsCompleted)
             physicsPersistence);
         initialPublication = initialPrepared.Publication;
     }
-    ReconcileArenaExposure();
+    await ReconcileArenaExposureAsync().ConfigureAwait(false);
     if (!publishRestoredFrame)
     {
         await node.CommitAsync(() => PublishClientGameplayDocumentsAsync(
@@ -421,7 +444,7 @@ while (!stopped.Task.IsCompleted)
             progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token).ConfigureAwait(false);
         ThrowIfClientHostFaulted(cultMeshClientHost);
         latestFrame = tick.Frame;
-        ReconcileArenaExposure();
+        await ReconcileArenaExposureAsync().ConfigureAwait(false);
         await PublishHotEntityStateAsync(
             node, soaPublisher, hotState, tick.Frame, ingressState.Catalog, cultMeshClientHost,
             AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest,
@@ -5523,6 +5546,7 @@ internal sealed class AetheriaHotEntityPublicationState
     private EveEntitySoaViewDocument? _layout;
 
     public void Set(EveEntitySoaViewDocument layout) => _layout = layout;
+    public void Reset() => _layout = null;
 
     public bool Matches(EveEntitySoaViewDocument next)
     {
@@ -5591,6 +5615,8 @@ internal sealed class AetheriaArenaSeatObservationPublishers : IDisposable
     private readonly CultMeshBodyDemandTracker _demand;
     private readonly Dictionary<string, AetheriaArenaSeatObservationPublisher> _publishers =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _retiredProducerEpochs =
+        new(StringComparer.Ordinal);
 
     public AetheriaArenaSeatObservationPublishers(long producerEpoch, CultMeshBodyDemandTracker demand)
     {
@@ -5602,9 +5628,12 @@ internal sealed class AetheriaArenaSeatObservationPublishers : IDisposable
     {
         if (_publishers.TryGetValue(controllerRuntimeId, out var existing))
             return existing;
+        var producerEpoch = _retiredProducerEpochs.TryGetValue(controllerRuntimeId, out var retiredEpoch)
+            ? checked(retiredEpoch + 1)
+            : _producerEpoch;
         var created = new AetheriaArenaSeatObservationPublisher(
             new AetheriaRuntimeDaemonSoaFramePublisher(
-                _producerEpoch,
+                producerEpoch,
                 _demand,
                 AetheriaRuntimeVerseRecordKeys.ArenaPilotBodyId(controllerRuntimeId)),
             new AetheriaHotEntityPublicationState());
@@ -5612,11 +5641,24 @@ internal sealed class AetheriaArenaSeatObservationPublishers : IDisposable
         return created;
     }
 
+    public IReadOnlyList<string> ControllerRuntimeIds => _publishers.Keys.ToArray();
+
+    public void RotateCapabilityGeneration()
+    {
+        foreach (var entry in _publishers)
+        {
+            entry.Value.Publisher.RotateCapabilityGeneration();
+            entry.Value.State.Reset();
+            _retiredProducerEpochs[entry.Key] = entry.Value.Publisher.ProducerEpoch;
+        }
+    }
+
     public void Retain(IEnumerable<string> controllerRuntimeIds)
     {
         var retained = (controllerRuntimeIds ?? Array.Empty<string>()).ToHashSet(StringComparer.Ordinal);
         foreach (var stale in _publishers.Keys.Where(key => !retained.Contains(key)).ToArray())
         {
+            _retiredProducerEpochs[stale] = _publishers[stale].Publisher.ProducerEpoch;
             _publishers[stale].Dispose();
             _publishers.Remove(stale);
         }
@@ -5627,6 +5669,7 @@ internal sealed class AetheriaArenaSeatObservationPublishers : IDisposable
         foreach (var publisher in _publishers.Values)
             publisher.Dispose();
         _publishers.Clear();
+        _retiredProducerEpochs.Clear();
     }
 }
 

@@ -188,7 +188,10 @@ gameplay-state writer.
   a delivered-record ledger for each peer. An Arena exposure-generation change
   reconciles that ledger, emits tombstones for records that lost visibility,
   updates changed per-peer projections, and withdraws body demand before the
-  next hot-body publication. Arena does not
+  next hot-body publication. The mapped-body publisher is retired before that
+  reconciliation; any later regrant creates a fresh mapping capability and
+  producer epoch. Retained cursors therefore remain frozen on the revoked
+  generation instead of becoming a side door into future frames. Arena does not
   use global realtime broadcast until that transport has per-peer identity.
   Headless and graphical controllers therefore observe the same bounded world
   around the ship they can command. Resulting facts

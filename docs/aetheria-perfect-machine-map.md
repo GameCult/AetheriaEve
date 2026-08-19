@@ -108,6 +108,10 @@ Date: 2026-06-13
 > CultMesh keeps a per-subscription delivered-record ledger. An exposure-generation
 > change reconciles that ledger, emits peer-specific removals and projection
 > updates, and withdraws body demand before the next hot-body publication.
+> Hot-body mappings are capability generations, not stable caches: every exact
+> consumer-set or Arena exposure-generation change retires the old publisher
+> before reconciliation and resumes on a fresh mapping token and producer epoch.
+> A cursor that survived revocation can inspect only its frozen generation.
 > Arena deployment installs
 > `aetheria.mode.arena.server.v1` plus one daemon-owned session roster. Launch
 > assigns a seat once, Continue cannot reassign it, and the Arena lobby command

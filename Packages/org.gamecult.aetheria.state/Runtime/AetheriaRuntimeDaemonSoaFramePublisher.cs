@@ -77,10 +77,12 @@ namespace GameCult.Aetheria.State.Verse
         private const string EntityProxyMeshUri = "cultmesh://aetheria/assets/daemon/entity_proxy/mesh";
         private const string EntityProxyMaterialUri = "cultmesh://aetheria/assets/daemon/entity_proxy/material";
 
-        private readonly CultMeshFrameBodyPublisher _localPublisher;
+        private CultMeshFrameBodyPublisher _localPublisher;
         private readonly CultMeshBodyDemandTracker? _demand;
         private readonly string _bodyId;
         private readonly string _producerId;
+        private long _producerEpoch;
+        private long _observedDemandGeneration;
         private readonly Dictionary<string, int> _syntheticEntityIndices =
             new Dictionary<string, int>(StringComparer.Ordinal);
         private int _nextSyntheticEntityIndex = -2;
@@ -93,16 +95,33 @@ namespace GameCult.Aetheria.State.Verse
         {
             _bodyId = string.IsNullOrWhiteSpace(bodyId) ? throw new ArgumentException("Body id must be non-empty.", nameof(bodyId)) : bodyId;
             _producerId = string.IsNullOrWhiteSpace(producerId) ? throw new ArgumentException("Producer id must be non-empty.", nameof(producerId)) : producerId;
-            _localPublisher = new CultMeshFrameBodyPublisher(
-                _bodyId, BodySchemaId, LayoutVersion, Capacity, producerEpoch,
-                checked((int)EntityHotSlabLayout.Create(Capacity).TotalByteLength),
-                TimeSpan.FromSeconds(30));
             _demand = demand;
+            _producerEpoch = producerEpoch;
+            _observedDemandGeneration = _demand?.Plan(_bodyId).Generation ?? 0;
+            _localPublisher = CreateLocalPublisher(_producerEpoch);
         }
 
         public string PublishedBodyId => _bodyId;
+        public long ProducerEpoch => _producerEpoch;
 
         public CultMeshBodyDemandPlan? CurrentDemandPlan() => _demand?.Plan(_bodyId);
+
+        /// <summary>
+        /// Retires the current mapped capability. Existing cursors may keep their frozen mapping,
+        /// but no subsequent frame will ever be written to it.
+        /// </summary>
+        public void RotateCapabilityGeneration()
+        {
+            RotateCapabilityGeneration(_demand?.Plan(_bodyId).Generation ?? _observedDemandGeneration);
+        }
+
+        private void RotateCapabilityGeneration(long observedDemandGeneration)
+        {
+            _localPublisher.Dispose();
+            _producerEpoch = checked(_producerEpoch + 1);
+            _observedDemandGeneration = observedDemandGeneration;
+            _localPublisher = CreateLocalPublisher(_producerEpoch);
+        }
 
         public AetheriaRuntimeDaemonSoaFrame? BuildCurrentZoneEntities(
             AetheriaRuntimeDaemonFrameDocument frame,
@@ -112,6 +131,8 @@ namespace GameCult.Aetheria.State.Verse
             if (frame == null)
                 throw new ArgumentNullException(nameof(frame));
             var demand = _demand?.Plan(_bodyId);
+            if (demand != null && demand.Generation != _observedDemandGeneration)
+                RotateCapabilityGeneration(demand.Generation);
             if (demand != null &&
                 (!demand.HasConsumers ||
                  (!demand.RequiresSharedMemory && !demand.RequiresSharedFileMapping && !realtimeDemand)))
@@ -374,6 +395,15 @@ namespace GameCult.Aetheria.State.Verse
         }
 
         public void Dispose() => _localPublisher.Dispose();
+
+        private CultMeshFrameBodyPublisher CreateLocalPublisher(long producerEpoch) => new(
+            _bodyId,
+            BodySchemaId,
+            LayoutVersion,
+            Capacity,
+            producerEpoch,
+            checked((int)EntityHotSlabLayout.Create(Capacity).TotalByteLength),
+            TimeSpan.FromSeconds(30));
 
         private static IReadOnlyList<AetheriaRuntimeDaemonRenderGroupDocument> CreateRenderGroups(
             IReadOnlyList<AetheriaRuntimeEntitySnapshotCommit> entities,

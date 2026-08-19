@@ -143,7 +143,11 @@ The authority policy differs without changing the document model:
   treated as ordinary non-Arena play. The daemon reconciles live subscriptions
   when that authority generation changes. CultMesh diffs each peer's delivered
   projection, sends removals for state that is no longer visible, and withdraws
-  its hot-body demand; dropping future updates alone is not revocation. Arena realtime broadcast is disabled
+  its hot-body demand. Withdrawal or any exact consumer-set change also retires
+  the mapped-body publisher before later publication can resume; regrant uses a
+  fresh capability token and producer epoch, so an old mapped cursor can never
+  observe the successor generation. Dropping future updates alone is not
+  revocation. Arena realtime broadcast is disabled
   until the QUIC path can identify and filter each receiving controller; local
   headless and rendered clients consume the same authenticated document/body
   boundary meanwhile.

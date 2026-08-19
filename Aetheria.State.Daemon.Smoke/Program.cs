@@ -893,21 +893,75 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         movedJoinedView.InputCapability.Actions.Single(action =>
                             action.ActionId == "pilot.target-nearest").Availability == "available",
                     "Arena seat projection must own the same ship, zone, contacts, and scoped observation records after reindex");
+                using (var seatDemand = new CultMeshBodyDemandTracker())
                 using (var seatPublisher = new AetheriaRuntimeDaemonSoaFramePublisher(
                            1,
-                           bodyId: movedJoinedView.ObservationRefs.EntityBodyId))
-                using (var seatHotFrame = seatPublisher.BuildCurrentZoneEntities(
-                           movedJoinedView.Frame,
-                           runtimeCatalog,
-                           realtimeDemand: true))
+                           seatDemand,
+                           movedJoinedView.ObservationRefs.EntityBodyId))
                 {
-                    var seatPublication = seatPublisher.PublishAsync(seatHotFrame!, includeRealtimePayload: false)
+                    seatDemand.Observe(new CultNetDatabaseSubscriptionDemand(
+                        "pilot-runtime",
+                        "arena-capability-generation",
+                        [movedJoinedView.ObservationRefs.EntityBodyId],
+                        [CultMeshBodyTransportKind.SharedMemory.ToString()],
+                        sameMachine: true,
+                        active: true));
+                    CultMeshBodyDescriptor initialSeatDescriptor;
+                    using (var seatHotFrame = seatPublisher.BuildCurrentZoneEntities(
+                               movedJoinedView.Frame,
+                               runtimeCatalog,
+                               realtimeDemand: true))
+                    {
+                        var seatPublication = seatPublisher.PublishAsync(seatHotFrame!, includeRealtimePayload: false)
+                            .GetAwaiter().GetResult();
+                        initialSeatDescriptor = seatPublication.Body.Representations.Single();
+                        Require(seatPublication.Body.BodyId == movedJoinedView.ObservationRefs.EntityBodyId &&
+                                seatPublication.View.Identities.Any(identity => identity.EntityId == joinedSeat.ControlledEntityId) &&
+                                seatPublication.View.Identities.Any(identity => identity.EntityId == joinedContact.EntityId) &&
+                                seatPublication.View.Identities.All(identity => identity.EntityId != primaryArenaSeat.ControlledEntityId),
+                            "Arena seat hot body must contain its own visible world and exclude the other seat's zone");
+                    }
+
+                    using var staleCursor = new CultMeshMappedFrameBodyCursor(initialSeatDescriptor);
+                    Require(staleCursor.TryAcquireLatest(out var initialSeatRead),
+                        "Arena capability smoke must acquire its initial mapped generation");
+                    initialSeatRead.Dispose();
+                    seatDemand.Observe(new CultNetDatabaseSubscriptionDemand(
+                        "pilot-runtime",
+                        "arena-capability-generation",
+                        [movedJoinedView.ObservationRefs.EntityBodyId],
+                        [CultMeshBodyTransportKind.SharedMemory.ToString()],
+                        sameMachine: true,
+                        active: false));
+                    Require(seatPublisher.BuildCurrentZoneEntities(
+                            movedJoinedView.Frame,
+                            runtimeCatalog,
+                            realtimeDemand: true) == null,
+                        "withdrawn Arena demand must retire its mapping without publishing another frame");
+                    seatDemand.Observe(new CultNetDatabaseSubscriptionDemand(
+                        "pilot-runtime",
+                        "arena-capability-generation",
+                        [movedJoinedView.ObservationRefs.EntityBodyId],
+                        [CultMeshBodyTransportKind.SharedMemory.ToString()],
+                        sameMachine: true,
+                        active: true));
+                    using var rotatedSeatHotFrame = seatPublisher.BuildCurrentZoneEntities(
+                        movedJoinedView.Frame,
+                        runtimeCatalog,
+                        realtimeDemand: true);
+                    var rotatedSeatPublication = seatPublisher.PublishAsync(
+                            rotatedSeatHotFrame!,
+                            includeRealtimePayload: false)
                         .GetAwaiter().GetResult();
-                    Require(seatPublication.Body.BodyId == movedJoinedView.ObservationRefs.EntityBodyId &&
-                            seatPublication.View.Identities.Any(identity => identity.EntityId == joinedSeat.ControlledEntityId) &&
-                            seatPublication.View.Identities.Any(identity => identity.EntityId == joinedContact.EntityId) &&
-                            seatPublication.View.Identities.All(identity => identity.EntityId != primaryArenaSeat.ControlledEntityId),
-                        "Arena seat hot body must contain its own visible world and exclude the other seat's zone");
+                    var rotatedSeatDescriptor = rotatedSeatPublication.Body.Representations.Single();
+                    Require(rotatedSeatDescriptor.ProducerEpoch > initialSeatDescriptor.ProducerEpoch &&
+                            rotatedSeatDescriptor.CapabilityToken != initialSeatDescriptor.CapabilityToken &&
+                            !staleCursor.TryAcquireLatest(out _),
+                        "retired Arena cursors must never observe a regranted body's future generation");
+                    using var currentCursor = new CultMeshMappedFrameBodyCursor(rotatedSeatDescriptor);
+                    Require(currentCursor.TryAcquireLatest(out var rotatedSeatRead),
+                        "a fresh Arena cursor must acquire the rotated capability generation");
+                    rotatedSeatRead.Dispose();
                 }
                 var movedPrimaryView = AetheriaRuntimeArenaSeatViewProjector.Project(
                     movedFrame,
