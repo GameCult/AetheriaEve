@@ -3714,7 +3714,7 @@ static async Task<AetheriaHangarProjectionDocument> PublishLocalHangarProjection
         AuthorityRuntimeId = options.DaemonId,
         AssetVerseId = options.VerseId,
         AssetProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
-        AssetManifestRecordRef = AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
+        AssetManifestRecordRef = AetheriaRuntimeVerseRecordKeys.EveAssetCatalogGeneration(assetCatalog.Version).ToString(),
         AssetCatalogVersion = assetCatalog.Version,
         Hangar = hangar,
         Draft = draft,
@@ -3864,10 +3864,11 @@ static EveAssetCatalogDocument BuildCoreAssetCatalog(
         })
         .OrderBy(entry => entry.AssetRef, StringComparer.Ordinal)
         .ToArray();
+    var version = AssetCatalogVersion(source.PublishedAtUtc);
     return new EveAssetCatalogDocument(
         AetheriaRuntimeProviderIdentity.ProviderId,
-        AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
-        AssetCatalogVersion(source.PublishedAtUtc),
+        AetheriaRuntimeVerseRecordKeys.EveAssetCatalogGeneration(version).ToString(),
+        version,
         source.PublishedAtUtc,
         assets);
 }
@@ -3881,8 +3882,12 @@ static async Task PublishClientAssetTopologyAsync(
     await node.MutableDocument<AetheriaRuntimeAssetManifestDocument>(AetheriaRuntimeVerseRecordKeys.DaemonAssetManifest)
         .ReplaceAsync(source)
         .ConfigureAwait(false);
+    var catalog = BuildCoreAssetCatalog(unityBundles, source);
+    await node.MutableDocument<EveAssetCatalogDocument>(AetheriaRuntimeVerseRecordKeys.EveAssetCatalogGeneration(catalog.Version))
+        .ReplaceAsync(catalog)
+        .ConfigureAwait(false);
     await node.MutableDocument<EveAssetCatalogDocument>(AetheriaRuntimeVerseRecordKeys.EveAssetCatalog)
-        .ReplaceAsync(BuildCoreAssetCatalog(unityBundles, source))
+        .ReplaceAsync(catalog)
         .ConfigureAwait(false);
 }
 

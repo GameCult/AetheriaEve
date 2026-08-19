@@ -97,12 +97,13 @@ and metrics never become equipment or deployment owners.
 The preview is a standard Eve `world.scene3d` containing one
 `world.entity3d` for the selected Hangar ship. The world qualifies its asset
 catalog by provider, Verse, authority runtime, record, Odin rendezvous routes,
-and exact required asset-catalog version. A lowerer stages the surface and that
-catalog generation as one candidate; a same-provider catalog change cannot
-bypass preload merely because provider identity is unchanged. Once committed,
-that pinned catalog remains the presentation owner until a newer base surface
-declares another generation. Catalog watches may satisfy an in-flight surface
-candidate, but cannot silently advance a pinned mounted surface. When
+and exact required asset-catalog version. Each exact catalog lives at an
+immutable generation-qualified record key; the mutable latest-catalog record is
+discovery only. A lowerer stages the surface and that immutable catalog as one
+candidate, reads it once, and lets the bounded presentation retry owner handle a
+missing or corrupt record. It never waits for an old number to reappear on the
+latest pointer. Once committed, that pinned catalog remains the presentation
+owner until a newer base surface declares another generation. When
 progression is local, those fields identify the local daemon. When
 another Verse is selected, they identify the progression authority that supplied
 the Hangar and catalog; the routing daemon does not re-author remote assets or

@@ -293,8 +293,10 @@ A matching terminal receipt ends delivery retries immediately, but its optional
 `presentationSurfaceVersion` independently gates visible finality. When that
 version is newer than the mounted advertised base surface, the lowerer retains
 the receipt lease, freezes obsolete controls, and exposes terminal finality
-only after that exact base surface and its required asset-catalog generation
-commit together. `sourceVersion` remains provider-state causality; receipt
+only after that exact base surface and its immutable generation-qualified asset
+catalog record commit together. Mutable latest-catalog records are discovery
+pointers and cannot satisfy an exact presentation lease. `sourceVersion`
+remains provider-state causality; receipt
 arrival and composed embedded-surface versions do not own presentation
 finality.
 For a remote progression Verse, the local router first verifies that terminal

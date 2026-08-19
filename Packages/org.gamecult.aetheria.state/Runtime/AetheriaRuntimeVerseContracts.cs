@@ -19,6 +19,11 @@ namespace GameCult.Aetheria.State.Verse
         public static CultRecordKey DaemonCommandBoundary { get; } = new("daemon:aetheria.command_boundary.v1");
         public static CultRecordKey DaemonAssetManifest { get; } = new("daemon:aetheria.asset_manifest.latest.v1");
         public static CultRecordKey EveAssetCatalog { get; } = new("eve:assets:aetheria.daemon");
+        public static CultRecordKey EveAssetCatalogGeneration(long version)
+        {
+            if (version <= 0) throw new ArgumentOutOfRangeException(nameof(version));
+            return new CultRecordKey($"eve:assets:aetheria.daemon:version:{version}");
+        }
         public static CultRecordKey VerseAuthorityPolicy { get; } = new(AetheriaRuntimeVerseAuthorityPolicyDocument.DocumentKey);
         public static CultRecordKey DaemonFrameLatest { get; } = new("daemon:aetheria.frame.latest.v1");
         public static CultRecordKey DaemonSoaViewLatest { get; } = new("daemon:aetheria.soa_view.latest.v1");

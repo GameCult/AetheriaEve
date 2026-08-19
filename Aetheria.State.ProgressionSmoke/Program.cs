@@ -117,6 +117,9 @@ try
         var coldAssetCatalog = await client.ReadAsync<EveAssetCatalogDocument>(
             localTarget,
             coldWorld.Props["assetManifest"]);
+        Require(coldAssetCatalog.CatalogId == coldWorld.Props["assetManifest"] &&
+                coldAssetCatalog.CatalogId.EndsWith($":version:{coldAssetCatalog.Version}", StringComparison.Ordinal),
+            "The cold-boot Hangar must reference an immutable generation-qualified asset catalog record.");
         var coldPreviewAsset = coldAssetCatalog.Assets.Single(asset =>
             asset.AssetRef == coldPreview.Props["assetRef"]);
         var coldPreviewVariant = coldPreviewAsset.Variants.Single(variant =>
@@ -280,7 +283,9 @@ try
         var remoteAssetCatalog = await remoteClient.ReadAsync<EveAssetCatalogDocument>(
             remoteTarget,
             remoteWorld.Props["assetManifest"]);
-        Require(long.Parse(remoteWorld.Props["assetCatalogVersion"]) == remoteAssetCatalog.Version,
+        Require(long.Parse(remoteWorld.Props["assetCatalogVersion"]) == remoteAssetCatalog.Version &&
+                remoteAssetCatalog.CatalogId == remoteWorld.Props["assetManifest"] &&
+                remoteAssetCatalog.CatalogId.EndsWith($":version:{remoteAssetCatalog.Version}", StringComparison.Ordinal),
             "The selected Hangar surface must lease the exact asset catalog generation owned by its progression Verse.");
         var remotePreviewAsset = remoteAssetCatalog.Assets.Single(asset =>
             asset.AssetRef == remotePreview.Props["assetRef"]);

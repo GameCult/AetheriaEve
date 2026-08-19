@@ -621,38 +621,25 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
 
     private async Task<AetheriaProgressionVerseView> ReadLocalViewAsync(AetheriaProgressionSourceDocument source)
     {
-        var hangar = await _node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
-            .ReadAsync().ConfigureAwait(false) ?? new AetheriaHangarState();
-        var draft = await AetheriaDaemonHangarCoordinator.EnsureDraftAsync(_node, hangar, DateTimeOffset.UtcNow.ToString("O"))
-            .ConfigureAwait(false);
-        AetheriaLoadoutTemplate? loadout = null;
-        var selected = (hangar.Ships ?? Array.Empty<AetheriaHangarShip>()).FirstOrDefault(ship =>
-            string.Equals(ship.ShipId, draft.SelectedShipId, StringComparison.Ordinal));
-        if (!string.IsNullOrWhiteSpace(selected?.LoadoutTemplateKey))
-            loadout = await _node.MutableDocument<AetheriaLoadoutTemplate>(new(selected.LoadoutTemplateKey))
-                .ReadAsync().ConfigureAwait(false);
         var projection = await _node.MutableDocument<AetheriaHangarProjectionDocument>(
                 AetheriaRuntimeVerseRecordKeys.HangarProjection)
             .ReadAsync().ConfigureAwait(false)
             ?? throw new InvalidOperationException("Local progression has no committed Hangar projection.");
-        var assetCatalog = await _node.MutableDocument<EveAssetCatalogDocument>(
-                AetheriaRuntimeVerseRecordKeys.EveAssetCatalog)
-            .ReadAsync().ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Local progression has no committed Hangar asset catalog.");
+        ValidateProjection(new CultMeshSessionTarget(_localVerseId, _runtimeId), projection);
         return new AetheriaProgressionVerseView
         {
             ProjectionGeneration = projection.Generation,
             Source = source,
             AuthorityRuntimeId = _runtimeId,
-            AssetVerseId = _localVerseId,
-            AssetProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
-            AssetManifestRecordRef = AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
-            AssetCatalogVersion = assetCatalog.Version,
+            AssetVerseId = projection.AssetVerseId,
+            AssetProviderId = projection.AssetProviderId,
+            AssetManifestRecordRef = projection.AssetManifestRecordRef,
+            AssetCatalogVersion = projection.AssetCatalogVersion,
             AssetRendezvousEndpoints = Array.Empty<string>(),
-            Hangar = hangar,
-            Draft = draft,
-            Loadout = loadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(loadout),
-            Catalog = _node.RuntimeCatalog().Latest()
+            Hangar = projection.Hangar,
+            Draft = projection.Draft,
+            Loadout = projection.Loadout,
+            Catalog = projection.Catalog
         };
     }
 
