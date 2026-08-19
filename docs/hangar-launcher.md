@@ -60,6 +60,11 @@ rejection that does not mutate the Hangar.
 Derived state: selected bay, selected mode, preview, fit metrics, affordability,
 compatibility warnings, and launch readiness are UI projections. The preview
 and metrics never become equipment or deployment owners.
+The preview is a standard Eve `world.scene3d` containing one
+`world.entity3d` for the selected Hangar ship. It resolves the hull through the
+provider asset manifest and carries the selected loadout identity/equipment
+projection. It does not read gameplay frame, entity-view, or zone-render
+pointers and does not create or load a run.
 
 Forbidden writers: Unity, Electron, Eve lowerers, mode session checkpoints,
 witness seeders, and mode-local inventory stores cannot mutate Hangar assets or
@@ -90,4 +95,6 @@ path. Generic New Game must not return as a gameplay-state writer.
   remote Odin-discovered progression Verse;
 - the portable surface exposes owned bays, ship preview, fit summary, existing
   inventory/refit entry, three mode selectors, and Launch;
+- on a fresh daemon with no run, the preview lowers one visible entity for the
+  selected ship and follows ship/loadout changes without touching gameplay state;
 - attaching a renderer does not change admission output.

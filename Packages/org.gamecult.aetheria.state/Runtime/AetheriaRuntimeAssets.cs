@@ -61,9 +61,8 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeCatalogSnapshot? catalog = null)
         {
             if (entity == null) return "";
-            var hull = catalog?.FindItem(entity.HullItemKey ?? "");
-            if (hull != null && !string.IsNullOrWhiteSpace(hull.HullPrefab))
-                return HullPrefabAssetKey(ResolvePresentationHull(hull, catalog!).ItemKey);
+            var hullAssetRef = ResolveHullPrefabAssetRef(entity.HullItemKey, catalog);
+            if (!string.IsNullOrWhiteSpace(hullAssetRef)) return hullAssetRef;
             var kind = (entity.Kind ?? "").Trim().ToLowerInvariant();
             if (kind.Contains("station")) return "prefab.entity.station";
             if (kind.Contains("projectile")) return "prefab.entity.projectile";
@@ -71,6 +70,16 @@ namespace GameCult.Aetheria.State.Verse
             return string.Equals(entity.FactionKey, "player", StringComparison.OrdinalIgnoreCase)
                 ? "prefab.entity.player"
                 : "prefab.entity.ship";
+        }
+
+        public static string ResolveHullPrefabAssetRef(
+            string hullItemKey,
+            AetheriaRuntimeCatalogSnapshot? catalog = null)
+        {
+            var hull = catalog?.FindItem(hullItemKey ?? "");
+            return hull != null && !string.IsNullOrWhiteSpace(hull.HullPrefab)
+                ? HullPrefabAssetKey(ResolvePresentationHull(hull, catalog!).ItemKey)
+                : "";
         }
 
         public static string HullPrefabAssetKey(string hullItemKey) =>

@@ -140,19 +140,7 @@ namespace GameCult.Aetheria.State.Verse
                             {
                                 Panel("aetheria.hangar.preview", "SHIP PREVIEW", new[]
                                 {
-                                    Component("aetheria.hangar.world", "world.scene3d", Props(
-                                        ("statePointerId", AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString()),
-                                        ("entityViewPointerId", AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString()),
-                                        ("entityViewSchema", GameCult.Eve.Surface.EveEntitySoaViewDocument.SchemaId),
-                                        ("entityBodyId", AetheriaRuntimeDaemonSoaFramePublisher.BodyId),
-                                        ("zoneRenderPointerId", AetheriaRuntimeVerseRecordKeys.ZoneRenderLatest.ToString()),
-                                        ("zoneRenderSchema", AetheriaRuntimeDaemonSchemas.ZoneRender),
-                                        ("assetManifest", AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString()),
-                                        ("cameraRig", "hangar-static"),
-                                        ("viewId", "aetheria.hangar")), Array.Empty<EveSurfaceComponent>()),
-                                    Component("aetheria.hangar.preview.slot", "asset.preview", Props(
-                                        ("assetRole", "ship.preview"),
-                                        ("subjectKey", selected?.ShipId ?? "")), Array.Empty<EveSurfaceComponent>())
+                                    HangarPreviewWorld(selected, loadout, catalog)
                                 }),
                                 Panel("aetheria.hangar.loadout", "LOADOUT", new[]
                                 {
@@ -389,6 +377,52 @@ namespace GameCult.Aetheria.State.Verse
 
         private static EveSurfaceComponent Text(string id, string value) =>
             Component(id, "text", Props(("value", value)), Array.Empty<EveSurfaceComponent>());
+
+        private static EveSurfaceComponent HangarPreviewWorld(
+            AetheriaHangarShip? ship,
+            AetheriaRuntimeLoadoutTemplateCommit? loadout,
+            AetheriaRuntimeCatalogSnapshot? catalog)
+        {
+            var entityId = ship?.ShipId ?? "";
+            var hullAssetRef = ship == null
+                ? ""
+                : AetheriaRuntimeAssets.ResolveHullPrefabAssetRef(ship.HullItemKey, catalog);
+            if (ship != null && string.IsNullOrWhiteSpace(hullAssetRef))
+                hullAssetRef = "prefab.entity.player";
+            var equipmentKeys = string.Join(",", (loadout?.RootEntity?.Equipment ?? Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>())
+                .Where(slot => slot?.Item != null && !string.IsNullOrWhiteSpace(slot.Item.ItemKey))
+                .Select(slot => slot.Item.ItemKey));
+            var entities = ship == null
+                ? Array.Empty<EveSurfaceComponent>()
+                : new[]
+                {
+                    Component("aetheria.hangar.preview.ship", "world.entity3d", Props(
+                        ("entityId", entityId),
+                        ("entityKind", "ship"),
+                        ("label", string.IsNullOrWhiteSpace(loadout?.Name) ? entityId : loadout.Name),
+                        ("assetRef", hullAssetRef),
+                        ("position", "0,0,0"),
+                        ("rotationY", "180"),
+                        ("radius", "4"),
+                        ("selectable", "false"),
+                        ("controllable", "false"),
+                        ("hullItemKey", ship.HullItemKey),
+                        ("loadoutTemplateKey", ship.LoadoutTemplateKey),
+                        ("equipmentItemKeys", equipmentKeys)), Array.Empty<EveSurfaceComponent>())
+                };
+            return Component("aetheria.hangar.world", "world.scene3d", Props(
+                    ("assetManifest", AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString()),
+                    ("cameraRig", "third-person-orbit"),
+                    ("viewId", "aetheria.hangar"),
+                    ("playerEntityId", entityId),
+                    ("cameraTargetEntityId", entityId),
+                    ("cameraDistance", "12"),
+                    ("cameraVerticalFieldOfViewDegrees", "45"),
+                    ("ambientLightColor", "0.22,0.24,0.28"),
+                    ("ambientLightIntensity", "1.2")),
+                entities,
+                Layout(("position", "relative"), ("width", "100%"), ("height", "100%"), ("minHeight", "260")));
+        }
 
         private static EveSurfaceComponent Button(
             string id,

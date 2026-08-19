@@ -253,6 +253,9 @@ Semantic operands such as ship, deployment, mode, and expected Hangar revision
 are explicit `payload.*` properties in that Eve projection. Labels, selected
 state, disabled state, and status remain presentation properties; lowerers do
 not infer command payloads from them.
+The central ship preview is an inline standard Eve world/entity projection
+derived from the selected Hangar ship, loadout, catalog, and asset manifest. It
+never reads the active gameplay frame and cannot activate a run.
 Classification and route creation read that envelope, never the dropdown's
 current value. A command targeting `Local` executes against the routing
 daemon's local store; a command targeting the daemon's own Verse executes

@@ -240,14 +240,24 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     },
                     progressionAuthorityRuntimeId: "aetheria-authority");
                 var world = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.world");
+                var previewShip = world.Children.Single(component => component.Kind == "world.entity3d");
                 var launcher = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.launcher");
                 var verse = launcher.Children.Single(component => component.Id == "aetheria.hangar.verse");
                 var launchControl = launcher.Children.Single(component => component.Id == "aetheria.hangar.launch");
                 Require(surface.Surface.Id == AetheriaRuntimeHangarCommands.SurfaceId &&
                         surface.Surface.Root.Props["selectedMode"] == AetheriaGameModes.Terminus &&
                         Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.ship.id").Props["value"] == selectedShipId &&
-                        world.Props.Any(prop => prop.Key == "entityViewPointerId" && !string.IsNullOrWhiteSpace(prop.Value)) &&
-                        world.Props.Any(prop => prop.Key == "entityBodyId" && !string.IsNullOrWhiteSpace(prop.Value)) &&
+                        !world.Props.ContainsKey("statePointerId") &&
+                        !world.Props.ContainsKey("entityViewPointerId") &&
+                        !world.Props.ContainsKey("zoneRenderPointerId") &&
+                        world.Props["cameraRig"] == "third-person-orbit" &&
+                        world.Props["cameraTargetEntityId"] == selectedShipId &&
+                        previewShip.Props["entityId"] == selectedShipId &&
+                        previewShip.Props["hullItemKey"] == ship.HullItemKey &&
+                        previewShip.Props["loadoutTemplateKey"] == ship.LoadoutTemplateKey &&
+                        !string.IsNullOrWhiteSpace(previewShip.Props["assetRef"]) &&
+                        !previewShip.Props["equipmentItemKeys"].Split(',').Contains(removedItemKey, StringComparer.Ordinal) &&
+                        !Flatten(surface.Surface.Root).Any(component => component.Kind == "asset.preview") &&
                         verse.Kind == "control.select" &&
                         verse.Props["value"] == "gamecult.aetheria" &&
                         surface.Surface.Root.Props["progressionVerseId"] == "gamecult.aetheria" &&
@@ -263,6 +273,14 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Launch) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Continue),
                     "the daemon-owned Hangar surface must advertise Verse selection, loadout, launch, and continuation operations");
+                var alternatePreviewSurface = AetheriaRuntimeHangarSurfaceBuilder.Build(
+                    hangar, ship.ShipId, draft.SelectedMode, "2026-08-08T00:00:01Z", 2,
+                    AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(template), runtimeCatalog);
+                var alternatePreview = Flatten(alternatePreviewSurface.Surface.Root)
+                    .Single(component => component.Kind == "world.entity3d");
+                Require(alternatePreview.Props["entityId"] == ship.ShipId &&
+                        alternatePreview.Props["entityId"] != previewShip.Props["entityId"],
+                    "the Hangar preview must follow the selected Hangar ship without loading or generating a gameplay run");
                 Require(!Flatten(surface.Surface.Root).Any(component => component.Kind == "panel" ||
                             component.Layout.Keys.Any(key => key.StartsWith("grid", StringComparison.OrdinalIgnoreCase))) &&
                         Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.launch").Props["disabled"] == "false",

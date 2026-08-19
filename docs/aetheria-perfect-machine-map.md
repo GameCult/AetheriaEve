@@ -63,6 +63,9 @@ Date: 2026-06-13
 > routing.
 > Hangar controls declare semantic command operands with `payload.*`; lowerers
 > never infer intent from presentation props.
+> The Hangar preview is a standard inline `world.scene3d` / `world.entity3d`
+> projection of the selected ship and loadout. Gameplay frame, SoA, and zone
+> pointers cannot supply Hangar preview truth.
 > Route resolution verifies that authority and adds the Odin route without
 > consulting mutable dropdown state or substituting another authority that
 > advertises the same Verse; a target
