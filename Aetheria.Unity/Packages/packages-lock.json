@@ -144,16 +144,16 @@
       "hash": "c5a4a75c1b727499b16c2dae1895f29e2a9f72f0"
     },
     "org.gamecult.eve.surface": {
-      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#27b56c85abc6ecf8fa1121b9e1e58cd17338edd4",
+      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#351f7021e279c3ac7a261540883d60002044c261",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "org.gamecult.cultlib": "1.0.45"
       },
-      "hash": "27b56c85abc6ecf8fa1121b9e1e58cd17338edd4"
+      "hash": "351f7021e279c3ac7a261540883d60002044c261"
     },
     "org.gamecult.eve.unity-scene": {
-      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#ef83ba78bbec75365e3dcbb94d7945b31a8f893b",
+      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#781e6128ff41457c27dcd0cafb094c171dcb0736",
       "depth": 0,
       "source": "git",
       "dependencies": {
@@ -165,16 +165,16 @@
         "com.unity.render-pipelines.universal": "17.4.0",
         "com.unity.modules.particlesystem": "1.0.0"
       },
-      "hash": "ef83ba78bbec75365e3dcbb94d7945b31a8f893b"
+      "hash": "781e6128ff41457c27dcd0cafb094c171dcb0736"
     },
     "org.gamecult.eve.unity-uitoolkit": {
-      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#ef83ba78bbec75365e3dcbb94d7945b31a8f893b",
+      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#781e6128ff41457c27dcd0cafb094c171dcb0736",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "org.gamecult.eve.surface": "0.3.3"
       },
-      "hash": "ef83ba78bbec75365e3dcbb94d7945b31a8f893b"
+      "hash": "781e6128ff41457c27dcd0cafb094c171dcb0736"
     },
     "com.unity.modules.assetbundle": {
       "version": "1.0.0",

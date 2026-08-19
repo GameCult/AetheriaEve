@@ -245,11 +245,17 @@ blocking local commands, ticks, or other state writers.
 The receipt must match the immutable request and pinned Verse/authority route;
 a typed document under the expected key with another command, provider,
 surface, authority, or navigation Verse is rejected and leaves the request
-retryable. Hangar surface publication has one coalescing daemon owner. It reads
+retryable. Its navigation target preserves the pinned authority runtime;
+discovery may verify that runtime but cannot select a different daemon merely
+because it advertises the same Pilot surface. Hangar surface publication has one coalescing daemon owner. It reads
 the selected progression source outside the mutation transaction, then commits
 only if no newer Hangar mutation overtook that candidate. Commands mark the
 projection dirty and never launch their own surface publisher, so a delayed
-remote read cannot overwrite a newer selection.
+remote read cannot overwrite a newer selection. Odin discovery owns only the
+available-Verse observation. It merges that observation into the latest
+progression-source revision and cannot write or roll back `SelectedVerseId`;
+an availability failure for an old selection likewise cannot poison the new
+selection.
 
 The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and

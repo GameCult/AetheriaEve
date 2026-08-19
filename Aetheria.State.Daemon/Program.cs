@@ -2999,7 +2999,8 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                     options.VerseId,
                     request.ProviderId,
                     AetheriaRuntimeHangarCommands.SurfaceId,
-                    "interactive-world");
+                    "interactive-world",
+                    authorityRuntimeId: options.DaemonId);
                 break;
             case AetheriaRuntimeHangarCommands.ShowOverview:
                 await AetheriaDaemonHangarCoordinator.SelectViewAsync(node, AetheriaHangarViews.Overview, now).ConfigureAwait(false);
@@ -3008,7 +3009,8 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                     options.VerseId,
                     request.ProviderId,
                     AetheriaRuntimeHangarCommands.SurfaceId,
-                    "interactive-world");
+                    "interactive-world",
+                    authorityRuntimeId: options.DaemonId);
                 break;
             case AetheriaRuntimeHangarCommands.EquipItem:
             {
@@ -3060,7 +3062,8 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                         options.VerseId,
                         request.ProviderId,
                         SurfaceForMode(receipt.Mode),
-                        "interactive-world");
+                        "interactive-world",
+                        authorityRuntimeId: options.DaemonId);
                 }
                 break;
             }
@@ -3079,7 +3082,8 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                         options.VerseId,
                         request.ProviderId,
                         SurfaceForMode(deployment.Mode),
-                        "interactive-world");
+                        "interactive-world",
+                        authorityRuntimeId: options.DaemonId);
                 }
                 break;
             }

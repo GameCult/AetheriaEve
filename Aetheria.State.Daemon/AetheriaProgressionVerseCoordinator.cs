@@ -95,19 +95,13 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         ThrowIfDisposed();
         var pointer = _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey);
         var existing = await pointer.ReadAsync().ConfigureAwait(false) ?? new AetheriaProgressionSourceDocument();
-        var next = Clone(existing);
-        next.OdinDiscoveryEndpoints = _odinEndpoints;
-        next.DiscoveredAtUtc = now ?? "";
-
         var verses = new List<AetheriaProgressionVerseOption> { LocalOption() };
+        var discoveryAttempted = _discovery != null;
+        var discoverySucceeded = false;
+        var discoveryDiagnostic = "";
         if (_discovery == null)
         {
-            next.Status = next.UsesLocalProgression
-                ? AetheriaProgressionSourceStatuses.Local
-                : AetheriaProgressionSourceStatuses.Unavailable;
-            next.Diagnostic = next.UsesLocalProgression
-                ? ""
-                : "The selected Verse is unavailable because no Odin discovery endpoint is configured.";
+            discoveryDiagnostic = "The selected Verse is unavailable because no Odin discovery endpoint is configured.";
         }
         else
         {
@@ -120,12 +114,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     .Select(ToOption)
                     .OrderBy(option => option.DisplayName, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(option => option.VerseId, StringComparer.Ordinal));
-                var selectedIsAvailable = next.UsesLocalProgression ||
-                    verses.Any(option => string.Equals(option.VerseId, next.SelectedVerseId, StringComparison.Ordinal));
-                next.Status = selectedIsAvailable
-                    ? (next.UsesLocalProgression ? AetheriaProgressionSourceStatuses.Local : AetheriaProgressionSourceStatuses.Ready)
-                    : AetheriaProgressionSourceStatuses.Unavailable;
-                next.Diagnostic = selectedIsAvailable ? "" : "The selected Verse was not advertised by the configured Odin.";
+                discoverySucceeded = true;
             }
             catch (Exception error) when (IsRemoteAvailabilityFailure(error))
             {
@@ -134,37 +123,28 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     if (!string.Equals(option.VerseId, AetheriaProgressionSources.Local, StringComparison.Ordinal))
                         verses.Add(option);
                 }
-                next.Status = next.UsesLocalProgression
-                    ? AetheriaProgressionSourceStatuses.Degraded
-                    : AetheriaProgressionSourceStatuses.Unavailable;
-                next.Diagnostic = $"Odin discovery failed: {error.Message}";
+                discoveryDiagnostic = $"Odin discovery failed: {error.Message}";
             }
         }
-
-        if (!next.UsesLocalProgression &&
-            !verses.Any(option => string.Equals(option.VerseId, next.SelectedVerseId, StringComparison.Ordinal)))
+        return await _node.CommitAsync(async () =>
         {
-            var previous = (existing.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
-                .FirstOrDefault(option => string.Equals(option.VerseId, next.SelectedVerseId, StringComparison.Ordinal));
-            verses.Add(previous ?? new AetheriaProgressionVerseOption
-            {
-                VerseId = next.SelectedVerseId,
-                DisplayName = next.SelectedVerseId
-            });
-        }
-
-        next.AvailableVerses = verses
-            .Where(option => !string.IsNullOrWhiteSpace(option.VerseId))
-            .GroupBy(option => option.VerseId, StringComparer.Ordinal)
-            .Select(group => group.First())
-            .ToArray();
-        if (!Equivalent(existing, next))
-        {
-            next.Revision = Math.Max(0, existing.Revision) + 1;
+            // Discovery is slow I/O. Merge its result into the latest committed selection rather
+            // than allowing the stale pre-discovery snapshot to become a second selection writer.
+            var latest = await pointer.ReadAsync().ConfigureAwait(false) ?? existing;
+            var next = MergeDiscovery(
+                latest,
+                verses,
+                discoveryAttempted,
+                discoverySucceeded,
+                discoveryDiagnostic,
+                now);
+            if (Equivalent(latest, next))
+                return latest;
+            next.Revision = Math.Max(0, latest.Revision) + 1;
             next.UpdatedAtUtc = now ?? "";
-            await _node.CommitAsync(() => pointer.ReplaceAsync(next)).ConfigureAwait(false);
-        }
-        return next;
+            await pointer.ReplaceAsync(next).ConfigureAwait(false);
+            return next;
+        }).ConfigureAwait(false);
     }
 
     public async Task<AetheriaProgressionSourceDocument> SelectAsync(string verseId, string now)
@@ -359,7 +339,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     TimeSpan.FromMilliseconds(500),
                     cancellationToken).ConfigureAwait(false);
                 ValidateRemoteReceipt(request, route, receipt);
-                return AddNavigationRoute(receipt, route.OdinDiscoveryEndpoints);
+                return AddNavigationRoute(receipt, route);
             }
             catch (Exception error) when (IsRemoteAvailabilityFailure(error))
             {
@@ -391,6 +371,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         if (receipt.Navigation != null)
         {
             if (!string.Equals(receipt.Navigation.VerseId, route.VerseId, StringComparison.Ordinal) ||
+                !string.Equals(receipt.Navigation.AuthorityRuntimeId, route.AuthorityRuntimeId, StringComparison.Ordinal) ||
                 !string.Equals(receipt.Navigation.ProviderId, receipt.ProviderId, StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(receipt.Navigation.SurfaceId))
             {
@@ -435,18 +416,21 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         string diagnostic,
         string now)
     {
-        if (string.Equals(current.Status, status, StringComparison.Ordinal) &&
-            string.Equals(current.Diagnostic, diagnostic, StringComparison.Ordinal))
-            return current;
-        var next = Clone(current);
-        next.Status = status;
-        next.Diagnostic = diagnostic;
-        next.Revision = Math.Max(0, current.Revision) + 1;
-        next.UpdatedAtUtc = now ?? "";
         return await _node.CommitAsync(async () =>
         {
-            await _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
-                .ReplaceAsync(next).ConfigureAwait(false);
+            var pointer = _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey);
+            var latest = await pointer.ReadAsync().ConfigureAwait(false) ?? current;
+            // A failed read of Verse A cannot mark Verse B unavailable after the player switches.
+            if (!string.Equals(latest.SelectedVerseId, current.SelectedVerseId, StringComparison.Ordinal) ||
+                (string.Equals(latest.Status, status, StringComparison.Ordinal) &&
+                 string.Equals(latest.Diagnostic, diagnostic, StringComparison.Ordinal)))
+                return latest;
+            var next = Clone(latest);
+            next.Status = status;
+            next.Diagnostic = diagnostic;
+            next.Revision = Math.Max(0, latest.Revision) + 1;
+            next.UpdatedAtUtc = now ?? "";
+            await pointer.ReplaceAsync(next).ConfigureAwait(false);
             return next;
         }).ConfigureAwait(false);
     }
@@ -560,6 +544,61 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         UpdatedAtUtc = source.UpdatedAtUtc
     };
 
+    private AetheriaProgressionSourceDocument MergeDiscovery(
+        AetheriaProgressionSourceDocument latest,
+        IEnumerable<AetheriaProgressionVerseOption> discoveredVerses,
+        bool discoveryAttempted,
+        bool discoverySucceeded,
+        string discoveryDiagnostic,
+        string now)
+    {
+        var next = Clone(latest);
+        next.OdinDiscoveryEndpoints = _odinEndpoints;
+        next.DiscoveredAtUtc = now ?? "";
+        var verses = discoveredVerses
+            .Where(option => !string.IsNullOrWhiteSpace(option.VerseId))
+            .GroupBy(option => option.VerseId, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToList();
+        var selectedIsAvailable = next.UsesLocalProgression ||
+            verses.Any(option => string.Equals(option.VerseId, next.SelectedVerseId, StringComparison.Ordinal));
+
+        if (!next.UsesLocalProgression && !selectedIsAvailable)
+        {
+            var previous = (latest.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
+                .FirstOrDefault(option => string.Equals(option.VerseId, next.SelectedVerseId, StringComparison.Ordinal));
+            verses.Add(previous ?? new AetheriaProgressionVerseOption
+            {
+                VerseId = next.SelectedVerseId,
+                DisplayName = next.SelectedVerseId
+            });
+        }
+
+        next.AvailableVerses = verses.ToArray();
+        if (!discoveryAttempted)
+        {
+            next.Status = next.UsesLocalProgression
+                ? AetheriaProgressionSourceStatuses.Local
+                : AetheriaProgressionSourceStatuses.Unavailable;
+            next.Diagnostic = next.UsesLocalProgression ? "" : discoveryDiagnostic;
+        }
+        else if (!discoverySucceeded)
+        {
+            next.Status = next.UsesLocalProgression
+                ? AetheriaProgressionSourceStatuses.Degraded
+                : AetheriaProgressionSourceStatuses.Unavailable;
+            next.Diagnostic = discoveryDiagnostic;
+        }
+        else
+        {
+            next.Status = selectedIsAvailable
+                ? (next.UsesLocalProgression ? AetheriaProgressionSourceStatuses.Local : AetheriaProgressionSourceStatuses.Ready)
+                : AetheriaProgressionSourceStatuses.Unavailable;
+            next.Diagnostic = selectedIsAvailable ? "" : "The selected Verse was not advertised by the configured Odin.";
+        }
+        return next;
+    }
+
     private static bool Equivalent(AetheriaProgressionSourceDocument left, AetheriaProgressionSourceDocument right) =>
         string.Equals(left.SelectedVerseId, right.SelectedVerseId, StringComparison.Ordinal) &&
         string.Equals(left.Status, right.Status, StringComparison.Ordinal) &&
@@ -593,11 +632,11 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
 
     private static EveCommandReceiptDocument AddNavigationRoute(
         EveCommandReceiptDocument receipt,
-        IReadOnlyList<string> routeEndpoints)
+        AetheriaProgressionCommandRouteDocument route)
     {
         if (receipt.Navigation == null || receipt.Navigation.RendezvousEndpoints.Length > 0)
             return receipt;
-        var endpoints = routeEndpoints?.Where(endpoint => !string.IsNullOrWhiteSpace(endpoint)).ToArray()
+        var endpoints = route.OdinDiscoveryEndpoints?.Where(endpoint => !string.IsNullOrWhiteSpace(endpoint)).ToArray()
             ?? Array.Empty<string>();
         if (endpoints.Length == 0)
             return receipt;
@@ -618,7 +657,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                 receipt.Navigation.ProviderId,
                 receipt.Navigation.SurfaceId,
                 receipt.Navigation.SurfaceKind,
-                endpoints));
+                endpoints,
+                route.AuthorityRuntimeId));
     }
 
     private void ThrowIfDisposed()

@@ -288,12 +288,17 @@ try
             $"Remote Terminus launch must return an accepted Eve navigation target for the selected Verse; state='{launchReceipt.State}', message='{launchReceipt.Message}', navigation='{launchNavigation?.VerseId ?? "<none>"}'.");
         Require(launchNavigation!.SurfaceId == AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
             "Remote Terminus launch must navigate the generic client to the Pilot surface.");
+        Require(launchNavigation.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
+            "Remote Terminus navigation must preserve the exact authority runtime that owns the accepted deployment.");
         Require(launchNavigation.RendezvousEndpoints.SequenceEqual(new[] { remoteEndpoint }, StringComparer.Ordinal),
             "Remote Terminus navigation must carry only the configured Odin rendezvous route, not flattened content or realtime provider routes.");
         using (var navigatedClient = Client(launchNavigation.RendezvousEndpoints[0]))
         {
+            var navigationTarget = new CultMeshSessionTarget(
+                launchNavigation.VerseId,
+                launchNavigation.AuthorityRuntimeId);
             using var gameSurfaceDemand = await navigatedClient.LeaseDocumentAsync<EveSurfaceDocument>(
-                remoteTarget,
+                navigationTarget,
                 AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString());
             var gameSurface = await ReadLiveUntilAsync(
                 gameSurfaceDemand.Handle,
@@ -305,7 +310,7 @@ try
             using var gameplayStateClient = Client(remoteEndpoint);
             var deployedHangar = await ReadUntilAsync(
                 gameplayStateClient,
-                remoteTarget,
+                navigationTarget,
                 AetheriaStateNode.HangarKey.ToString(),
                 (AetheriaHangarState hangar) =>
                     (hangar.Deployments ?? []).Any(deployment => deployment.RequestId == launchReceipt.CommandId),
@@ -313,7 +318,7 @@ try
             var deployment = deployedHangar.Deployments.Single(value => value.RequestId == launchReceipt.CommandId);
             var gameSession = await ReadUntilAsync(
                 gameplayStateClient,
-                remoteTarget,
+                navigationTarget,
                 AetheriaStateNode.GameSessionStateKey.ToString(),
                 (AetheriaGameSessionState session) =>
                     session.Mode == AetheriaGameSessionState.TerminusMode &&
@@ -323,7 +328,7 @@ try
                 TimeSpan.FromSeconds(10));
             var liveFrame = await ReadUntilAsync(
                 gameplayStateClient,
-                remoteTarget,
+                navigationTarget,
                 AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
                 (AetheriaRuntimeDaemonFrameDocument frame) =>
                     frame.Run?.RunId == deployment.RunId && frame.Run.GameMode == AetheriaGameModes.Terminus,
@@ -350,7 +355,9 @@ try
             continueSurface,
             AetheriaRuntimeHangarCommands.Continue,
             new Dictionary<string, string>(resume.Props, StringComparer.Ordinal));
-        Require(continueReceipt.State == "accepted" && continueReceipt.Navigation?.VerseId == remoteVerse,
+        Require(continueReceipt.State == "accepted" &&
+                continueReceipt.Navigation?.VerseId == remoteVerse &&
+                continueReceipt.Navigation.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
             "Remote Terminus continue must return the selected Verse Pilot navigation target.");
 
         var pinnedLaunchRoute = await client.ReadAsync<AetheriaProgressionCommandRouteDocument>(

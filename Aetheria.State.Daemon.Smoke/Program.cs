@@ -457,7 +457,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     navigationVerse,
                     providerId,
                     AetheriaRuntimeHangarCommands.SurfaceId,
-                    "interactive-world"));
+                    "interactive-world",
+                    authorityRuntimeId: authority));
 
         AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(request, route, Receipt());
 

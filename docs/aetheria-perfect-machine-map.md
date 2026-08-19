@@ -40,11 +40,16 @@ Date: 2026-06-13
 > A remote typed receipt is not final merely because it occupies the expected
 > record key: its command, provider, surface, authority runtime, terminal state,
 > and navigation Verse must match the immutable request and pinned route before
-> the local inbox can be deleted. One daemon-owned, coalescing Hangar projection
+> the local inbox can be deleted. Navigation carries that pinned authority
+> runtime through Eve; lowerers rediscover and verify that exact authority and
+> cannot substitute another daemon advertising the same surface in the Verse.
+> One daemon-owned, coalescing Hangar projection
 > worker prepares slow local or remote reads, discards any candidate overtaken
 > by a newer Hangar mutation, and alone commits the derived Eve surface. Command
 > handlers only mark that projection dirty; they do not publish competing
-> surfaces.
+> surfaces. Odin discovery owns the available-Verse observation only. It merges
+> that observation into the latest progression-source revision and cannot write
+> or roll back the player's `SelectedVerseId`.
 > CultCache v4 writes content-addressed record pages,
 > exposes the batch through one atomic manifest generation swap, and leases the
 > selected manifest generation until a reader has hydrated every referenced
