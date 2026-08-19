@@ -323,7 +323,9 @@ Supported now:
 - `delegated-runtime`
 - `interest-lease`
 - one Arena session roster for runtime/actor/exact-operation admission under a
-  separate `host-authoritative` fact policy
+  separate `host-authoritative` fact policy; roster-specific Eve pilot surfaces
+  project each controller's actor, and ingress derives that actor again from the
+  authenticated runtime rather than trusting renderer payload
 
 Represented but fail closed:
 

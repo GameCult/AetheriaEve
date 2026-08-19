@@ -20,14 +20,21 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeDaemonHealthDocument health,
             AetheriaRuntimeDaemonCommandBoundaryDocument commandBoundary,
             string activeMainMenuSurfaceId = "",
-            AetheriaRuntimeCatalogSnapshot? catalog = null)
+            AetheriaRuntimeCatalogSnapshot? catalog = null,
+            string controlledEntityKey = "",
+            string surfaceId = "")
         {
             frame ??= new AetheriaRuntimeDaemonFrameDocument();
             health ??= new AetheriaRuntimeDaemonHealthDocument();
             commandBoundary ??= AetheriaRuntimeDaemonCommandBoundaryDocument.Create(frame.DaemonId);
             var run = frame.Run ?? new AetheriaRuntimeRunCheckpointCommit();
+            controlledEntityKey = string.IsNullOrWhiteSpace(controlledEntityKey)
+                ? run.CurrentEntityKey
+                : controlledEntityKey;
+            surfaceId = string.IsNullOrWhiteSpace(surfaceId) ? SurfaceId : surfaceId;
+            var bindsPrimaryEntity = string.Equals(controlledEntityKey, run.CurrentEntityKey, StringComparison.Ordinal);
             var zone = FindCurrentZone(run);
-            var entity = FindCurrentEntity(run, zone);
+            var entity = FindCurrentEntity(run, zone, controlledEntityKey);
             var target = FindTargetEntity(zone, entity);
             var entityName = string.IsNullOrWhiteSpace(entity?.Name) ? "(no current entity)" : entity!.Name;
             if (!string.IsNullOrWhiteSpace(activeMainMenuSurfaceId))
@@ -38,12 +45,11 @@ namespace GameCult.Aetheria.State.Verse
                     "aetheria.daemon.game.world",
                     run,
                     zone,
-                    run.CurrentEntityKey,
+                    controlledEntityKey,
                     frame,
                     frame.SimulationSettings,
                     catalog),
                 CockpitOverlay(entity, target, frame.SimulationSettings),
-                ReactiveGameplaySlot(),
                 GravityFieldSurface("aetheria.daemon.game.field"),
                 MainMenuOverlay("aetheria.daemon.game.main_menu", activeMainMenuSurfaceId),
                 Hidden(Node(
@@ -67,13 +73,13 @@ namespace GameCult.Aetheria.State.Verse
                     Metric("aetheria.daemon.game.player.terminal_reason", "Terminal Reason", run.TerminalReason, AetheriaRuntimeDaemonStateRefs.CurrentRunTerminalReason),
                     Metric("aetheria.daemon.game.player.terminal_frame", "Terminal Frame", run.TerminalFrameId.ToString(CultureInfo.InvariantCulture), AetheriaRuntimeDaemonStateRefs.CurrentRunTerminalFrameId),
                     Metric("aetheria.daemon.game.player.zone", "Zone", run.CurrentZoneIndex.ToString(CultureInfo.InvariantCulture), AetheriaRuntimeDaemonStateRefs.CurrentZoneIndex),
-                    Metric("aetheria.daemon.game.player.key", "Entity Key", run.CurrentEntityKey, AetheriaRuntimeDaemonStateRefs.CurrentEntityKey),
-                    Metric("aetheria.daemon.game.player.name", "Name", entityName, AetheriaRuntimeDaemonStateRefs.CurrentEntityName),
-                    Metric("aetheria.daemon.game.player.position", "Position", FormatPosition(entity), AetheriaRuntimeDaemonStateRefs.CurrentEntityPosition),
-                    Metric("aetheria.daemon.game.player.target", "Target", string.IsNullOrWhiteSpace(target?.Name) ? "(none)" : target!.Name, AetheriaRuntimeDaemonStateRefs.CurrentTargetName),
-                    Metric("aetheria.daemon.game.player.equipment", "Equipment", Count(entity?.Equipment).ToString(CultureInfo.InvariantCulture), AetheriaRuntimeDaemonStateRefs.CurrentEquipmentCount),
-                    Metric("aetheria.daemon.game.player.cargo", "Cargo Bays", Count(entity?.CargoContents).ToString(CultureInfo.InvariantCulture), AetheriaRuntimeDaemonStateRefs.CurrentCargoBayCount),
-                    Metric("aetheria.daemon.game.player.weaponGroups", "Weapon Groups", Count(entity?.WeaponGroups).ToString(CultureInfo.InvariantCulture), AetheriaRuntimeDaemonStateRefs.CurrentWeaponGroupCount))),
+                    Metric("aetheria.daemon.game.player.key", "Entity Key", controlledEntityKey, bindsPrimaryEntity ? AetheriaRuntimeDaemonStateRefs.CurrentEntityKey : ""),
+                    Metric("aetheria.daemon.game.player.name", "Name", entityName, bindsPrimaryEntity ? AetheriaRuntimeDaemonStateRefs.CurrentEntityName : ""),
+                    Metric("aetheria.daemon.game.player.position", "Position", FormatPosition(entity), bindsPrimaryEntity ? AetheriaRuntimeDaemonStateRefs.CurrentEntityPosition : ""),
+                    Metric("aetheria.daemon.game.player.target", "Target", string.IsNullOrWhiteSpace(target?.Name) ? "(none)" : target!.Name, bindsPrimaryEntity ? AetheriaRuntimeDaemonStateRefs.CurrentTargetName : ""),
+                    Metric("aetheria.daemon.game.player.equipment", "Equipment", Count(entity?.Equipment).ToString(CultureInfo.InvariantCulture), bindsPrimaryEntity ? AetheriaRuntimeDaemonStateRefs.CurrentEquipmentCount : ""),
+                    Metric("aetheria.daemon.game.player.cargo", "Cargo Bays", Count(entity?.CargoContents).ToString(CultureInfo.InvariantCulture), bindsPrimaryEntity ? AetheriaRuntimeDaemonStateRefs.CurrentCargoBayCount : ""),
+                    Metric("aetheria.daemon.game.player.weaponGroups", "Weapon Groups", Count(entity?.WeaponGroups).ToString(CultureInfo.InvariantCulture), bindsPrimaryEntity ? AetheriaRuntimeDaemonStateRefs.CurrentWeaponGroupCount : ""))),
                 Hidden(Node(
                     "aetheria.daemon.game.commands",
                     "card",
@@ -98,6 +104,8 @@ namespace GameCult.Aetheria.State.Verse
                         CommandButton("aetheria.daemon.game.commands.undock", "Undock", AetheriaRuntimeDaemonCommandKinds.Undock),
                         CommandButton("aetheria.daemon.game.commands.ping", "Sensor Ping", AetheriaRuntimeDaemonCommandKinds.SensorPing))))
             };
+            if (string.Equals(controlledEntityKey, run.CurrentEntityKey, StringComparison.Ordinal))
+                surfaceChildren.Insert(2, ReactiveGameplaySlot());
             if (entity != null)
                 surfaceChildren.Add(Node(
                     "aetheria.daemon.game.weapon-state",
@@ -115,7 +123,7 @@ namespace GameCult.Aetheria.State.Verse
                 version: frame.FrameId,
                 updatedAtUtc: frame.PublishedAtUtc,
                 surface: new EveSurfaceTree(
-                    SurfaceId,
+                    surfaceId,
                     PilotSurfaceRoot(
                         "aetheria.daemon.game.root",
                         surfaceChildren.ToArray()),
@@ -796,9 +804,12 @@ namespace GameCult.Aetheria.State.Verse
 
         private static AetheriaRuntimeEntitySnapshotCommit? FindCurrentEntity(
             AetheriaRuntimeRunCheckpointCommit run,
-            AetheriaRuntimeZoneSnapshotCommit zone)
+            AetheriaRuntimeZoneSnapshotCommit zone,
+            string currentEntityKey = "")
         {
-            var entityIndex = TryParseEntityIndex(run.CurrentEntityKey);
+            var entityIndex = TryParseEntityIndex(string.IsNullOrWhiteSpace(currentEntityKey)
+                ? run.CurrentEntityKey
+                : currentEntityKey);
             if (entityIndex >= 0)
                 return zone.Entities.FirstOrDefault(entity => entity.EntityIndex == entityIndex);
 
@@ -1117,7 +1128,7 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeZoneSnapshotCommit zone,
             string playerEntityId)
         {
-            var player = FindCurrentEntity(run, zone);
+            var player = FindCurrentEntity(run, zone, playerEntityId);
             if (player == null)
                 return null;
 
@@ -1141,7 +1152,7 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeZoneSnapshotCommit zone,
             string playerEntityId)
         {
-            var player = FindCurrentEntity(run, zone);
+            var player = FindCurrentEntity(run, zone, playerEntityId);
             if (player == null)
                 return null;
 
@@ -1169,7 +1180,7 @@ namespace GameCult.Aetheria.State.Verse
             string playerEntityId,
             AetheriaRuntimeDaemonSimulationSettings simulationSettings)
         {
-            var player = FindCurrentEntity(run, zone);
+            var player = FindCurrentEntity(run, zone, playerEntityId);
             if (player == null)
                 return null;
 
@@ -1225,7 +1236,7 @@ namespace GameCult.Aetheria.State.Verse
         {
             var entityId = run.EntityRecordKey(zone.ZoneIndex, entity.EntityIndex);
             var playerEntityId = PlayableWorldEntityId(run, zone, currentEntityKey);
-            var player = FindCurrentEntity(run, zone);
+            var player = FindCurrentEntity(run, zone, currentEntityKey);
             var targetEntityId = entity.TargetEntityIndex < 0
                 ? ""
                 : run.EntityRecordKey(zone.ZoneIndex, entity.TargetEntityIndex);

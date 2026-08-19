@@ -93,8 +93,10 @@ Date: 2026-06-13
 > publication until that boundary exists. Arena deployment installs
 > `aetheria.mode.arena.server.v1` plus one daemon-owned session roster. Launch
 > assigns a seat once, Continue cannot reassign it, and the Hangar Eve command
-> gives additional runtimes the next open seat while the daemon remains the sole
-> committed-fact author. Starbridge's
+> gives additional runtimes the next open seat. Each active seat has a
+> daemon-authored Eve pilot surface, and command ingress derives its actor from
+> authenticated runtime plus roster instead of trusting the global current ship
+> or payload. The daemon remains the sole committed-fact author. Starbridge's
 > mode-policy identity remains empty until Pilot correction is installed and
 > proven; mode labels alone are not authority evidence.
 

@@ -554,6 +554,135 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         "2026-08-08T00:00:05Z")
                     .GetAwaiter().GetResult();
                 arenaRoster = node.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
+                var parsedPrimarySeat = AetheriaRuntimeRunCheckpointCommit.TryParseEntityKey(
+                    arenaSession.ControlledEntityKey, out var primaryZoneIndex, out var primaryEntityIndex);
+                var parsedJoinedSeat = AetheriaRuntimeRunCheckpointCommit.TryParseEntityKey(
+                    joinedSeat!.ControlledEntityKey, out var joinedZoneIndex, out var joinedEntityIndex);
+                Require(parsedPrimarySeat && parsedJoinedSeat && primaryZoneIndex == joinedZoneIndex,
+                    "Arena smoke seats must identify concrete actors in one playable zone");
+                const string entityKeyPrefix = "global:aetheria.run_state.";
+                var entityKeyZoneOffset = joinedSeat.ControlledEntityKey.IndexOf(".zone.", StringComparison.Ordinal);
+                Require(joinedSeat.ControlledEntityKey.StartsWith(entityKeyPrefix, StringComparison.Ordinal) &&
+                        entityKeyZoneOffset > entityKeyPrefix.Length,
+                    "Arena seat actor identity must retain the runtime run key");
+                var runtimeRunId = joinedSeat.ControlledEntityKey.Substring(
+                    entityKeyPrefix.Length,
+                    entityKeyZoneOffset - entityKeyPrefix.Length);
+                var seatEntities = Enumerable.Range(0, Math.Max(primaryEntityIndex, joinedEntityIndex) + 1)
+                    .Select(index => Entity(index, index * 20, index == primaryEntityIndex ? "arena-a" : "arena-b"))
+                    .ToArray();
+                var seatRun = new AetheriaRuntimeRunCheckpointCommit
+                {
+                    RunId = runtimeRunId,
+                    GameMode = AetheriaGameModes.Arena,
+                    CurrentZoneIndex = primaryZoneIndex,
+                    CurrentEntityKey = arenaSession.ControlledEntityKey,
+                    Zones =
+                    [
+                        new AetheriaRuntimeZoneSnapshotCommit
+                        {
+                            ZoneIndex = primaryZoneIndex,
+                            Entities = seatEntities
+                        }
+                    ]
+                };
+                var seatFrame = AetheriaRuntimeDaemonFrameDocument.Create(
+                    seatRun, "daemon-smoke", arenaSession.SessionId, 1, 0, 0.02);
+                var seatSurfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId("ai-build-b");
+                var seatSurface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
+                    seatFrame,
+                    new AetheriaRuntimeDaemonHealthDocument(),
+                    AetheriaRuntimeDaemonCommandBoundaryDocument.Create("daemon-smoke"),
+                    catalog: runtimeCatalog,
+                    controlledEntityKey: joinedSeat.ControlledEntityKey,
+                    surfaceId: seatSurfaceId);
+                var seatWorld = Flatten(seatSurface.Surface.Root).Single(component => component.Kind == "world.scene3d");
+                var controllableEntities = Flatten(seatSurface.Surface.Root)
+                    .Where(component => component.Kind == "entity.presentation" &&
+                        component.Props.TryGetValue("controllable", out var value) && value == "true")
+                    .ToArray();
+                Require(seatSurface.Surface.Id == seatSurfaceId &&
+                        seatWorld.Props["playerEntityId"] == joinedSeat.ControlledEntityKey &&
+                        seatWorld.Props["cameraTargetEntityId"] == joinedSeat.ControlledEntityKey &&
+                        controllableEntities.Length == 1 &&
+                        controllableEntities[0].Props["entityId"] == joinedSeat.ControlledEntityKey,
+                    "each Arena seat surface must project its roster actor as the only pilot/camera/controllable entity");
+
+                var ordinarySeatRequest = new EveSurfaceCommandRequest(
+                    AetheriaRuntimeProviderIdentity.ProviderId,
+                    seatSurfaceId,
+                    CultMesh.OperationInvocation(AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(
+                        AetheriaRuntimeDaemonCommandKinds.SetMoveVector)),
+                    CultMesh.OperationPayload(
+                        ("directionX", "1"),
+                        ("directionY", "0"),
+                        ("scalarValue", "1")),
+                    DateTimeOffset.UtcNow,
+                    "ai-build-b");
+                Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
+                        ordinarySeatRequest,
+                        seatFrame,
+                        "ai-build-b",
+                        arenaSession.SessionId,
+                        out var translatedSeatCommand) && translatedSeatCommand != null &&
+                        translatedSeatCommand.ActorEntityKey == arenaSession.ControlledEntityKey,
+                    "the generic command translator must expose the old global actor before Arena admission replaces it");
+                translatedSeatCommand!.ClientId = "ai-build-b";
+                translatedSeatCommand.AuthorRuntimeId = "ai-build-b";
+                var seatBinding = AetheriaRuntimeArenaOperationAdmission.BindAuthenticatedSurfaceActor(
+                    translatedSeatCommand,
+                    seatSurfaceId,
+                    arenaSession.SessionId,
+                    arenaSession.RunId,
+                    arenaRoster,
+                    "daemon-smoke");
+                var seatExecution = AetheriaRuntimeDaemonOperations.Execute(seatRun, [translatedSeatCommand]);
+                var seatFact = AetheriaRuntimeCommittedCommandFactDocument.FromAppliedCommand(
+                    seatFrame,
+                    translatedSeatCommand,
+                    "aetheria.local");
+                var seatMovement = seatExecution.Intents.Movements.SingleOrDefault();
+                Require(seatBinding.Authorized &&
+                        translatedSeatCommand.ActorEntityKey == joinedSeat.ControlledEntityKey &&
+                        AetheriaRuntimeArenaOperationAdmission.Authorize(
+                            translatedSeatCommand,
+                            arenaSession.Mode,
+                            arenaSession.SessionId,
+                            arenaSession.RunId,
+                            arenaSession.ModePolicyId,
+                            arenaPolicy,
+                            arenaRoster,
+                            "daemon-smoke").Authorized &&
+                        seatMovement?.ActorEntityKey == joinedSeat.ControlledEntityKey &&
+                        seatFact.SourceRuntimeId == "daemon-smoke" &&
+                        seatFact.ProposedByRuntimeId == "ai-build-b",
+                    $"ordinary Arena input must derive the seat actor at ingress and retain daemon fact authority with controller provenance; " +
+                    $"bound={seatBinding.Authorized}, actor={translatedSeatCommand.ActorEntityKey}, kind={translatedSeatCommand.Kind}, " +
+                    $"direction={translatedSeatCommand.DirectionX},{translatedSeatCommand.DirectionY}, magnitude={translatedSeatCommand.ScalarValue}, " +
+                    $"applied={string.Join(',', seatExecution.AppliedCommandIds)}, rejected={string.Join(',', seatExecution.RejectedCommandIds)}, " +
+                    $"movement={seatMovement?.ActorEntityKey ?? "none"}");
+                var wrongSurfaceCommand = MessagePack.MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
+                    MessagePack.MessagePackSerializer.Serialize(translatedSeatCommand));
+                Require(AetheriaRuntimeArenaOperationAdmission.BindAuthenticatedSurfaceActor(
+                            wrongSurfaceCommand,
+                            AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+                            arenaSession.SessionId,
+                            arenaSession.RunId,
+                            arenaRoster,
+                            "daemon-smoke").Reason == "arena-controller-surface-required",
+                    "a non-host Arena controller must not submit through the global pilot surface");
+                var spoofedSeatCommand = MessagePack.MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
+                    MessagePack.MessagePackSerializer.Serialize(translatedSeatCommand));
+                spoofedSeatCommand.ActorEntityKey = arenaSession.ControlledEntityKey;
+                Require(AetheriaRuntimeArenaOperationAdmission.BindAuthenticatedSurfaceActor(
+                            spoofedSeatCommand,
+                            seatSurfaceId,
+                            arenaSession.SessionId,
+                            arenaSession.RunId,
+                            arenaRoster,
+                            "daemon-smoke").Authorized &&
+                        spoofedSeatCommand.ActorEntityKey == joinedSeat.ControlledEntityKey,
+                    "Arena ingress must derive the roster actor instead of trusting a spoofed surface payload");
                 var secondController = new AetheriaRuntimeDaemonCommandDocument
                 {
                     CommandId = "arena-ai-build-b",

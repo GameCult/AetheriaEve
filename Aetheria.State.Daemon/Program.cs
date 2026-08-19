@@ -2353,16 +2353,20 @@ static async Task PublishClientGameplayDocumentsAsync(
         await node.MutableDocument<AetheriaRuntimeDaemonProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.DaemonProviderAdvertisement)
             .ReplaceAsync(result.ProviderAdvertisement)
             .ConfigureAwait(false);
+    var gameSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+        .ReadAsync().ConfigureAwait(false);
+    var arenaRoster = gameSession != null && string.Equals(gameSession.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
+        ? node.Documents<AetheriaRuntimeArenaRosterDocument>().SingleOrDefault(value =>
+            value != null && value.IsActiveFor(gameSession.SessionId, gameSession.RunId))
+        : null;
     if (publishTopology)
         await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement)
-            .ReplaceAsync(BuildCoreProviderAdvertisement(options, result.Frame.PublishedAtUtc))
+            .ReplaceAsync(BuildCoreProviderAdvertisement(options, result.Frame.PublishedAtUtc, arenaRoster))
             .ConfigureAwait(false);
     TraceClientDocumentPhase("provider-advertisements");
     if (publishTopology && result.AssetManifest != null)
         await PublishClientAssetTopologyAsync(node, unityBundles, result.AssetManifest).ConfigureAwait(false);
     TraceClientDocumentPhase("asset-catalog");
-    var gameSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
-        .ReadAsync().ConfigureAwait(false);
     await node.MutableDocument<EveInputCapabilityDocument>(AetheriaRuntimeVerseRecordKeys.PilotInputCapability)
         .ReplaceAsync(AetheriaRuntimeInputCapabilityDocument.FromFrame(
             result.Frame,
@@ -2406,6 +2410,27 @@ static async Task PublishClientGameplayDocumentsAsync(
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonGameSurface)
             .ReplaceAsync(portableGameSurface)
             .ConfigureAwait(false);
+        if (arenaRoster != null)
+        {
+            foreach (var seat in (arenaRoster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>()).Where(seat =>
+                         seat != null &&
+                         string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
+                         !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId)))
+            {
+                var seatSurfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId);
+                var seatSurface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
+                    result.Frame,
+                    result.Health ?? new AetheriaRuntimeDaemonHealthDocument(),
+                    result.CommandBoundary ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId),
+                    activeMainMenuSurfaceId,
+                    inputCatalog,
+                    seat.ControlledEntityKey,
+                    seatSurfaceId);
+                await node.MutableDocument<EveSurfaceDocument>(
+                        AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId))
+                    .ReplaceAsync(seatSurface).ConfigureAwait(false);
+            }
+        }
         await PublishDaemonSectorMapSurfaceAsync(node, result.Frame, inputCatalog).ConfigureAwait(false);
     }
     TraceClientDocumentPhase("game-topology");
@@ -2463,7 +2488,8 @@ static async Task PublishDaemonSectorMapSurfaceAsync(
 
 static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
     AetheriaDaemonHostOptions options,
-    string updatedAtUtc)
+    string updatedAtUtc,
+    AetheriaRuntimeArenaRosterDocument? arenaRoster = null)
 {
     var interaction = new EveWorldInteractionAdvertisement(
         "provider-authored-world-surface",
@@ -2485,6 +2511,53 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
         AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
         new[] { "unity-scene", "web-reference", "electron-shell" },
         "provider-owns-topology-discovery-landmarks-influence-and-assets");
+    var surfaces = new List<EveAdvertisedSurface>
+    {
+        new EveAdvertisedSurface(
+            AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+            EveSurfaceDocument.SchemaId,
+            AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString(),
+            "cultmesh-record",
+            "active",
+            "interactive-world",
+            interaction),
+        new EveAdvertisedSurface(
+            AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId,
+            EveSurfaceDocument.SchemaId,
+            AetheriaRuntimeVerseRecordKeys.StarbridgeCommanderSurface.ToString(),
+            "cultmesh-record",
+            "active",
+            "interactive-world",
+            interaction),
+        new EveAdvertisedSurface(
+            AetheriaRuntimeSectorMapSurfaceBuilder.SurfaceId,
+            EveSurfaceDocument.SchemaId,
+            AetheriaRuntimeVerseRecordKeys.MapMenuSurface.ToString(),
+            "cultmesh-record",
+            "active",
+            "graph",
+            mapInteraction),
+        new EveAdvertisedSurface(
+            AetheriaRuntimeHangarCommands.SurfaceId,
+            EveSurfaceDocument.SchemaId,
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
+            "cultmesh-record",
+            "active",
+            "interactive-world",
+            interaction)
+    };
+    surfaces.AddRange((arenaRoster?.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
+        .Where(seat => seat != null &&
+            string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
+            !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId))
+        .Select(seat => new EveAdvertisedSurface(
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId),
+            EveSurfaceDocument.SchemaId,
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId).ToString(),
+            "cultmesh-record",
+            "active",
+            "interactive-world",
+            interaction)));
     return new EveProviderAdvertisementDocument(
         AetheriaRuntimeProviderIdentity.ProviderId,
         options.DaemonId,
@@ -2502,41 +2575,7 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
             EveAssetCatalogDocument.SchemaId
         },
         Array.Empty<GameCult.Eve.Surface.EveProviderWitness>(),
-        new[]
-        {
-            new EveAdvertisedSurface(
-                AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
-                EveSurfaceDocument.SchemaId,
-                AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString(),
-                "cultmesh-record",
-                "active",
-                "interactive-world",
-                interaction),
-            new EveAdvertisedSurface(
-                AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId,
-                EveSurfaceDocument.SchemaId,
-                AetheriaRuntimeVerseRecordKeys.StarbridgeCommanderSurface.ToString(),
-                "cultmesh-record",
-                "active",
-                "interactive-world",
-                interaction),
-            new EveAdvertisedSurface(
-                AetheriaRuntimeSectorMapSurfaceBuilder.SurfaceId,
-                EveSurfaceDocument.SchemaId,
-                AetheriaRuntimeVerseRecordKeys.MapMenuSurface.ToString(),
-                "cultmesh-record",
-                "active",
-                "graph",
-                mapInteraction),
-            new EveAdvertisedSurface(
-                AetheriaRuntimeHangarCommands.SurfaceId,
-                EveSurfaceDocument.SchemaId,
-                AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
-                "cultmesh-record",
-                "active",
-                "interactive-world",
-                interaction)
-        },
+        surfaces.ToArray(),
         Array.Empty<EveAdvertisedCommand>(),
         new[] { AetheriaRuntimeDaemonSoaFramePublisher.ProducerId });
 }
@@ -3252,6 +3291,43 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
             command.CommandId = request.CommandId;
             command.ClientId = request.ClientId;
             command.AuthorRuntimeId = request.ClientId;
+            var activeSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                .ReadAsync().ConfigureAwait(false);
+            if (string.Equals(activeSession?.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+            {
+                var roster = await node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
+                        new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(activeSession!.SessionId)))
+                    .ReadAsync().ConfigureAwait(false);
+                var binding = AetheriaRuntimeArenaOperationAdmission.BindAuthenticatedSurfaceActor(
+                    command,
+                    request.SurfaceId,
+                    activeSession.SessionId,
+                    activeSession.RunId,
+                    roster,
+                    options.DaemonId);
+                if (!binding.Authorized)
+                {
+                    var deniedArenaOperation = new EveCommandReceiptDocument(
+                        $"receipt:{request.CommandId}:denied",
+                        request.CommandId,
+                        request.Command,
+                        "denied",
+                        "Aetheria Arena",
+                        options.DaemonId,
+                        request.ProviderId,
+                        request.SurfaceId,
+                        binding.Reason,
+                        DateTimeOffset.UtcNow.ToString("O"),
+                        Math.Max(currentFrame?.FrameId ?? 0, 0),
+                        invocationHash: payloadHash);
+                    await node.Database.PutAsync(
+                            AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(deniedArenaOperation.CommandId),
+                            deniedArenaOperation)
+                        .ConfigureAwait(false);
+                    await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
+                    return false;
+                }
+            }
             await node.SubmitDaemonCommandAsync(command).ConfigureAwait(false);
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
             return false;
@@ -3419,10 +3495,17 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                 if (accepted)
                 {
                     activatesSession = true;
+                    var surfaceId = SurfaceForMode(receipt.Mode);
+                    if (string.Equals(receipt.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+                    {
+                        var seat = FindArenaSeat(node, options.SessionId, request.ClientId);
+                        if (seat != null)
+                            surfaceId = await PublishArenaSeatSurfaceAsync(node, options, seat, now).ConfigureAwait(false);
+                    }
                     navigation = new EveSurfaceNavigationTarget(
                         options.VerseId,
                         request.ProviderId,
-                        SurfaceForMode(receipt.Mode),
+                        surfaceId,
                         "interactive-world",
                         authorityRuntimeId: options.DaemonId);
                 }
@@ -3443,10 +3526,17 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                 if (deployment != null)
                 {
                     activatesSession = true;
+                    var surfaceId = SurfaceForMode(deployment.Mode);
+                    if (string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+                    {
+                        var seat = FindArenaSeat(node, options.SessionId, request.ClientId);
+                        if (seat != null)
+                            surfaceId = await PublishArenaSeatSurfaceAsync(node, options, seat, now).ConfigureAwait(false);
+                    }
                     navigation = new EveSurfaceNavigationTarget(
                         options.VerseId,
                         request.ProviderId,
-                        SurfaceForMode(deployment.Mode),
+                        surfaceId,
                         "interactive-world",
                         authorityRuntimeId: options.DaemonId);
                 }
@@ -3464,10 +3554,11 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                 if (accepted)
                 {
                     activatesSession = true;
+                    var surfaceId = await PublishArenaSeatSurfaceAsync(node, options, seat!, now).ConfigureAwait(false);
                     navigation = new EveSurfaceNavigationTarget(
                         options.VerseId,
                         request.ProviderId,
-                        SurfaceForMode(AetheriaGameModes.Arena),
+                        surfaceId,
                         "interactive-world",
                         authorityRuntimeId: options.DaemonId);
                 }
@@ -3534,6 +3625,73 @@ static string SurfaceForMode(string mode) =>
     string.Equals(mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
         ? AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId
         : AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId;
+
+static AetheriaRuntimeArenaSeat? FindArenaSeat(
+    AetheriaStateNode node,
+    string sessionId,
+    string controllerRuntimeId)
+{
+    var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
+    if (session == null ||
+        !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) ||
+        !string.Equals(session.SessionId, sessionId, StringComparison.Ordinal))
+        return null;
+    var roster = node.Cache.Get<AetheriaRuntimeArenaRosterDocument>(
+        new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(sessionId)));
+    return roster?.Seats?.SingleOrDefault(seat => seat != null &&
+        seat.IsActiveFor(controllerRuntimeId, seat.ControlledEntityKey));
+}
+
+static async Task<string> PublishArenaSeatSurfaceAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    AetheriaRuntimeArenaSeat seat,
+    string updatedAtUtc)
+{
+    var session = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+        .ReadAsync().ConfigureAwait(false)
+        ?? throw new InvalidOperationException("Arena seat projection requires the active game session.");
+    var run = await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, session.RunRecordKey).ConfigureAwait(false)
+        ?? throw new InvalidOperationException("Arena seat projection requires the canonical run checkpoint.");
+    var latestFrame = await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(
+            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
+        .ReadAsync().ConfigureAwait(false);
+    var frame = FrameBelongsToSession(latestFrame, session)
+        ? latestFrame!
+        : AetheriaRuntimeDaemonFrameDocument.Create(
+            run,
+            options.DaemonId,
+            session.SessionId,
+            0,
+            0,
+            options.FixedDeltaSeconds,
+            renderSettings: options.RenderSettings);
+    frame.GameMode = session.Mode;
+    frame.RunRecordKey = session.RunRecordKey;
+    frame.PublishedAtUtc = updatedAtUtc ?? DateTimeOffset.UtcNow.ToString("O");
+    var health = await node.MutableDocument<AetheriaRuntimeDaemonHealthDocument>(AetheriaRuntimeVerseRecordKeys.DaemonHealth)
+        .ReadAsync().ConfigureAwait(false) ?? new AetheriaRuntimeDaemonHealthDocument();
+    var boundary = await node.MutableDocument<AetheriaRuntimeDaemonCommandBoundaryDocument>(AetheriaRuntimeVerseRecordKeys.DaemonCommandBoundary)
+        .ReadAsync().ConfigureAwait(false) ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId);
+    var surfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId);
+    var surface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
+        frame,
+        health,
+        boundary,
+        "",
+        node.RuntimeCatalog().Latest(),
+        seat.ControlledEntityKey,
+        surfaceId);
+    await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId))
+        .ReplaceAsync(surface).ConfigureAwait(false);
+    var roster = await node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
+            new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(session.SessionId)))
+        .ReadAsync().ConfigureAwait(false)
+        ?? throw new InvalidOperationException("Arena seat projection requires the daemon-owned roster.");
+    await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement)
+        .ReplaceAsync(BuildCoreProviderAdvertisement(options, frame.PublishedAtUtc, roster)).ConfigureAwait(false);
+    return surfaceId;
+}
 
 static string Payload(EveSurfaceCommandRequest request, string key) =>
     request.PayloadFields.TryGetValue(key, out var value)
@@ -5027,6 +5185,7 @@ internal sealed class AetheriaPlayableWorldDemandState
         (demand.RecordKeys.Any(key =>
              string.Equals(key, AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(), StringComparison.Ordinal) ||
              string.Equals(key, AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString(), StringComparison.Ordinal) ||
+             key.StartsWith("eve:surface:aetheria.arena.pilot.", StringComparison.Ordinal) ||
              string.Equals(key, AetheriaRuntimeVerseRecordKeys.DaemonGameReactiveSurface.ToString(), StringComparison.Ordinal) ||
              string.Equals(key, AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(), StringComparison.Ordinal)) ||
          demand.SchemaIds.Contains(AetheriaRuntimeDaemonSchemas.Frame, StringComparer.Ordinal) ||

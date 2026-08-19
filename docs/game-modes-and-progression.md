@@ -113,8 +113,12 @@ The authority policy differs without changing the document model:
   activation. One daemon-owned roster assigns exact actors and operation kinds
   to controller runtimes. Launch may fill the first seat once; Continue cannot
   rewrite it. Additional humans and headless AIs request the next open seat
-  through the same Hangar Eve command, without choosing their own actor. Those
-  operations remain proposals: the
+  through the same Hangar Eve command, without choosing their own actor. Each
+  active seat receives a daemon-authored Eve pilot surface whose player,
+  camera, and controllable entity are derived from that roster assignment.
+  At ingress the daemon derives the command actor again from the authenticated
+  runtime and current roster, so a stale/global surface or forged entity payload
+  cannot choose another seat. Those operations remain proposals: the
   daemon validates and simulates them, authors the committed fact, and records
   the proposing runtime separately. Controller identity is never rewritten as
   host identity, and no controller may author canonical facts directly.
@@ -357,8 +361,9 @@ Terminus proof profiles remain verification-only inputs.
 
 Arena still lacks its complete match/score document family and public
 observation/operation replay witness. Its minimal daemon session now preserves
-multiple controller seats and the operation/fact split, but does not yet prove
-a complete PvP or balance run through a real transport. Starbridge's
+  multiple controller seats, per-seat Eve pilot projections, roster-derived
+  command actors, and the operation/fact split in managed verification, but does
+  not yet prove a complete PvP or balance run through a real transport. Starbridge's
 minimal session bootstrap likewise does not by itself prove pilot-veto
 convergence.
 

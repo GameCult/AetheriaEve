@@ -34,6 +34,10 @@ namespace GameCult.Aetheria.State.Verse
         public static CultRecordKey StarbridgeSessionSummary { get; } = new("daemon:aetheria.starbridge.session.latest.v1");
         public static CultRecordKey StarbridgePlayerSeat(string seatId) => new(AetheriaRuntimeStarbridgePlayerSeatDocument.RecordKey(seatId));
         public static CultRecordKey DaemonGameSurface { get; } = new("eve:surface:aetheria.daemon.game");
+        public static string ArenaPilotSurfaceId(string controllerRuntimeId) =>
+            $"aetheria.arena.pilot.{StableToken(controllerRuntimeId)}";
+        public static CultRecordKey ArenaPilotSurface(string controllerRuntimeId) =>
+            new($"eve:surface:{ArenaPilotSurfaceId(controllerRuntimeId)}");
         public static CultRecordKey DaemonGameReactiveSurface { get; } = new("eve:surface:aetheria.daemon.game.reactive");
         public static CultRecordKey StarbridgeCommanderSurface { get; } = new("eve:surface:aetheria.starbridge.commander");
         public static CultRecordKey PilotInputCapability { get; } = new("eve:input:aetheria.pilot");

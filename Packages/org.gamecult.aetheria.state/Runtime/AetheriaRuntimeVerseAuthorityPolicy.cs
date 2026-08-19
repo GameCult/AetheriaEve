@@ -271,6 +271,45 @@ namespace GameCult.Aetheria.State.Verse
 
     public static class AetheriaRuntimeArenaOperationAdmission
     {
+        public static AetheriaRuntimeAuthorityDecision BindAuthenticatedSurfaceActor(
+            AetheriaRuntimeDaemonCommandDocument command,
+            string surfaceId,
+            string sessionId,
+            string runId,
+            AetheriaRuntimeArenaRosterDocument? roster,
+            string hostRuntimeId)
+        {
+            if (command == null)
+                return Denied("missing-command", "", "", "", "");
+
+            var proposerRuntimeId = string.IsNullOrWhiteSpace(command.AuthorRuntimeId)
+                ? command.ClientId ?? ""
+                : command.AuthorRuntimeId;
+            if (string.Equals(proposerRuntimeId, hostRuntimeId ?? "", StringComparison.Ordinal))
+                return Allowed(command.ActorEntityKey, AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, "arena.host-operation");
+            if (string.IsNullOrWhiteSpace(proposerRuntimeId))
+                return Denied("controller-identity-required", "", AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), "", "");
+            if (roster == null || !roster.IsActiveFor(sessionId ?? "", runId ?? ""))
+                return Denied("arena-roster-required", "", AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, "");
+
+            var seats = (roster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
+                .Where(candidate => candidate != null &&
+                    string.Equals(candidate.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
+                    string.Equals(candidate.ControllerRuntimeId, proposerRuntimeId, StringComparison.Ordinal))
+                .ToArray();
+            if (seats.Length != 1)
+                return Denied("arena-controller-seat-required", "", AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, "");
+
+            var seat = seats[0];
+            var expectedSurfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(proposerRuntimeId);
+            if (!string.Equals(surfaceId ?? "", expectedSurfaceId, StringComparison.Ordinal))
+                return Denied("arena-controller-surface-required", seat.ControlledEntityKey, AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, seat.SeatId);
+
+            command.SessionId = sessionId ?? "";
+            command.ActorEntityKey = seat.ControlledEntityKey;
+            return Allowed(command.ActorEntityKey, AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, seat.SeatId);
+        }
+
         public static AetheriaRuntimeAuthorityDecision Authorize(
             AetheriaRuntimeDaemonCommandDocument command,
             string gameMode,
