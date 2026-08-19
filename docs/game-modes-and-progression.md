@@ -147,7 +147,9 @@ The authority policy differs without changing the document model:
   its hot-body demand. Withdrawal or any exact consumer-set change also retires
   the mapped-body publisher before later publication can resume; regrant uses a
   fresh capability token and producer epoch, so an old mapped cursor can never
-  observe the successor generation. Dropping future updates alone is not
+  observe the successor generation. Frame commit is guarded by that exact
+  demand generation, so a frame prepared before withdrawal is discarded if
+  revocation linearizes first. Dropping future updates alone is not
   revocation. Seat publication takes the same resolved authority context as
   subscription admission; cached ingress roster state cannot keep an invalid
   match broadcasting. Arena realtime broadcast is disabled

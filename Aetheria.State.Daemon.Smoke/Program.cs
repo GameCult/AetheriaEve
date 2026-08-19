@@ -948,7 +948,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                realtimeDemand: true))
                     {
                         var seatPublication = seatPublisher.PublishAsync(seatHotFrame!, includeRealtimePayload: false)
-                            .GetAwaiter().GetResult();
+                            .GetAwaiter().GetResult() ?? throw new InvalidOperationException(
+                                "active Arena demand must publish its initial hot body");
                         initialSeatDescriptor = seatPublication.Body.Representations.Single();
                         Require(seatPublication.Body.BodyId == movedJoinedView.ObservationRefs.EntityBodyId &&
                                 seatPublication.View.Identities.Any(identity => identity.EntityId == joinedSeat.ControlledEntityId) &&
@@ -961,6 +962,12 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     Require(staleCursor.TryAcquireLatest(out var initialSeatRead),
                         "Arena capability smoke must acquire its initial mapped generation");
                     initialSeatRead.Dispose();
+                    using var preparedBeforeWithdrawal = seatPublisher.BuildCurrentZoneEntities(
+                        movedJoinedView.Frame,
+                        runtimeCatalog,
+                        realtimeDemand: true);
+                    Require(preparedBeforeWithdrawal != null,
+                        "active Arena demand must prepare a frame before withdrawal");
                     seatDemand.Observe(new CultNetDatabaseSubscriptionDemand(
                         "pilot-runtime",
                         "arena-capability-generation",
@@ -968,6 +975,12 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         [CultMeshBodyTransportKind.SharedMemory.ToString()],
                         sameMachine: true,
                         active: false));
+                    var revokedPublication = seatPublisher.PublishAsync(
+                            preparedBeforeWithdrawal!,
+                            includeRealtimePayload: false)
+                        .GetAwaiter().GetResult();
+                    Require(revokedPublication == null && !staleCursor.TryAcquireLatest(out _),
+                        "a frame prepared before Arena demand withdrawal must be discarded before capability commit");
                     Require(seatPublisher.BuildCurrentZoneEntities(
                             movedJoinedView.Frame,
                             runtimeCatalog,
@@ -987,7 +1000,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     var rotatedSeatPublication = seatPublisher.PublishAsync(
                             rotatedSeatHotFrame!,
                             includeRealtimePayload: false)
-                        .GetAwaiter().GetResult();
+                        .GetAwaiter().GetResult() ?? throw new InvalidOperationException(
+                            "regranted Arena demand must publish a rotated hot body");
                     var rotatedSeatDescriptor = rotatedSeatPublication.Body.Representations.Single();
                     Require(rotatedSeatDescriptor.ProducerEpoch > initialSeatDescriptor.ProducerEpoch &&
                             rotatedSeatDescriptor.CapabilityToken != initialSeatDescriptor.CapabilityToken &&

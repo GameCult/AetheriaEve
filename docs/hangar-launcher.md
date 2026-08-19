@@ -193,7 +193,10 @@ gameplay-state writer.
   next hot-body publication. The mapped-body publisher is retired before that
   reconciliation; any later regrant creates a fresh mapping capability and
   producer epoch. Retained cursors therefore remain frozen on the revoked
-  generation instead of becoming a side door into future frames. Seat
+  generation instead of becoming a side door into future frames. A prepared
+  frame may commit only while holding the demand tracker's exact generation;
+  withdrawal that wins first discards the frame without advancing the mapping.
+  Seat
   publication consumes this same resolved context rather than a separately
   cached roster. Arena does not
   use global realtime broadcast until that transport has per-peer identity.

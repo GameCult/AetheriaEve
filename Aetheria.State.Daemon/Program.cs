@@ -2381,6 +2381,8 @@ static async Task PublishHotEntityStateAsync(
     var publication = await publisher.PublishAsync(
         hotFrame,
         includeRealtimePayload: hasRealtimeConsumers).ConfigureAwait(false);
+    if (publication == null)
+        return;
     var layoutChanged = !state.Matches(publication.View);
     if (layoutChanged)
     {

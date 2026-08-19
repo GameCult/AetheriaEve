@@ -15,20 +15,23 @@ namespace GameCult.Aetheria.State.Verse
     {
         private CultMeshFrameBodyWriteLease? _write;
 
-        public AetheriaRuntimeDaemonSoaFrame(
+        internal AetheriaRuntimeDaemonSoaFrame(
             AetheriaRuntimeDaemonSoaViewDocument view,
             CultMeshFrameBodyWriteLease write,
-            int byteLength)
+            int byteLength,
+            long demandGeneration)
         {
             View = view ?? throw new ArgumentNullException(nameof(view));
             _write = write ?? throw new ArgumentNullException(nameof(write));
             ByteLength = byteLength;
+            DemandGeneration = demandGeneration;
         }
 
         public AetheriaRuntimeDaemonSoaViewDocument View { get; }
         public int ByteLength { get; }
+        public long DemandGeneration { get; }
 
-        public CultMeshBodyDescriptor Commit(DateTimeOffset nowUtc)
+        internal CultMeshBodyDescriptor Commit(DateTimeOffset nowUtc)
         {
             var write = _write ?? throw new ObjectDisposedException(nameof(AetheriaRuntimeDaemonSoaFrame));
             var descriptor = write.Commit(ByteLength, nowUtc);
@@ -318,7 +321,8 @@ namespace GameCult.Aetheria.State.Verse
                 return new AetheriaRuntimeDaemonSoaFrame(
                     view,
                     write,
-                    checked((int)layout.TotalByteLength));
+                    checked((int)layout.TotalByteLength),
+                    demand?.Generation ?? -1);
             }
             catch
             {
@@ -327,13 +331,27 @@ namespace GameCult.Aetheria.State.Verse
             }
         }
 
-        public Task<AetheriaRuntimeDaemonSoaPublication> PublishAsync(
+        public Task<AetheriaRuntimeDaemonSoaPublication?> PublishAsync(
             AetheriaRuntimeDaemonSoaFrame frame,
             bool includeRealtimePayload = false)
         {
             if (frame == null) throw new ArgumentNullException(nameof(frame));
             var now = DateTimeOffset.UtcNow;
-            var local = frame.Commit(now);
+            CultMeshBodyDescriptor? local = null;
+            if (_demand == null)
+            {
+                local = frame.Commit(now);
+            }
+            else if (!_demand.TryExecuteAtGeneration(
+                         _bodyId,
+                         frame.DemandGeneration,
+                         () => local = frame.Commit(now)))
+            {
+                frame.Dispose();
+                return Task.FromResult<AetheriaRuntimeDaemonSoaPublication?>(null);
+            }
+            if (local == null)
+                throw new InvalidOperationException("CultMesh body commit completed without producing a descriptor.");
             var generation = new CultMeshBodyGeneration
             {
                 BodyId = _bodyId,
@@ -369,7 +387,8 @@ namespace GameCult.Aetheria.State.Verse
             var realtimePayload = includeRealtimePayload
                 ? CopyRealtimePayload(local, now)
                 : ReadOnlyMemory<byte>.Empty;
-            return Task.FromResult(new AetheriaRuntimeDaemonSoaPublication(publication, view, realtimePayload));
+            return Task.FromResult<AetheriaRuntimeDaemonSoaPublication?>(
+                new AetheriaRuntimeDaemonSoaPublication(publication, view, realtimePayload));
         }
 
         private static ReadOnlyMemory<byte> CopyRealtimePayload(CultMeshBodyDescriptor descriptor, DateTimeOffset now)
