@@ -2810,6 +2810,10 @@ static async Task ForwardProgressionCommandAsync(
             request,
             route,
             cancellationToken).ConfigureAwait(false);
+        var clientReceipt = AetheriaProgressionVerseCoordinator.ReEnvelopeForLocalClient(
+            request,
+            remoteReceipt,
+            options.DaemonId);
 
         await using var mutation = await hangarProjection.EnterMutationAsync(cancellationToken).ConfigureAwait(false);
         await node.CommitAsync(async () =>
@@ -2831,7 +2835,7 @@ static async Task ForwardProgressionCommandAsync(
                 throw new InvalidOperationException("Progression forwarding route changed before receipt finality.");
             await node.Database.PutAsync(
                 AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId),
-                remoteReceipt).ConfigureAwait(false);
+                clientReceipt).ConfigureAwait(false);
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }

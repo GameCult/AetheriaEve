@@ -286,6 +286,8 @@ try
         var launchNavigation = launchReceipt.Navigation;
         Require(launchReceipt.State == "accepted" && launchNavigation?.VerseId == remoteVerse,
             $"Remote Terminus launch must return an accepted Eve navigation target for the selected Verse; state='{launchReceipt.State}', message='{launchReceipt.Message}', navigation='{launchNavigation?.VerseId ?? "<none>"}'.");
+        Require(launchReceipt.Authority == localTarget.AuthorityRuntimeId,
+            "The local progression router must own the client-facing receipt authority.");
         Require(launchNavigation!.SurfaceId == AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
             "Remote Terminus launch must navigate the generic client to the Pilot surface.");
         Require(launchNavigation.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
@@ -357,7 +359,8 @@ try
             new Dictionary<string, string>(resume.Props, StringComparer.Ordinal));
         Require(continueReceipt.State == "accepted" &&
                 continueReceipt.Navigation?.VerseId == remoteVerse &&
-                continueReceipt.Navigation.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
+                continueReceipt.Navigation.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId &&
+                continueReceipt.Authority == localTarget.AuthorityRuntimeId,
             "Remote Terminus continue must return the selected Verse Pilot navigation target.");
 
         var pinnedLaunchRoute = await client.ReadAsync<AetheriaProgressionCommandRouteDocument>(

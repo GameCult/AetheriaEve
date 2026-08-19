@@ -460,7 +460,18 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     "interactive-world",
                     authorityRuntimeId: authority));
 
-        AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(request, route, Receipt());
+        var remoteReceipt = Receipt();
+        AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(request, route, remoteReceipt);
+        var clientReceipt = AetheriaProgressionVerseCoordinator.ReEnvelopeForLocalClient(
+            request,
+            remoteReceipt,
+            "local-router");
+        Require(clientReceipt.Authority == "local-router" &&
+                clientReceipt.CommandId == request.CommandId &&
+                clientReceipt.ProviderId == request.ProviderId &&
+                clientReceipt.SurfaceId == request.SurfaceId &&
+                clientReceipt.Navigation?.AuthorityRuntimeId == route.AuthorityRuntimeId,
+            "verified remote finality must be re-enveloped by the local router while navigation preserves the remote run authority");
 
         static bool Rejects(Action action)
         {

@@ -381,6 +381,31 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         }
     }
 
+    internal static EveCommandReceiptDocument ReEnvelopeForLocalClient(
+        EveSurfaceCommandRequest request,
+        EveCommandReceiptDocument remoteReceipt,
+        string localAuthorityRuntimeId)
+    {
+        if (request == null) throw new ArgumentNullException(nameof(request));
+        if (remoteReceipt == null) throw new ArgumentNullException(nameof(remoteReceipt));
+        if (string.IsNullOrWhiteSpace(localAuthorityRuntimeId))
+            throw new ArgumentException("The local receipt authority is required.", nameof(localAuthorityRuntimeId));
+        var localAuthority = localAuthorityRuntimeId.Trim();
+        return new EveCommandReceiptDocument(
+            $"receipt:{request.CommandId}:{remoteReceipt.State}:via:{localAuthority}",
+            request.CommandId,
+            request.Command,
+            remoteReceipt.State,
+            "Aetheria Progression Router",
+            localAuthority,
+            request.ProviderId,
+            request.SurfaceId,
+            remoteReceipt.Message,
+            remoteReceipt.IssuedAtUtc,
+            remoteReceipt.SourceVersion,
+            remoteReceipt.Navigation);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

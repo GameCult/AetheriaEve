@@ -265,6 +265,11 @@ or denies the mutation.
 An Eve `pending` receipt is an observation, not finality. The client retains
 the immutable command, retries, and exact receipt lease until the provider
 publishes a matching terminal `accepted`, `denied`, or `reconciled` receipt.
+For a remote progression Verse, the local router first verifies that terminal
+receipt against the pinned remote authority, then publishes a client-facing
+receipt under its own local authority. The navigation target retains the remote
+authority that owns the launched run; Unity does not relax its trust boundary
+to accept cross-authority receipts on a local subscription.
 
 The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and
