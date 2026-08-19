@@ -3836,7 +3836,8 @@ static Task<bool> AcceptArenaLobbyInvocationAsync(
             throw new InvalidOperationException("The Arena lobby accepts only its advertised join operation.");
         var seat = await AetheriaDaemonHangarCoordinator.JoinArenaAsync(
             node,
-            options.SessionId,
+            Payload(request, AetheriaRuntimeArenaLobbyCommands.ExpectedSessionId),
+            Payload(request, AetheriaRuntimeArenaLobbyCommands.ExpectedRunId),
             request.ClientId,
             now).ConfigureAwait(false);
         var accepted = seat != null;
@@ -3947,6 +3948,7 @@ static async Task<string> PublishArenaSeatSurfaceAsync(
             new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(session.SessionId)))
         .ReadAsync().ConfigureAwait(false)
         ?? throw new InvalidOperationException("Arena seat projection requires the daemon-owned roster.");
+    await PublishArenaLobbySurfaceAsync(node, frame.PublishedAtUtc).ConfigureAwait(false);
     await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement)
         .ReplaceAsync(BuildCoreProviderAdvertisement(options, frame.PublishedAtUtc, roster, frame.Run)).ConfigureAwait(false);
     return surfaceId;
@@ -3958,6 +3960,29 @@ static string Payload(EveSurfaceCommandRequest request, string key) =>
         : request.PayloadFields.TryGetValue("payload." + key, out value)
             ? value ?? ""
             : "";
+
+static async Task<EveSurfaceDocument> PublishArenaLobbySurfaceAsync(
+    AetheriaStateNode node,
+    string updatedAtUtc)
+{
+    var document = node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.ArenaLobbySurface);
+    var current = await document.ReadAsync().ConfigureAwait(false);
+    var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
+    var roster = session == null
+        ? null
+        : node.Cache.Get<AetheriaRuntimeArenaRosterDocument>(
+            new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(session.SessionId)));
+    var active = session != null &&
+        string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) &&
+        roster?.IsActiveFor(session.SessionId, session.RunId) == true;
+    var surface = AetheriaRuntimeArenaLobbySurfaceBuilder.Build(
+        active ? session!.SessionId : "",
+        active ? session!.RunId : "",
+        updatedAtUtc,
+        Math.Max(1, (current?.Version ?? 0) + 1));
+    await document.ReplaceAsync(surface).ConfigureAwait(false);
+    return surface;
+}
 
 static long PayloadLong(EveSurfaceCommandRequest request, string key, long fallback) =>
     long.TryParse(Payload(request, key), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
@@ -4059,11 +4084,7 @@ static async Task PublishStateSurfacesCoreAsync(
     await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaStateNode.ProviderAdvertisementSurfaceKey)
         .ReplaceAsync(AetheriaEveSurfaceDocuments.BuildProviderAdvertisement(verseHost, node.StatePath, updatedAtUtc))
         .ConfigureAwait(false);
-    var arenaLobbyDocument = node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.ArenaLobbySurface);
-    var arenaLobby = await arenaLobbyDocument.ReadAsync().ConfigureAwait(false);
-    await arenaLobbyDocument.ReplaceAsync(AetheriaRuntimeArenaLobbySurfaceBuilder.Build(
-        updatedAtUtc,
-        Math.Max(1, (arenaLobby?.Version ?? 0) + 1))).ConfigureAwait(false);
+    await PublishArenaLobbySurfaceAsync(node, updatedAtUtc).ConfigureAwait(false);
     await PublishLocalHangarProjectionAsync(node, options, updatedAtUtc).ConfigureAwait(false);
     if (hangarView != null)
         await PublishHangarSurfaceAsync(node, updatedAtUtc, hangarView).ConfigureAwait(false);

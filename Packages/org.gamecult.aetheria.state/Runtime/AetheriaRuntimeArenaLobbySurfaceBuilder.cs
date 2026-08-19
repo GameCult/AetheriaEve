@@ -10,11 +10,17 @@ namespace GameCult.Aetheria.State.Verse
     {
         public const string SurfaceId = "aetheria.arena.lobby";
         public const string Join = "aetheria.arena.join";
+        public const string ExpectedSessionId = "expectedArenaSessionId";
+        public const string ExpectedRunId = "expectedArenaRunId";
     }
 
     public static class AetheriaRuntimeArenaLobbySurfaceBuilder
     {
-        public static EveSurfaceDocument Build(string updatedAtUtc, long version = 1)
+        public static EveSurfaceDocument Build(
+            string expectedSessionId,
+            string expectedRunId,
+            string updatedAtUtc,
+            long version = 1)
         {
             var join = new EveSurfaceComponent(
                 "aetheria.arena.lobby.join",
@@ -22,7 +28,9 @@ namespace GameCult.Aetheria.State.Verse
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["label"] = "JOIN ARENA",
-                    ["command"] = AetheriaRuntimeArenaLobbyCommands.Join
+                    ["command"] = AetheriaRuntimeArenaLobbyCommands.Join,
+                    ["payload." + AetheriaRuntimeArenaLobbyCommands.ExpectedSessionId] = expectedSessionId ?? "",
+                    ["payload." + AetheriaRuntimeArenaLobbyCommands.ExpectedRunId] = expectedRunId ?? ""
                 },
                 Array.Empty<EveSurfaceComponent>());
             var root = new EveSurfaceComponent(

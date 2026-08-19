@@ -154,7 +154,8 @@ gameplay-state writer.
   `--hangar-principal-runtime-id` (`aetheria-unity` in the Unity launchers).
   Arena controllers never inherit that progression capability: they discover a
   separate lobby surface exposing only `Join Arena`, then receive their scoped
-  seat surface;
+  seat surface. Each Join carries the exact Arena session and run that authored
+  it; ingress and the atomic roster mutation both reject an earlier match;
 - a routing daemon is accepted by a remote progression Verse only when that
   Verse explicitly configures it as an authenticated progression gateway (or
   later binds an account principal). Forwarding/delegation metadata preserves

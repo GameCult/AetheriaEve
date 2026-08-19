@@ -344,7 +344,8 @@ public static class AetheriaDaemonHangarCoordinator
 
     public static Task<AetheriaRuntimeArenaSeat?> JoinArenaAsync(
         AetheriaStateNode node,
-        string sessionId,
+        string expectedSessionId,
+        string expectedRunId,
         string controllerRuntimeId,
         string now)
     {
@@ -354,7 +355,8 @@ public static class AetheriaDaemonHangarCoordinator
                 .ReadAsync().ConfigureAwait(false);
             if (session == null ||
                 !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) ||
-                !string.Equals(session.SessionId, sessionId, StringComparison.Ordinal) ||
+                !string.Equals(session.SessionId, expectedSessionId, StringComparison.Ordinal) ||
+                !string.Equals(session.RunId, expectedRunId, StringComparison.Ordinal) ||
                 !string.Equals(session.ModePolicyId, AetheriaModePolicies.ArenaServerAuthoritative, StringComparison.Ordinal))
             {
                 return null;
@@ -362,12 +364,13 @@ public static class AetheriaDaemonHangarCoordinator
             if (string.IsNullOrWhiteSpace(controllerRuntimeId))
                 throw new InvalidOperationException("Arena join requires an authenticated controller runtime.");
             var rosterPointer = node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
-                new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(sessionId)));
+                new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(expectedSessionId)));
             var roster = await rosterPointer
-                .ReadAsync().ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Arena join requires the daemon-owned roster.");
+                .ReadAsync().ConfigureAwait(false);
+            if (roster == null)
+                return null;
             if (!roster.IsActiveFor(session.SessionId, session.RunId))
-                throw new InvalidOperationException("Arena roster does not belong to the active session.");
+                return null;
             var existing = (roster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
                 .SingleOrDefault(seat => string.Equals(
                     seat.ControllerRuntimeId, controllerRuntimeId, StringComparison.Ordinal) &&

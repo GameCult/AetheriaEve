@@ -1,5 +1,6 @@
 using Aetheria.State;
 using Aetheria.State.Documents;
+using GameCult.Caching;
 using GameCult.Aetheria.State.Verse;
 using GameCult.Eve.Surface;
 
@@ -37,7 +38,27 @@ internal static class AetheriaPublicEveCommandAdmission
             throw new InvalidOperationException("The Arena lobby accepts only its advertised join operation.");
 
         var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
-        if (session == null || !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+        if (session == null ||
+            !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) ||
+            !string.Equals(
+                Payload(request, AetheriaRuntimeArenaLobbyCommands.ExpectedSessionId),
+                session.SessionId,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                Payload(request, AetheriaRuntimeArenaLobbyCommands.ExpectedRunId),
+                session.RunId,
+                StringComparison.Ordinal))
             throw new InvalidOperationException("No active Arena session is accepting controllers.");
+        var roster = node.Cache.Get<AetheriaRuntimeArenaRosterDocument>(
+            new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(session.SessionId)));
+        if (roster?.IsActiveFor(session.SessionId, session.RunId) != true)
+            throw new InvalidOperationException("The active Arena has no matching controller roster.");
     }
+
+    private static string Payload(EveSurfaceCommandRequest request, string key) =>
+        request.PayloadFields.TryGetValue(key, out var value)
+            ? value ?? ""
+            : request.PayloadFields.TryGetValue("payload." + key, out value)
+                ? value ?? ""
+                : "";
 }

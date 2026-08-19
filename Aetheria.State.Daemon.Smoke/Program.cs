@@ -566,10 +566,23 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 var joinedSeat = AetheriaDaemonHangarCoordinator.JoinArenaAsync(
                         node,
                         arenaSession.SessionId,
+                        arenaSession.RunId,
                         "ai-build-b",
                         "2026-08-08T00:00:05Z")
                     .GetAwaiter().GetResult();
                 arenaRoster = node.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
+                var rosterBeforeStaleJoin = MessagePackSerializer.Serialize(arenaRoster);
+                var staleSeat = AetheriaDaemonHangarCoordinator.JoinArenaAsync(
+                        node,
+                        arenaSession.SessionId,
+                        "run:previous-arena",
+                        "stale-ai-build",
+                        "2026-08-08T00:00:05Z")
+                    .GetAwaiter().GetResult();
+                var rosterAfterStaleJoin = node.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
+                Require(staleSeat == null &&
+                        rosterBeforeStaleJoin.SequenceEqual(MessagePackSerializer.Serialize(rosterAfterStaleJoin)),
+                    "a Join bound to another Arena run must not mutate the active roster");
                 Require(!string.IsNullOrWhiteSpace(primaryArenaSeat.ControlledEntityId) &&
                         !string.IsNullOrWhiteSpace(joinedSeat!.ControlledEntityId) &&
                         !string.Equals(primaryArenaSeat.ControlledEntityId, joinedSeat.ControlledEntityId, StringComparison.Ordinal),
@@ -1070,7 +1083,9 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ReceiptSchema = EveCommandReceiptDocument.SchemaId,
                     Payload = new Dictionary<string, object?>
                     {
-                        ["mode"] = AetheriaGameModes.Terminus
+                        ["mode"] = AetheriaGameModes.Terminus,
+                        [AetheriaRuntimeArenaLobbyCommands.ExpectedSessionId] = "arena:operation-ingress",
+                        [AetheriaRuntimeArenaLobbyCommands.ExpectedRunId] = "run:operation-ingress"
                     },
                     IssuedAt = "2026-08-19T00:00:00Z",
                     ClientId = assertedRuntimeId
@@ -1133,6 +1148,23 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     RunId = "run:operation-ingress",
                     RunRecordKey = "global:aetheria.run:operation-ingress"
                 }).GetAwaiter().GetResult();
+            node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
+                    new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey("arena:operation-ingress")))
+                .ReplaceAsync(new AetheriaRuntimeArenaRosterDocument
+                {
+                    RosterId = "roster:operation-ingress",
+                    SessionId = "arena:operation-ingress",
+                    RunId = "run:operation-ingress",
+                    Revision = 1,
+                    Seats =
+                    [
+                        new AetheriaRuntimeArenaSeat
+                        {
+                            SeatId = "seat:open",
+                            Status = AetheriaRuntimeArenaSeatStatuses.Open
+                        }
+                    ]
+                }).GetAwaiter().GetResult();
             var controllerPeer = new OperationIngressTestPeer();
             server.DispatchAsync(new CultMeshSessionOpenMessage
             {
@@ -1176,9 +1208,15 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     join.ClientId == seatB,
                 "an authenticated Arena controller must retain the dedicated lobby join path");
 
-            var lobby = AetheriaRuntimeArenaLobbySurfaceBuilder.Build("2026-08-19T00:00:00Z");
+            var lobby = AetheriaRuntimeArenaLobbySurfaceBuilder.Build(
+                "arena:operation-ingress",
+                "run:operation-ingress",
+                "2026-08-19T00:00:00Z");
             Require(lobby.Commands.Count == 1 &&
                     lobby.Commands[0].Command == AetheriaRuntimeArenaLobbyCommands.Join &&
+                    lobby.Surface.Root.Children.Single(component =>
+                        component.Id == "aetheria.arena.lobby.join").Props[
+                        "payload." + AetheriaRuntimeArenaLobbyCommands.ExpectedRunId] == "run:operation-ingress" &&
                     !AetheriaRuntimeHangarSurfaceBuilder.Build(
                         new AetheriaHangarState(), "", AetheriaGameModes.Terminus, "2026-08-19T00:00:00Z")
                         .Commands.Any(template => template.Command == AetheriaRuntimeArenaLobbyCommands.Join),

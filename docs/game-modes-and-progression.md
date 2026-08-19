@@ -115,6 +115,8 @@ The authority policy differs without changing the document model:
   rewrite it. Additional humans and headless AIs request the next open seat
   through a dedicated Arena lobby Eve surface, without choosing their own actor.
   The lobby exposes only `Join Arena`; it is not a projection of progression.
+  Its Join payload is bound to the exact Arena session/run generation, so a
+  delayed command from one match cannot acquire a seat in its successor.
   The configured local Hangar principal remains the only runtime permitted to
   change mode, Verse, loadout, deployment, or continuation. Each
   active seat receives a daemon-authored Eve pilot surface whose player,

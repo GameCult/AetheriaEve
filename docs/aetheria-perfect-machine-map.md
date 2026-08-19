@@ -97,7 +97,8 @@ Date: 2026-06-13
 > Hangar capability to `aetheria-unity`; both public command ingresses reject a
 > different established runtime before creating a journal record. Arena
 > controllers discover a separate lobby surface whose only operation is Join,
-> while the Hangar disappears from their advertisement and read boundary.
+> bound to the exact Arena session/run at ingress and roster commit, while the
+> Hangar disappears from their advertisement and read boundary.
 > Arena deployment installs
 > `aetheria.mode.arena.server.v1` plus one daemon-owned session roster. Launch
 > assigns a seat once, Continue cannot reassign it, and the Arena lobby command
