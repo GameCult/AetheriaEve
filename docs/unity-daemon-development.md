@@ -58,6 +58,9 @@ daemon checkpoints the latest authoritative frame even while a playable
 subscription remains active. Ctrl+C, standard input, and the lifecycle pipe
 converge before that checkpoint; process killing is failure recovery, not the
 ordinary persistence mechanism.
+The released launcher builds the daemon explicitly, then starts
+`dotnet Aetheria.State.Daemon.dll` directly; it never owns a `dotnet run`
+wrapper whose child could survive termination.
 
 The editor connects through the daemon's `cultnet+tcp` control endpoint. The
 advertised session then selects the dedicated content and QUIC realtime planes;

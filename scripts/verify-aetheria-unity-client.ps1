@@ -202,6 +202,11 @@ foreach ($lifecycleBoundary in @('--lifecycle-pipe', 'NamedPipeClientStream', 'W
         throw "Released launcher is missing daemon lifecycle boundary '$lifecycleBoundary'."
     }
 }
+if ($launcherSource -match '"run"\s*,\s*"--project"' -or
+    $launcherSource -notmatch [regex]::Escape('Aetheria.State.Daemon.dll') -or
+    $launcherSource -notmatch [regex]::Escape('dotnet build $daemonProject')) {
+    throw "Released launcher must build explicitly and own the direct dotnet daemon process, not a dotnet-run wrapper."
+}
 $editorDaemonSource = Get-Content (Join-Path $ProjectPath "Assets/Editor/AetheriaDaemonDevelopmentWindow.cs") -Raw
 foreach ($lifecycleBoundary in @('--lifecycle-pipe', 'NamedPipeClientStream', 'RequestDaemonShutdown', 'MatchesProcessInstance', 'StartTime.ToUniversalTime().Ticks', 'WriteAllLines')) {
     if ($editorDaemonSource -notmatch [regex]::Escape($lifecycleBoundary)) {

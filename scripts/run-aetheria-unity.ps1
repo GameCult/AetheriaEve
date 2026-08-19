@@ -15,6 +15,7 @@ $assetBundleRoot = Join-Path $assetProject "Build\EveAssets"
 $artifacts = Join-Path $project "Build\Logs"
 $clientExe = Join-Path $project "Build\Windows\Aetheria.exe"
 $daemonProject = Join-Path $root "Aetheria.State.Daemon\Aetheria.State.Daemon.csproj"
+$daemonDll = Join-Path $root "Aetheria.State.Daemon\bin\Debug\net10.0\Aetheria.State.Daemon.dll"
 $importProject = Join-Path $root "Aetheria.State.Import\Aetheria.State.Import.csproj"
 $state = if ([string]::IsNullOrWhiteSpace($State)) {
   Join-Path $project "Build\aetheria-unity.cc"
@@ -61,6 +62,11 @@ if (-not $SkipBuild) {
 
 if (-not (Test-Path $clientExe)) { throw "Client executable not found. Run without -SkipBuild first." }
 
+dotnet build $daemonProject
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $daemonDll)) {
+  throw "Aetheria daemon build failed with exit code $LASTEXITCODE."
+}
+
 function Stop-AetheriaDaemon([System.Diagnostics.Process] $Daemon, [string] $PipeName) {
   if ($null -eq $Daemon -or $Daemon.HasExited) { return }
 
@@ -100,7 +106,7 @@ function Stop-AetheriaDaemon([System.Diagnostics.Process] $Daemon, [string] $Pip
 $daemonLog = Join-Path $artifacts "daemon.log"
 $lifecyclePipe = "aetheria-unity-daemon-$([guid]::NewGuid().ToString('N'))"
 $daemonArguments = @(
-  "run", "--project", $daemonProject, "--",
+  $daemonDll,
   "--root", $root,
   "--state", $state,
   "--client-cultmesh-host", "127.0.0.1",
