@@ -7,6 +7,7 @@ using GameCult.Networking;
 using GameCult.Networking.WebSockets;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -357,6 +358,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                     receiptKey,
                     TimeSpan.FromMilliseconds(500),
                     cancellationToken).ConfigureAwait(false);
+                ValidateRemoteReceipt(request, route, receipt);
                 return AddNavigationRoute(receipt, route.OdinDiscoveryEndpoints);
             }
             catch (Exception error) when (IsRemoteAvailabilityFailure(error))
@@ -365,6 +367,37 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             }
         }
         throw new TimeoutException($"Verse '{route.VerseId}' did not publish a Hangar receipt for '{request.CommandId}'.");
+    }
+
+    internal static void ValidateRemoteReceipt(
+        EveSurfaceCommandRequest request,
+        AetheriaProgressionCommandRouteDocument route,
+        EveCommandReceiptDocument receipt)
+    {
+        if (receipt == null)
+            throw new InvalidDataException("The progression authority returned an empty Hangar receipt.");
+        if (!string.Equals(receipt.Schema, EveCommandReceiptDocument.SchemaId, StringComparison.Ordinal) ||
+            !string.Equals(receipt.CommandId, request.CommandId, StringComparison.Ordinal) ||
+            !string.Equals(receipt.Command, request.Command, StringComparison.Ordinal) ||
+            !string.Equals(receipt.ProviderId, request.ProviderId, StringComparison.Ordinal) ||
+            !string.Equals(receipt.SurfaceId, request.SurfaceId, StringComparison.Ordinal) ||
+            !string.Equals(receipt.Authority, route.AuthorityRuntimeId, StringComparison.Ordinal) ||
+            !(string.Equals(receipt.State, "accepted", StringComparison.Ordinal) ||
+              string.Equals(receipt.State, "denied", StringComparison.Ordinal)))
+        {
+            throw new InvalidDataException(
+                $"Verse '{route.VerseId}' returned a receipt that does not finalize the pinned Hangar command envelope.");
+        }
+        if (receipt.Navigation != null)
+        {
+            if (!string.Equals(receipt.Navigation.VerseId, route.VerseId, StringComparison.Ordinal) ||
+                !string.Equals(receipt.Navigation.ProviderId, receipt.ProviderId, StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(receipt.Navigation.SurfaceId))
+            {
+                throw new InvalidDataException(
+                    $"Verse '{route.VerseId}' returned a Hangar navigation target owned by another Verse or provider.");
+            }
+        }
     }
 
     public void Dispose()

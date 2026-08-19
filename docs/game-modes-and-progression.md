@@ -242,6 +242,14 @@ simulation tick. The first attempt commits only the immutable route pin. A
 remote receipt later enters one short finality transaction with the local
 receipt and inbox deletion. Timeout leaves that request pending without
 blocking local commands, ticks, or other state writers.
+The receipt must match the immutable request and pinned Verse/authority route;
+a typed document under the expected key with another command, provider,
+surface, authority, or navigation Verse is rejected and leaves the request
+retryable. Hangar surface publication has one coalescing daemon owner. It reads
+the selected progression source outside the mutation transaction, then commits
+only if no newer Hangar mutation overtook that candidate. Commands mark the
+projection dirty and never launch their own surface publisher, so a delayed
+remote read cannot overwrite a newer selection.
 
 The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and

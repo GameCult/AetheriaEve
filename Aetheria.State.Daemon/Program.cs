@@ -137,6 +137,23 @@ using var soaPublisher = new AetheriaRuntimeDaemonSoaFramePublisher(
 var stopped = new TaskCompletionSource<object?>();
 var progressionForwardingTasks = new ConcurrentDictionary<string, Task>();
 using var progressionForwardingShutdown = new CancellationTokenSource();
+await using var hangarProjection = new AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection>(
+    async cancellationToken =>
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var updatedAtUtc = DateTimeOffset.UtcNow.ToString("O");
+        using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
+        var view = await progressionVerses.ReadViewAsync(updatedAtUtc).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new AetheriaPreparedHangarProjection(updatedAtUtc, view);
+    },
+    async (prepared, cancellationToken) =>
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await node.CommitAsync(
+            () => PublishStateSurfacesCoreAsync(node, options, prepared.UpdatedAtUtc, prepared.View)).ConfigureAwait(false);
+    },
+    error => Console.Error.WriteLine($"Aetheria Hangar projection refresh failed: {error}"));
 var hangarActivationRequested = false;
 Console.CancelKeyPress += (_, eventArgs) =>
 {
@@ -160,11 +177,12 @@ while (!stopped.Task.IsCompleted)
                 options,
                 latestFrame,
                 progressionForwardingTasks,
+                hangarProjection,
                 progressionForwardingShutdown.Token).ConfigureAwait(false);
             await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
             if (options.OdinDiscoveryEndpoints.Count > 0 && DateTimeOffset.UtcNow >= nextProgressionRefreshUtc)
             {
-                await PublishStateSurfacesAsync(node, options, DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
+                hangarProjection.RequestRefresh();
                 nextProgressionRefreshUtc = DateTimeOffset.UtcNow.AddSeconds(5);
             }
             if (hangarActivationRequested && playableWorldDemand.IsActive &&
@@ -219,7 +237,7 @@ while (!stopped.Task.IsCompleted)
     {
         var firstTick = await TickAsync(
             node, options, unityBundles, worldPhysics, latestFrame, ingressState,
-            progressionForwardingTasks, progressionForwardingShutdown.Token,
+            progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token,
             refreshControlPlane: false).ConfigureAwait(false);
         TraceStartup("first-tick");
         latestFrame = firstTick.Frame;
@@ -289,7 +307,7 @@ while (!stopped.Task.IsCompleted)
         var buildPublications = DateTimeOffset.UtcNow >= nextApiPublicationUtc;
         var tick = await TickAsync(
             node, options, unityBundles, worldPhysics, latestFrame, ingressState,
-            progressionForwardingTasks, progressionForwardingShutdown.Token,
+            progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token,
             refreshControlPlane: buildPublications).ConfigureAwait(false);
         ThrowIfClientHostFaulted(cultMeshClientHost);
         latestFrame = tick.Frame;
@@ -363,6 +381,7 @@ try
 catch (OperationCanceledException)
 {
 }
+await hangarProjection.DrainAsync().ConfigureAwait(false);
 await PublishRuntimeSessionAsync(node, options, startedAtUtc, "stopped").ConfigureAwait(false);
 Console.WriteLine("Aetheria Verse daemon stopping.");
 
@@ -386,6 +405,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     AetheriaRuntimeDaemonFrameDocument? currentFrame,
     AetheriaDaemonIngressState ingressState,
     ConcurrentDictionary<string, Task> progressionForwardingTasks,
+    AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection> hangarProjection,
     CancellationToken progressionForwardingCancellation,
     bool refreshControlPlane)
 {
@@ -406,6 +426,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
         options,
         currentFrame,
         progressionForwardingTasks,
+        hangarProjection,
         progressionForwardingCancellation).ConfigureAwait(false);
     TracePhase("core-ingress");
     await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
@@ -2646,6 +2667,7 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
     AetheriaDaemonHostOptions options,
     AetheriaRuntimeDaemonFrameDocument? currentFrame,
     ConcurrentDictionary<string, Task> progressionForwardingTasks,
+    AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection> hangarProjection,
     CancellationToken progressionForwardingCancellation)
 {
     var activatedSession = false;
@@ -2664,27 +2686,41 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
                 storedRequest.Key,
                 storedRequest.Request,
                 progressionForwardingTasks,
+                hangarProjection,
                 progressionForwardingCancellation);
             continue;
         }
 
         try
         {
-            var requestActivatedSession = await node.CommitAsync(
-                () => AcceptCoreEveInvocationAsync(
-                    node,
-                    options,
-                    currentFrame,
-                    storedRequest.Key,
-                    storedRequest.Request)).ConfigureAwait(false);
+            var isHangarRequest = string.Equals(
+                storedRequest.Request.SurfaceId,
+                AetheriaRuntimeHangarCommands.SurfaceId,
+                StringComparison.Ordinal);
+            var requestActivatedSession = false;
+            if (isHangarRequest)
+            {
+                await using var mutation = await hangarProjection.EnterMutationAsync(
+                    progressionForwardingCancellation).ConfigureAwait(false);
+                requestActivatedSession = await node.CommitAsync(
+                    () => AcceptCoreEveInvocationAsync(
+                        node,
+                        options,
+                        currentFrame,
+                        storedRequest.Key,
+                        storedRequest.Request)).ConfigureAwait(false);
+            }
+            else
+            {
+                requestActivatedSession = await node.CommitAsync(
+                    () => AcceptCoreEveInvocationAsync(
+                        node,
+                        options,
+                        currentFrame,
+                        storedRequest.Key,
+                        storedRequest.Request)).ConfigureAwait(false);
+            }
             activatedSession |= requestActivatedSession;
-            if (string.Equals(storedRequest.Request.SurfaceId, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal))
-                StartHangarProjectionRefresh(
-                    node,
-                    options,
-                    storedRequest.Request.CommandId,
-                    progressionForwardingTasks,
-                    progressionForwardingCancellation);
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -2717,6 +2753,7 @@ static void StartProgressionForwarding(
     CultRecordKey requestRecordKey,
     EveSurfaceCommandRequest request,
     ConcurrentDictionary<string, Task> tasks,
+    AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection> hangarProjection,
     CancellationToken cancellationToken)
 {
     var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -2733,6 +2770,7 @@ static void StartProgressionForwarding(
                 options,
                 requestRecordKey,
                 request,
+                hangarProjection,
                 cancellationToken).ConfigureAwait(false);
             completion.TrySetResult(null);
         }
@@ -2748,53 +2786,12 @@ static void StartProgressionForwarding(
     }
 }
 
-static void StartHangarProjectionRefresh(
-    AetheriaStateNode node,
-    AetheriaDaemonHostOptions options,
-    string commandId,
-    ConcurrentDictionary<string, Task> tasks,
-    CancellationToken cancellationToken)
-{
-    var taskKey = "hangar-projection:" + commandId;
-    var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-    if (!tasks.TryAdd(taskKey, completion.Task))
-        return;
-    _ = RunAsync();
-
-    async Task RunAsync()
-    {
-        try
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await PublishStateSurfacesAsync(
-                node,
-                options,
-                DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
-            completion.TrySetResult(null);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            completion.TrySetCanceled(cancellationToken);
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine(
-                $"Aetheria Hangar projection refresh failed after command '{commandId}' committed: {error}");
-            completion.TrySetResult(null);
-        }
-        finally
-        {
-            ((ICollection<KeyValuePair<string, Task>>)tasks).Remove(
-                new KeyValuePair<string, Task>(taskKey, completion.Task));
-        }
-    }
-}
-
 static async Task ForwardProgressionCommandAsync(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
     CultRecordKey requestRecordKey,
     EveSurfaceCommandRequest request,
+    AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection> hangarProjection,
     CancellationToken cancellationToken)
 {
     try
@@ -2814,6 +2811,7 @@ static async Task ForwardProgressionCommandAsync(
             route,
             cancellationToken).ConfigureAwait(false);
 
+        await using var mutation = await hangarProjection.EnterMutationAsync(cancellationToken).ConfigureAwait(false);
         await node.CommitAsync(async () =>
         {
             var pending = await node.MutableDocument<EveSurfaceCommandRequest>(requestRecordKey)
@@ -2836,19 +2834,6 @@ static async Task ForwardProgressionCommandAsync(
                 remoteReceipt).ConfigureAwait(false);
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
         }).ConfigureAwait(false);
-
-        try
-        {
-            await PublishStateSurfacesAsync(
-                node,
-                options,
-                DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
-        }
-        catch (Exception error) when (error is not OperationCanceledException)
-        {
-            Console.Error.WriteLine(
-                $"Aetheria Hangar projection refresh failed after forwarded command '{request.CommandId}' committed: {error}");
-        }
     }
     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
     {
@@ -3747,8 +3732,7 @@ static async Task PublishRuntimeSessionAsync(
         node,
         options,
         now,
-        publishHangar: !string.Equals(status, "running", StringComparison.Ordinal) &&
-            !string.Equals(status, "completed", StringComparison.Ordinal)).ConfigureAwait(false);
+        publishHangar: false).ConfigureAwait(false);
 }
 
 static async Task EnsureWorldDocumentAsync(AetheriaStateNode node)

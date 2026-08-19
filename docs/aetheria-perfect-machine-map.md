@@ -37,6 +37,14 @@ Date: 2026-06-13
 > Remote discovery, submission, and receipt waiting run in a bounded
 > per-command worker outside both the mutation gate and simulation tick; only
 > route pinning and final receipt/inbox deletion use short state transactions.
+> A remote typed receipt is not final merely because it occupies the expected
+> record key: its command, provider, surface, authority runtime, terminal state,
+> and navigation Verse must match the immutable request and pinned route before
+> the local inbox can be deleted. One daemon-owned, coalescing Hangar projection
+> worker prepares slow local or remote reads, discards any candidate overtaken
+> by a newer Hangar mutation, and alone commits the derived Eve surface. Command
+> handlers only mark that projection dirty; they do not publish competing
+> surfaces.
 > CultCache v4 writes content-addressed record pages,
 > exposes the batch through one atomic manifest generation swap, and leases the
 > selected manifest generation until a reader has hydrated every referenced

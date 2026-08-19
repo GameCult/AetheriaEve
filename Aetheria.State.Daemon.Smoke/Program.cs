@@ -119,6 +119,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         RunCheck(ConcurrentHangarCommandIdsAdmitOneImmutablePayload);
         RunCheck(StateNodeCommitScopeCannotBeFlushedHalfwayByCommandIngress);
         RunCheck(FailedPostGenerationStepRollsBackTheWholeDeployment);
+        RunCheck(RemoteHangarReceiptMustFinalizeThePinnedEnvelope);
+        RunCheck(NewerHangarMutationDiscardsPreparedOlderProjection);
     }
 
     public void RunCommandScale() => RunCheck(FrameSizeDoesNotGrowWithCommandChronology);
@@ -412,6 +414,119 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
+    }
+
+    private static void RemoteHangarReceiptMustFinalizeThePinnedEnvelope()
+    {
+        const string commandId = "remote-receipt-validation";
+        var request = new EveSurfaceCommandRequest(
+            AetheriaRuntimeProviderIdentity.ProviderId,
+            AetheriaRuntimeHangarCommands.SurfaceId,
+            new CultMeshOperationInvocationDescriptor(
+                AetheriaRuntimeHangarCommands.SelectShip,
+                idempotencyKey: commandId),
+            CultMesh.OperationPayload(("shipId", "ship:one")),
+            DateTimeOffset.Parse("2026-08-19T00:00:00Z", CultureInfo.InvariantCulture),
+            "pilot:receipt-smoke");
+        var route = new AetheriaProgressionCommandRouteDocument
+        {
+            CommandId = commandId,
+            PayloadHash = AetheriaHangarCommandJournal.PayloadHash(request),
+            VerseId = "gamecult.aetheria",
+            AuthorityRuntimeId = "aetheria-authority"
+        };
+
+        EveCommandReceiptDocument Receipt(
+            string receiptCommandId = commandId,
+            string providerId = AetheriaRuntimeProviderIdentity.ProviderId,
+            string surfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
+            string authority = "aetheria-authority",
+            string navigationVerse = "gamecult.aetheria") => new(
+                "receipt:" + receiptCommandId,
+                receiptCommandId,
+                AetheriaRuntimeHangarCommands.SelectShip,
+                "accepted",
+                "Aetheria Hangar",
+                authority,
+                providerId,
+                surfaceId,
+                "",
+                "2026-08-19T00:00:01Z",
+                1,
+                new EveSurfaceNavigationTarget(
+                    navigationVerse,
+                    providerId,
+                    AetheriaRuntimeHangarCommands.SurfaceId,
+                    "interactive-world"));
+
+        AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(request, route, Receipt());
+
+        static bool Rejects(Action action)
+        {
+            try
+            {
+                action();
+                return false;
+            }
+            catch (InvalidDataException)
+            {
+                return true;
+            }
+        }
+
+        Require(Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
+                    request, route, Receipt(receiptCommandId: "another-command"))) &&
+                Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
+                    request, route, Receipt(providerId: "another-provider"))) &&
+                Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
+                    request, route, Receipt(surfaceId: "another-surface"))) &&
+                Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
+                    request, route, Receipt(authority: "another-authority"))) &&
+                Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
+                    request, route, Receipt(navigationVerse: "another-verse"))),
+            "a remote typed document under the expected key must not finalize a different command, provider, surface, authority, or Verse");
+    }
+
+    private static void NewerHangarMutationDiscardsPreparedOlderProjection()
+    {
+        var firstPrepared = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var committed = new List<string>();
+        var prepareCount = 0;
+
+        async Task RunAsync()
+        {
+            await using var owner = new AetheriaHangarProjectionOwner<string>(
+                async cancellationToken =>
+                {
+                    var current = Interlocked.Increment(ref prepareCount);
+                    if (current == 1)
+                    {
+                        firstPrepared.TrySetResult(null);
+                        await releaseFirst.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                        return "old";
+                    }
+                    return "new";
+                },
+                (candidate, _) =>
+                {
+                    committed.Add(candidate);
+                    return Task.CompletedTask;
+                });
+
+            owner.RequestRefresh();
+            await firstPrepared.Task.ConfigureAwait(false);
+            await using (await owner.EnterMutationAsync().ConfigureAwait(false))
+            {
+                // The command's canonical mutation would commit while this lease is held.
+            }
+            releaseFirst.TrySetResult(null);
+            await owner.DrainAsync().ConfigureAwait(false);
+        }
+
+        RunAsync().GetAwaiter().GetResult();
+        Require(committed.SequenceEqual(new[] { "new" }, StringComparer.Ordinal),
+            "a Hangar projection prepared before a newer mutation must be discarded rather than overwrite the newer projection");
     }
 
     private static void StateNodeCommitScopeCannotBeFlushedHalfwayByCommandIngress()
