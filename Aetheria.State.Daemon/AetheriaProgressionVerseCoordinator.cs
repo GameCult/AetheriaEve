@@ -27,6 +27,12 @@ internal sealed class AetheriaProgressionVerseView
     public AetheriaRuntimeCatalogSnapshot? Catalog { get; init; }
 }
 
+internal sealed record AetheriaPreparedProgressionSelection(
+    string VerseId,
+    string AuthorityRuntimeId,
+    bool UsesLocalProgression,
+    AetheriaHangarProjectionDocument Projection);
+
 internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
 {
     private readonly AetheriaStateNode _node;
@@ -167,33 +173,111 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         }).ConfigureAwait(false);
     }
 
-    public async Task<AetheriaProgressionSourceDocument> SelectAsync(string verseId, string now)
+    public async Task<AetheriaPreparedProgressionSelection> PrepareSelectionAsync(
+        string verseId,
+        string now,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(verseId))
             throw new ArgumentException("A Verse selection is required.", nameof(verseId));
-        var pointer = _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey);
-        var current = await pointer.ReadAsync().ConfigureAwait(false)
+        var current = await _node.MutableDocument<AetheriaProgressionSourceDocument>(
+                AetheriaStateNode.ProgressionSourceKey)
+            .ReadAsync().ConfigureAwait(false)
             ?? await EnsureAndRefreshAsync(now).ConfigureAwait(false);
         var selected = verseId.Trim();
-        if (!(current.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
-            .Any(option => string.Equals(option.VerseId, selected, StringComparison.Ordinal)))
+        var option = (current.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
+            .FirstOrDefault(candidate => string.Equals(candidate.VerseId, selected, StringComparison.Ordinal));
+        if (option == null)
         {
             throw new InvalidOperationException($"Verse '{selected}' is not advertised by the configured Odin.");
         }
-        if (string.Equals(current.SelectedVerseId, selected, StringComparison.Ordinal))
-            return current;
+
+        if (string.Equals(selected, AetheriaProgressionSources.Local, StringComparison.Ordinal))
+        {
+            var projection = await _node.MutableDocument<AetheriaHangarProjectionDocument>(
+                    AetheriaRuntimeVerseRecordKeys.HangarProjection)
+                .ReadAsync().ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Local progression has no published Hangar projection.");
+            if (projection.Generation <= 0 ||
+                !string.Equals(projection.AuthorityRuntimeId, _runtimeId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Local progression published an invalid Hangar projection.");
+            return new AetheriaPreparedProgressionSelection(
+                selected,
+                _runtimeId,
+                true,
+                projection);
+        }
+
+        if (_remote == null)
+            throw new InvalidOperationException("No Odin discovery endpoint is configured for the selected Verse.");
+        var proposed = Clone(current);
+        proposed.SelectedVerseId = selected;
+        proposed.Status = AetheriaProgressionSourceStatuses.Ready;
+        proposed.Diagnostic = "";
+        var remote = await ResolveRemoteProgressionAsync(proposed, cancellationToken).ConfigureAwait(false);
+        if (!(option.AuthorityRuntimeIds ?? Array.Empty<string>()).Contains(
+                remote.Target.AuthorityRuntimeId,
+                StringComparer.Ordinal))
+            throw new InvalidOperationException("The prepared Hangar authority is no longer advertised for the selected Verse.");
+        return new AetheriaPreparedProgressionSelection(
+            selected,
+            remote.Target.AuthorityRuntimeId,
+            false,
+            remote.Projection);
+    }
+
+    public async Task<AetheriaProgressionSourceDocument> CommitPreparedSelectionAsync(
+        AetheriaPreparedProgressionSelection prepared,
+        string now)
+    {
+        ThrowIfDisposed();
+        if (prepared == null) throw new ArgumentNullException(nameof(prepared));
+        var pointer = _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey);
+        var current = await pointer.ReadAsync().ConfigureAwait(false) ?? new AetheriaProgressionSourceDocument();
+        var option = (current.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.VerseId, prepared.VerseId, StringComparison.Ordinal) &&
+                (candidate.AuthorityRuntimeIds ?? Array.Empty<string>()).Contains(
+                    prepared.AuthorityRuntimeId,
+                    StringComparer.Ordinal));
+        if (option == null)
+            throw new InvalidOperationException("The prepared progression Verse authority is no longer advertised.");
 
         var next = Clone(current);
-        next.SelectedVerseId = selected;
-        next.Status = string.Equals(selected, AetheriaProgressionSources.Local, StringComparison.Ordinal)
+        next.SelectedVerseId = prepared.VerseId;
+        next.Status = prepared.UsesLocalProgression
             ? AetheriaProgressionSourceStatuses.Local
             : AetheriaProgressionSourceStatuses.Ready;
         next.Diagnostic = "";
         next.Revision = Math.Max(0, current.Revision) + 1;
         next.UpdatedAtUtc = now ?? "";
-        await _node.CommitAsync(() => pointer.ReplaceAsync(next)).ConfigureAwait(false);
+        await pointer.ReplaceAsync(next).ConfigureAwait(false);
         return next;
+    }
+
+    internal AetheriaProgressionVerseView CreateSelectionView(
+        AetheriaProgressionSourceDocument committedSource,
+        AetheriaPreparedProgressionSelection prepared)
+    {
+        if (committedSource == null) throw new ArgumentNullException(nameof(committedSource));
+        if (prepared == null) throw new ArgumentNullException(nameof(prepared));
+        return new AetheriaProgressionVerseView
+        {
+            ProjectionGeneration = prepared.Projection.Generation,
+            Source = committedSource,
+            AuthorityRuntimeId = prepared.AuthorityRuntimeId,
+            AssetVerseId = prepared.Projection.AssetVerseId,
+            AssetProviderId = prepared.Projection.AssetProviderId,
+            AssetManifestRecordRef = prepared.Projection.AssetManifestRecordRef,
+            AssetRendezvousEndpoints = prepared.UsesLocalProgression
+                ? Array.Empty<string>()
+                : committedSource.OdinDiscoveryEndpoints?.ToArray() ?? _odinEndpoints,
+            Hangar = prepared.Projection.Hangar,
+            Draft = prepared.Projection.Draft,
+            Loadout = prepared.Projection.Loadout,
+            Catalog = prepared.Projection.Catalog
+        };
     }
 
     public async Task<AetheriaProgressionVerseView> ReadViewAsync(string now)

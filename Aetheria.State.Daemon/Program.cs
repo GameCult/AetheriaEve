@@ -2743,6 +2743,18 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
         .ToArray();
     foreach (var storedRequest in pendingRequests)
     {
+        if (IsVerseSelectionRequest(storedRequest.Request))
+        {
+            StartVerseSelection(
+                node,
+                options,
+                storedRequest.Key,
+                storedRequest.Request,
+                progressionForwardingTasks,
+                hangarProjection,
+                progressionForwardingCancellation);
+            continue;
+        }
         if (ShouldForwardHangarRequest(node, options, storedRequest.Request))
         {
             StartProgressionForwarding(
@@ -2798,6 +2810,184 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
         }
     }
     return activatedSession;
+}
+
+static bool IsVerseSelectionRequest(EveSurfaceCommandRequest request) =>
+    string.Equals(request.SurfaceId, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal) &&
+    string.Equals(request.Command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal);
+
+static void StartVerseSelection(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    CultRecordKey requestRecordKey,
+    EveSurfaceCommandRequest request,
+    ConcurrentDictionary<string, Task> tasks,
+    AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection> hangarProjection,
+    CancellationToken cancellationToken)
+{
+    var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+    if (!tasks.TryAdd(request.CommandId, completion.Task))
+        return;
+    _ = RunAsync();
+
+    async Task RunAsync()
+    {
+        try
+        {
+            await FinalizeVerseSelectionAsync(
+                node,
+                options,
+                requestRecordKey,
+                request,
+                hangarProjection,
+                cancellationToken).ConfigureAwait(false);
+            completion.TrySetResult(null);
+        }
+        catch (Exception error)
+        {
+            completion.TrySetException(error);
+        }
+        finally
+        {
+            ((ICollection<KeyValuePair<string, Task>>)tasks).Remove(
+                new KeyValuePair<string, Task>(request.CommandId, completion.Task));
+        }
+    }
+}
+
+static async Task FinalizeVerseSelectionAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    CultRecordKey requestRecordKey,
+    EveSurfaceCommandRequest request,
+    AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection> hangarProjection,
+    CancellationToken cancellationToken)
+{
+    try
+    {
+        var payloadHash = await node.CommitAsync(() => AetheriaHangarCommandJournal.ValidateAsync(
+            node,
+            request,
+            DateTimeOffset.UtcNow.ToString("O"),
+            options.VerseId,
+            options.DaemonId)).ConfigureAwait(false);
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_VERSE_SELECTION_COMMAND_ID"),
+                request.CommandId,
+                StringComparison.Ordinal) &&
+            int.TryParse(
+                Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_VERSE_SELECTION_MS"),
+                out var selectionDelayMs) &&
+            selectionDelayMs > 0)
+        {
+            await Task.Delay(selectionDelayMs, cancellationToken).ConfigureAwait(false);
+        }
+
+        using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
+        var prepared = await progressionVerses.PrepareSelectionAsync(
+            Payload(request, "value"),
+            DateTimeOffset.UtcNow.ToString("O"),
+            cancellationToken).ConfigureAwait(false);
+
+        await using var mutation = await hangarProjection.EnterMutationAsync(cancellationToken).ConfigureAwait(false);
+        await node.CommitAsync(async () =>
+        {
+            var pending = await node.MutableDocument<EveSurfaceCommandRequest>(requestRecordKey)
+                .ReadAsync().ConfigureAwait(false);
+            if (pending == null)
+                return;
+            if (!string.Equals(AetheriaHangarCommandJournal.PayloadHash(pending), payloadHash, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Hangar command id '{request.CommandId}' changed while its Verse selection was prepared.");
+
+            var currentSurface = await node.MutableDocument<EveSurfaceDocument>(
+                    AetheriaRuntimeVerseRecordKeys.HangarSurface)
+                .ReadAsync().ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Verse selection lost the canonical Hangar surface.");
+            var root = currentSurface.Surface.Root;
+            var expectedSurfaceVersion = PayloadLong(
+                request,
+                AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion,
+                -1);
+            var expectedSourceRevision = PayloadLong(
+                request,
+                AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision,
+                -1);
+            var stale = currentSurface.Version != expectedSurfaceVersion ||
+                !root.Props.TryGetValue("progressionVerseId", out var currentVerseId) ||
+                !string.Equals(
+                    currentVerseId,
+                    Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId),
+                    StringComparison.Ordinal) ||
+                !root.Props.TryGetValue("progressionAuthorityRuntimeId", out var currentAuthority) ||
+                !string.Equals(
+                    currentAuthority,
+                    Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId),
+                    StringComparison.Ordinal) ||
+                !root.Props.TryGetValue("progressionSourceRevision", out var sourceRevisionText) ||
+                !long.TryParse(sourceRevisionText, out var currentSourceRevision) ||
+                currentSourceRevision != expectedSourceRevision;
+            if (stale)
+            {
+                var currentProjectionGeneration = root.Props.TryGetValue(
+                        "progressionProjectionGeneration",
+                        out var projectionGenerationText) &&
+                    long.TryParse(projectionGenerationText, out var parsedProjectionGeneration)
+                        ? Math.Max(1, parsedProjectionGeneration)
+                        : 1;
+                await node.Database.PutAsync(
+                    AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId),
+                    new EveCommandReceiptDocument(
+                        $"receipt:{request.CommandId}:denied",
+                        request.CommandId,
+                        request.Command,
+                        "denied",
+                        "Aetheria Hangar",
+                        options.DaemonId,
+                        request.ProviderId,
+                        request.SurfaceId,
+                        "Verse selection targets a stale Hangar projection.",
+                        DateTimeOffset.UtcNow.ToString("O"),
+                        currentProjectionGeneration,
+                        invocationHash: payloadHash)).ConfigureAwait(false);
+                await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
+                return;
+            }
+
+            var committedSource = await progressionVerses.CommitPreparedSelectionAsync(
+                prepared,
+                DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
+            var successorView = progressionVerses.CreateSelectionView(committedSource, prepared);
+            await PublishHangarSurfaceAsync(
+                node,
+                DateTimeOffset.UtcNow.ToString("O"),
+                successorView).ConfigureAwait(false);
+            await node.Database.PutAsync(
+                AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId),
+                new EveCommandReceiptDocument(
+                    $"receipt:{request.CommandId}:accepted",
+                    request.CommandId,
+                    request.Command,
+                    "accepted",
+                    "Aetheria Hangar",
+                    options.DaemonId,
+                    request.ProviderId,
+                    request.SurfaceId,
+                    "",
+                    DateTimeOffset.UtcNow.ToString("O"),
+                    prepared.Projection.Generation,
+                    invocationHash: payloadHash)).ConfigureAwait(false);
+            await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+    }
+    catch (Exception error)
+    {
+        Console.Error.WriteLine(
+            $"Hangar Verse selection '{request.CommandId}' failed before finality and remains pending: {error}");
+    }
 }
 
 static bool ShouldForwardHangarRequest(
@@ -3095,7 +3285,6 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
             request.CommandId,
             StringComparison.Ordinal))
         throw new InvalidOperationException("Injected Hangar command finality failure.");
-    using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
     var pinnedRoute = await node.MutableDocument<AetheriaProgressionCommandRouteDocument>(
             AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId))
         .ReadAsync().ConfigureAwait(false);
@@ -3105,8 +3294,8 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
         ?? throw new InvalidOperationException("Hangar command has no provider-bound admission envelope.");
     if (string.Equals(command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal))
     {
-        await progressionVerses.SelectAsync(Payload(request, "value"), now).ConfigureAwait(false);
-        accepted = true;
+        throw new InvalidOperationException(
+            "Verse selection must enter through the projection-preparation worker before state finality.");
     }
     else if (pinnedRoute != null ||
         !((string.Equals(
@@ -3253,8 +3442,7 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
     var currentSource = await node.MutableDocument<AetheriaProgressionSourceDocument>(
             AetheriaStateNode.ProgressionSourceKey)
         .ReadAsync().ConfigureAwait(false) ?? new AetheriaProgressionSourceDocument();
-    if (!string.Equals(command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal) &&
-        currentSource.UsesLocalProgression)
+    if (currentSource.UsesLocalProgression)
     {
         await PublishHangarSurfaceAsync(
             node,

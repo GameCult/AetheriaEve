@@ -223,19 +223,26 @@ try
             new Dictionary<string, string> { ["value"] = remoteVerse },
             staleSelectorCommandId);
 
-        await SubmitAsync(
+        var selectRemoteReceipt = await SubmitAsync(
             client,
             localTarget,
             selectorSurface,
             AetheriaRuntimeHangarCommands.SelectVerse,
             new Dictionary<string, string> { ["value"] = remoteVerse });
-        await ReadUntilAsync(
-            client,
+        Require(selectRemoteReceipt.State == "accepted" && selectRemoteReceipt.SourceVersion > 0,
+            "Verse selection finality must name the projection installed by the successor Hangar surface.");
+        var selectedRemoteSource = await client.ReadAsync<AetheriaProgressionSourceDocument>(
             localTarget,
-            AetheriaStateNode.ProgressionSourceKey.ToString(),
-            (AetheriaProgressionSourceDocument source) =>
-                source.SelectedVerseId == remoteVerse && source.Status == AetheriaProgressionSourceStatuses.Ready,
-            TimeSpan.FromSeconds(10));
+            AetheriaStateNode.ProgressionSourceKey.ToString());
+        var selectedRemoteSurface = await client.ReadAsync<EveSurfaceDocument>(
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
+        Require(selectedRemoteSource.SelectedVerseId == remoteVerse &&
+                selectedRemoteSource.Status == AetheriaProgressionSourceStatuses.Ready &&
+                selectedRemoteSurface.Surface.Root.Props["progressionVerseId"] == remoteVerse &&
+                selectedRemoteSurface.Surface.Root.Props["progressionAuthorityRuntimeId"] == remoteTarget.AuthorityRuntimeId &&
+                long.Parse(selectedRemoteSurface.Surface.Root.Props["progressionProjectionGeneration"]) >= selectRemoteReceipt.SourceVersion,
+            "An accepted Verse selector receipt must not precede its selected source and successor Hangar surface.");
 
         var remoteHangar = await remoteClient.ReadAsync<AetheriaHangarState>(
             remoteTarget,
@@ -251,14 +258,10 @@ try
             AetheriaStateNode.HangarKey.ToString());
         Require(hangarAfterRejectedPut.Revision == remoteRevision,
             "A public CultMesh peer must not mutate Hangar state through a generic raw document put.");
-        var remoteSurface = await ReadUntilAsync(
-            client,
-            localTarget,
-            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
-            (EveSurfaceDocument surface) =>
-                Find(surface.Surface.Root, "aetheria.hangar.verse").Props["value"] == remoteVerse &&
-                Find(surface.Surface.Root, "aetheria.hangar.loadout.grid").Children.Count > 0,
-            TimeSpan.FromSeconds(10));
+        var remoteSurface = selectedRemoteSurface;
+        Require(Find(remoteSurface.Surface.Root, "aetheria.hangar.verse").Props["value"] == remoteVerse &&
+                Find(remoteSurface.Surface.Root, "aetheria.hangar.loadout.grid").Children.Count > 0,
+            "The successor Hangar surface committed with the selector receipt must already contain the selected Verse loadout.");
         Require(remoteSurface.Surface.Root.Props["progressionAuthorityRuntimeId"] == remoteTarget.AuthorityRuntimeId,
             "The Hangar projection must identify the exact authority runtime that supplied the selected Verse view.");
         var remoteWorld = Find(remoteSurface.Surface.Root, "aetheria.hangar.world");
@@ -374,9 +377,16 @@ try
             new Dictionary<string, string> { ["value"] = AetheriaProgressionSources.Local });
         localFinality.Stop();
         Require(selectLocalReceipt.State == "accepted" &&
+                selectLocalReceipt.SourceVersion > 0 &&
                 localFinality.Elapsed < TimeSpan.FromMilliseconds(1500) &&
                 !removeReceiptTask.IsCompleted,
             "a pre-route remote command must not hold the state gate or block a later Verse selection");
+        var localSurfaceAfterReceipt = await client.ReadAsync<EveSurfaceDocument>(
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
+        Require(localSurfaceAfterReceipt.Surface.Root.Props["progressionVerseId"] == AetheriaProgressionSources.Local &&
+                long.Parse(localSurfaceAfterReceipt.Surface.Root.Props["progressionProjectionGeneration"]) >= selectLocalReceipt.SourceVersion,
+            "An accepted Local Verse selector receipt must include the successor Local Hangar surface.");
         if (!Stop(remote, lifecyclePipeName: remoteLifecyclePipe))
             throw new InvalidOperationException("The selected remote authority could not be stopped for the exact-authority witness.");
         remote = null;

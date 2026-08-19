@@ -75,6 +75,14 @@ remains selected, commit its Eve Hangar surface before publishing the
 client-facing receipt. Periodic projection refresh is recovery and discovery,
 not the first publisher of command-caused truth.
 
+Verse selection follows the same boundary. The routing daemon prepares the
+target authority's projection while the previous Verse and surface remain
+canonical and emits no terminal receipt during that preparation. It then
+commits the selected progression source, successor Hangar surface, terminal
+receipt, and request deletion together. A command issued after an accepted
+selector receipt therefore binds to the new surface; the previous surface can
+no longer route a post-selection refit or launch.
+
 Derived state: selected bay, selected mode, preview, fit metrics, affordability,
 compatibility warnings, and launch readiness are UI projections. The preview
 and metrics never become equipment or deployment owners.
@@ -123,6 +131,9 @@ path. Generic New Game must not return as a gameplay-state writer.
   Hangar/loadout/catalog mixture;
 - an accepted remote refit receipt has a positive projection generation, and
   the matching routing surface is already visible when that receipt is read;
+- an accepted Verse-selector receipt is atomic with the selected source and
+  successor surface, and an immediate command from that surface reaches only
+  the selected Verse;
 - the portable surface exposes owned bays, ship preview, fit summary, existing
   inventory/refit entry, three mode selectors, and Launch;
 - on a fresh daemon with no run, the preview lowers one visible entity for the
