@@ -90,6 +90,7 @@ namespace GameCult.Aetheria.State.Verse
         [Key(8)] public AetheriaRuntimeLoadoutTemplateCommit? Loadout { get; set; }
         [Key(9)] public AetheriaRuntimeCatalogSnapshot? Catalog { get; set; }
         [Key(10)] public string UpdatedAtUtc { get; set; } = "";
+        [Key(11)] public long AssetCatalogVersion { get; set; }
     }
 
     [MessagePackObject]

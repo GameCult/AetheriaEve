@@ -72,9 +72,11 @@ commits the canonical mutation, its new projection generation, and the terminal
 receipt in one state transaction; that authority's receipt names the projection
 generation. A routing daemon must observe at least that generation and, while
 the same Verse remains selected, commit a strictly newer Eve Hangar surface.
-The client-facing receipt's `sourceVersion` names that exact routing-surface
-version. Periodic projection refresh is recovery and discovery, not the first
-publisher of command-caused truth.
+The client-facing receipt preserves that provider-state generation in
+`sourceVersion` and separately names the exact routing-surface lease in
+`presentationSurfaceVersion`. `sourceVersion` is causal state provenance; it
+must not be reinterpreted as a renderer version. Periodic projection refresh is
+recovery and discovery, not the first publisher of command-caused truth.
 
 Verse selection follows the same boundary. The routing daemon prepares the
 target authority's projection while the previous Verse and surface remain
@@ -94,8 +96,11 @@ compatibility warnings, and launch readiness are UI projections. The preview
 and metrics never become equipment or deployment owners.
 The preview is a standard Eve `world.scene3d` containing one
 `world.entity3d` for the selected Hangar ship. The world qualifies its asset
-catalog by provider, Verse, authority runtime, record, and Odin rendezvous
-routes. When progression is local, those fields identify the local daemon. When
+catalog by provider, Verse, authority runtime, record, Odin rendezvous routes,
+and exact required asset-catalog version. A lowerer stages the surface and that
+catalog generation as one candidate; a same-provider catalog change cannot
+bypass preload merely because provider identity is unchanged. When progression
+is local, those fields identify the local daemon. When
 another Verse is selected, they identify the progression authority that supplied
 the Hangar and catalog; the routing daemon does not re-author remote assets or
 satisfy remote references from a same-named local catalog. The preview carries
@@ -135,9 +140,10 @@ path. Generic New Game must not return as a gameplay-state writer.
 - a remote refit concurrent with projection refresh yields either the complete
   earlier projection generation or the complete later generation, never a
   Hangar/loadout/catalog mixture;
-- an accepted remote refit receipt names the exact matching routing-surface
-  version, whose projection-generation property names the remote authority
-  snapshot that contains the mutation;
+- an accepted remote refit receipt preserves the remote projection generation
+  in `sourceVersion` and names the matching routing-surface version in
+  `presentationSurfaceVersion`; that surface names the same remote projection
+  and the exact asset-catalog generation it requires;
 - an accepted Verse-selector receipt is atomic with the selected source and
   a strictly newer successor surface; lowerers do not expose the receipt or
   permit an immediate command until that surface's assets commit, after which

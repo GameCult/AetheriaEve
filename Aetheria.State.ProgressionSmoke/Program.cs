@@ -229,7 +229,9 @@ try
             selectorSurface,
             AetheriaRuntimeHangarCommands.SelectVerse,
             new Dictionary<string, string> { ["value"] = remoteVerse });
-        Require(selectRemoteReceipt.State == "accepted" && selectRemoteReceipt.SourceVersion > 0,
+        Require(selectRemoteReceipt.State == "accepted" &&
+                selectRemoteReceipt.SourceVersion > 0 &&
+                selectRemoteReceipt.PresentationSurfaceVersion > 0,
             "Verse selection finality must name the projection installed by the successor Hangar surface.");
         var selectedRemoteSource = await client.ReadAsync<AetheriaProgressionSourceDocument>(
             localTarget,
@@ -241,7 +243,8 @@ try
                 selectedRemoteSource.Status == AetheriaProgressionSourceStatuses.Ready &&
                 selectedRemoteSurface.Surface.Root.Props["progressionVerseId"] == remoteVerse &&
                 selectedRemoteSurface.Surface.Root.Props["progressionAuthorityRuntimeId"] == remoteTarget.AuthorityRuntimeId &&
-                selectedRemoteSurface.Version == selectRemoteReceipt.SourceVersion &&
+                selectedRemoteSurface.Version == selectRemoteReceipt.PresentationSurfaceVersion &&
+                long.Parse(selectedRemoteSurface.Surface.Root.Props["progressionProjectionGeneration"]) == selectRemoteReceipt.SourceVersion &&
                 selectedRemoteSurface.Version > selectorSurface.Version,
             "An accepted Verse selector receipt must not precede its selected source and successor Hangar surface.");
 
@@ -277,6 +280,8 @@ try
         var remoteAssetCatalog = await remoteClient.ReadAsync<EveAssetCatalogDocument>(
             remoteTarget,
             remoteWorld.Props["assetManifest"]);
+        Require(long.Parse(remoteWorld.Props["assetCatalogVersion"]) == remoteAssetCatalog.Version,
+            "The selected Hangar surface must lease the exact asset catalog generation owned by its progression Verse.");
         var remotePreviewAsset = remoteAssetCatalog.Assets.Single(asset =>
             asset.AssetRef == remotePreview.Props["assetRef"]);
         var remotePreviewVariant = remotePreviewAsset.Variants.Single(variant =>
@@ -379,6 +384,7 @@ try
         localFinality.Stop();
         Require(selectLocalReceipt.State == "accepted" &&
                 selectLocalReceipt.SourceVersion > 0 &&
+                selectLocalReceipt.PresentationSurfaceVersion > 0 &&
                 localFinality.Elapsed < TimeSpan.FromMilliseconds(1500) &&
                 !removeReceiptTask.IsCompleted,
             "a pre-route remote command must not hold the state gate or block a later Verse selection");
@@ -386,7 +392,8 @@ try
             localTarget,
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
         Require(localSurfaceAfterReceipt.Surface.Root.Props["progressionVerseId"] == AetheriaProgressionSources.Local &&
-                localSurfaceAfterReceipt.Version == selectLocalReceipt.SourceVersion &&
+                localSurfaceAfterReceipt.Version == selectLocalReceipt.PresentationSurfaceVersion &&
+                long.Parse(localSurfaceAfterReceipt.Surface.Root.Props["progressionProjectionGeneration"]) == selectLocalReceipt.SourceVersion &&
                 localSurfaceAfterReceipt.Version > remoteSurface.Version,
             "An accepted Local Verse selector receipt must include the successor Local Hangar surface.");
         if (!Stop(remote, lifecyclePipeName: remoteLifecyclePipe))
@@ -474,7 +481,8 @@ try
         Require(Find(refitSurface.Surface.Root, "aetheria.hangar.inventory.grid").Children
                     .Any(item => item.Props["itemKey"] == removedItemKey) &&
                 Find(refitSurface.Surface.Root, "aetheria.hangar.loadout.grid").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString() &&
-                refitSurface.Version == removeReceipt.SourceVersion &&
+                refitSurface.Version == removeReceipt.PresentationSurfaceVersion &&
+                removeReceipt.SourceVersion == removeProjection.Generation &&
                 long.Parse(refitSurface.Surface.Root.Props["progressionProjectionGeneration"]) == removeProjection.Generation,
             "The routing daemon must commit the matching remote projection before exposing its accepted receipt.");
         var refitInventory = Find(refitSurface.Surface.Root, "aetheria.hangar.inventory.grid");
@@ -503,7 +511,8 @@ try
         var launchSurface = await client.ReadAsync<EveSurfaceDocument>(
             localTarget,
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
-        Require(launchSurface.Version == equipReceipt.SourceVersion &&
+        Require(launchSurface.Version == equipReceipt.PresentationSurfaceVersion &&
+                equipReceipt.SourceVersion == equipProjection.Generation &&
                 long.Parse(launchSurface.Surface.Root.Props["progressionProjectionGeneration"]) == equipProjection.Generation &&
                 Find(launchSurface.Surface.Root, "aetheria.hangar.launch").Props["disabled"] == "false" &&
                 Find(launchSurface.Surface.Root, "aetheria.hangar.launch").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),

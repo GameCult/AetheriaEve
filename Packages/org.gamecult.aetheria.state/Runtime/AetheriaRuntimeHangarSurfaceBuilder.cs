@@ -46,7 +46,8 @@ namespace GameCult.Aetheria.State.Verse
             string assetAuthorityRuntimeId = "",
             string assetManifestRecordRef = "",
             IReadOnlyList<string>? assetRendezvousEndpoints = null,
-            long progressionProjectionGeneration = 0)
+            long progressionProjectionGeneration = 0,
+            long assetCatalogVersion = 0)
         {
             if (hangar == null) throw new ArgumentNullException(nameof(hangar));
             var ships = hangar.Ships ?? Array.Empty<AetheriaHangarShip>();
@@ -157,7 +158,8 @@ namespace GameCult.Aetheria.State.Verse
                                         string.IsNullOrWhiteSpace(assetManifestRecordRef)
                                             ? AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString()
                                             : assetManifestRecordRef,
-                                        assetRendezvousEndpoints ?? Array.Empty<string>())
+                                        assetRendezvousEndpoints ?? Array.Empty<string>(),
+                                        assetCatalogVersion)
                                 }),
                                 Panel("aetheria.hangar.loadout", "LOADOUT", new[]
                                 {
@@ -403,7 +405,8 @@ namespace GameCult.Aetheria.State.Verse
             string assetVerseId,
             string assetAuthorityRuntimeId,
             string assetManifestRecordRef,
-            IReadOnlyList<string> assetRendezvousEndpoints)
+            IReadOnlyList<string> assetRendezvousEndpoints,
+            long assetCatalogVersion)
         {
             var entityId = ship?.ShipId ?? "";
             var hullAssetRef = ship == null
@@ -438,6 +441,7 @@ namespace GameCult.Aetheria.State.Verse
                     ("assetVerseId", assetVerseId),
                     ("assetAuthorityRuntimeId", assetAuthorityRuntimeId),
                     ("assetRendezvousEndpoints", string.Join(";", assetRendezvousEndpoints.Where(value => !string.IsNullOrWhiteSpace(value)))),
+                    ("assetCatalogVersion", Math.Max(0, assetCatalogVersion).ToString(CultureInfo.InvariantCulture)),
                     ("cameraRig", "third-person-orbit"),
                     ("viewId", "aetheria.hangar"),
                     ("playerEntityId", entityId),

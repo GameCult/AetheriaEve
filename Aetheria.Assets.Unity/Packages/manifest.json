@@ -6,7 +6,7 @@
     "org.gamecult.aetheria.state": "file:../../Packages/org.gamecult.aetheria.state",
     "org.gamecult.cultmath": "https://github.com/GameCult/CultMath.git?path=/unity/org.gamecult.cultmath#cultmath-unity-v0.1.2",
     "org.gamecult.cultlib": "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#b9cbd7561d96b01a770273891ea9144d98a538bc",
-    "org.gamecult.eve.surface": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#3ede0799abde0bf21a4b691d99dae73ce2294f4b",
+    "org.gamecult.eve.surface": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#f7c79ee784aae57b090b8093967ad2d8f22fc19c",
     "org.gamecult.eve.plugin-fields": "https://github.com/GameCult/EvePlugins.git?path=/plugins/eve-plugin-fields/unity/org.gamecult.eve.plugin-fields#eve-plugin-fields-unity-v0.2.3"
   }
 }

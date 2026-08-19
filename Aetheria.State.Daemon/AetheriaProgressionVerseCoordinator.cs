@@ -20,6 +20,7 @@ internal sealed class AetheriaProgressionVerseView
     public required string AssetVerseId { get; init; }
     public required string AssetProviderId { get; init; }
     public required string AssetManifestRecordRef { get; init; }
+    public long AssetCatalogVersion { get; init; }
     public required string[] AssetRendezvousEndpoints { get; init; }
     public required AetheriaHangarState Hangar { get; init; }
     public required AetheriaHangarDraftState Draft { get; init; }
@@ -270,6 +271,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             AssetVerseId = prepared.Projection.AssetVerseId,
             AssetProviderId = prepared.Projection.AssetProviderId,
             AssetManifestRecordRef = prepared.Projection.AssetManifestRecordRef,
+            AssetCatalogVersion = prepared.Projection.AssetCatalogVersion,
             AssetRendezvousEndpoints = prepared.UsesLocalProgression
                 ? Array.Empty<string>()
                 : committedSource.OdinDiscoveryEndpoints?.ToArray() ?? _odinEndpoints,
@@ -302,6 +304,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                 AssetVerseId = projection.AssetVerseId,
                 AssetProviderId = projection.AssetProviderId,
                 AssetManifestRecordRef = projection.AssetManifestRecordRef,
+                AssetCatalogVersion = projection.AssetCatalogVersion,
                 AssetRendezvousEndpoints = source.OdinDiscoveryEndpoints?.ToArray() ?? Array.Empty<string>(),
                 Hangar = projection.Hangar,
                 Draft = projection.Draft,
@@ -508,6 +511,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             AssetVerseId = projection.AssetVerseId,
             AssetProviderId = projection.AssetProviderId,
             AssetManifestRecordRef = projection.AssetManifestRecordRef,
+            AssetCatalogVersion = projection.AssetCatalogVersion,
             AssetRendezvousEndpoints = source.OdinDiscoveryEndpoints?.ToArray() ?? _odinEndpoints,
             Hangar = projection.Hangar,
             Draft = projection.Draft,
@@ -575,9 +579,10 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             request.SurfaceId,
             remoteReceipt.Message,
             remoteReceipt.IssuedAtUtc,
-            localSurfaceVersion,
+            remoteReceipt.SourceVersion,
             remoteReceipt.Navigation,
-            route.PayloadHash);
+            route.PayloadHash,
+            localSurfaceVersion);
     }
 
     internal static EveSurfaceCommandRequest CreateForwardedRequest(
@@ -626,15 +631,23 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         if (!string.IsNullOrWhiteSpace(selected?.LoadoutTemplateKey))
             loadout = await _node.MutableDocument<AetheriaLoadoutTemplate>(new(selected.LoadoutTemplateKey))
                 .ReadAsync().ConfigureAwait(false);
+        var projection = await _node.MutableDocument<AetheriaHangarProjectionDocument>(
+                AetheriaRuntimeVerseRecordKeys.HangarProjection)
+            .ReadAsync().ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Local progression has no committed Hangar projection.");
+        var assetCatalog = await _node.MutableDocument<EveAssetCatalogDocument>(
+                AetheriaRuntimeVerseRecordKeys.EveAssetCatalog)
+            .ReadAsync().ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Local progression has no committed Hangar asset catalog.");
         return new AetheriaProgressionVerseView
         {
-            ProjectionGeneration = Math.Max(1, _node.Cache.Get<AetheriaHangarProjectionDocument>(
-                AetheriaRuntimeVerseRecordKeys.HangarProjection)?.Generation ?? 1),
+            ProjectionGeneration = projection.Generation,
             Source = source,
             AuthorityRuntimeId = _runtimeId,
             AssetVerseId = _localVerseId,
             AssetProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
             AssetManifestRecordRef = AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
+            AssetCatalogVersion = assetCatalog.Version,
             AssetRendezvousEndpoints = Array.Empty<string>(),
             Hangar = hangar,
             Draft = draft,
@@ -676,6 +689,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         AssetVerseId = "",
         AssetProviderId = "",
         AssetManifestRecordRef = "",
+        AssetCatalogVersion = 0,
         AssetRendezvousEndpoints = Array.Empty<string>(),
         Hangar = new AetheriaHangarState
         {
@@ -790,7 +804,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             !string.Equals(projection.AuthorityRuntimeId, target.AuthorityRuntimeId, StringComparison.Ordinal) ||
             !string.Equals(projection.AssetVerseId, target.VerseId, StringComparison.Ordinal) ||
             string.IsNullOrWhiteSpace(projection.AssetProviderId) ||
-            string.IsNullOrWhiteSpace(projection.AssetManifestRecordRef))
+            string.IsNullOrWhiteSpace(projection.AssetManifestRecordRef) ||
+            projection.AssetCatalogVersion <= 0)
         {
             throw new InvalidOperationException(
                 $"Verse '{target.VerseId}' authority '{target.AuthorityRuntimeId}' published an invalid Hangar projection.");
@@ -932,7 +947,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                 receipt.Navigation.SurfaceKind,
                 endpoints,
                 route.AuthorityRuntimeId),
-            receipt.InvocationHash);
+            receipt.InvocationHash,
+            receipt.PresentationSurfaceVersion);
     }
 
     private void ThrowIfDisposed()

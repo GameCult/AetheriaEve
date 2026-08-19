@@ -2929,6 +2929,10 @@ static async Task FinalizeVerseSelectionAsync(
                 currentSourceRevision != expectedSourceRevision;
             if (stale)
             {
+                var currentProjectionGeneration = root.Props.TryGetValue("progressionProjectionGeneration", out var generationText) &&
+                    long.TryParse(generationText, out var parsedGeneration)
+                        ? Math.Max(1, parsedGeneration)
+                        : 1;
                 await node.Database.PutAsync(
                     AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId),
                     new EveCommandReceiptDocument(
@@ -2942,8 +2946,9 @@ static async Task FinalizeVerseSelectionAsync(
                         request.SurfaceId,
                         "Verse selection targets a stale Hangar projection.",
                         DateTimeOffset.UtcNow.ToString("O"),
-                        currentSurface.Version,
-                        invocationHash: payloadHash)).ConfigureAwait(false);
+                        currentProjectionGeneration,
+                        invocationHash: payloadHash,
+                        presentationSurfaceVersion: currentSurface.Version)).ConfigureAwait(false);
                 await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
                 return;
             }
@@ -2969,8 +2974,9 @@ static async Task FinalizeVerseSelectionAsync(
                     request.SurfaceId,
                     "",
                     DateTimeOffset.UtcNow.ToString("O"),
-                    successorSurface.Version,
-                    invocationHash: payloadHash)).ConfigureAwait(false);
+                    prepared.Projection.Generation,
+                    invocationHash: payloadHash,
+                    presentationSurfaceVersion: successorSurface.Version)).ConfigureAwait(false);
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
@@ -3442,7 +3448,7 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
     var currentSurface = await node.MutableDocument<EveSurfaceDocument>(
             AetheriaRuntimeVerseRecordKeys.HangarSurface)
         .ReadAsync().ConfigureAwait(false);
-    var receiptSourceVersion = Math.Max(1, currentSurface?.Version ?? 0);
+    var presentationSurfaceVersion = Math.Max(1, currentSurface?.Version ?? 0);
     if (currentSource.UsesLocalProgression)
     {
         var successorSurface = await PublishHangarSurfaceAsync(
@@ -3457,12 +3463,13 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                 AssetProviderId = projection.AssetProviderId,
                 AssetManifestRecordRef = projection.AssetManifestRecordRef,
                 AssetRendezvousEndpoints = Array.Empty<string>(),
+                AssetCatalogVersion = projection.AssetCatalogVersion,
                 Hangar = projection.Hangar,
                 Draft = projection.Draft,
                 Loadout = projection.Loadout,
                 Catalog = projection.Catalog
             }).ConfigureAwait(false);
-        receiptSourceVersion = successorSurface.Version;
+        presentationSurfaceVersion = successorSurface.Version;
     }
 
     var receiptDocument = new EveCommandReceiptDocument(
@@ -3476,9 +3483,10 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
         request.SurfaceId,
         diagnostic,
         now,
-        receiptSourceVersion,
+        projection.Generation,
         navigation,
-        AetheriaHangarCommandJournal.PayloadHash(request));
+        AetheriaHangarCommandJournal.PayloadHash(request),
+        presentationSurfaceVersion);
     await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), receiptDocument)
         .ConfigureAwait(false);
     return activatesSession;
@@ -3669,7 +3677,8 @@ static async Task<EveSurfaceDocument> PublishHangarSurfaceAsync(
             hangarView.AuthorityRuntimeId,
             hangarView.AssetManifestRecordRef,
             hangarView.AssetRendezvousEndpoints,
-            hangarView.ProjectionGeneration);
+            hangarView.ProjectionGeneration,
+            hangarView.AssetCatalogVersion);
     await document.ReplaceAsync(surface).ConfigureAwait(false);
     return surface;
 }
@@ -3693,6 +3702,10 @@ static async Task<AetheriaHangarProjectionDocument> PublishLocalHangarProjection
         if (stored != null)
             loadout = AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(stored);
     }
+    var assetCatalog = await node.MutableDocument<EveAssetCatalogDocument>(
+            AetheriaRuntimeVerseRecordKeys.EveAssetCatalog)
+        .ReadAsync().ConfigureAwait(false)
+        ?? throw new InvalidOperationException("The Hangar asset catalog must exist before its progression projection is published.");
     var pointer = node.MutableDocument<AetheriaHangarProjectionDocument>(AetheriaRuntimeVerseRecordKeys.HangarProjection);
     var existing = await pointer.ReadAsync().ConfigureAwait(false);
     var projection = new AetheriaHangarProjectionDocument
@@ -3702,6 +3715,7 @@ static async Task<AetheriaHangarProjectionDocument> PublishLocalHangarProjection
         AssetVerseId = options.VerseId,
         AssetProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
         AssetManifestRecordRef = AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
+        AssetCatalogVersion = assetCatalog.Version,
         Hangar = hangar,
         Draft = draft,
         Loadout = loadout,

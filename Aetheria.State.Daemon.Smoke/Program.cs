@@ -133,6 +133,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             AssetVerseId = "verse:modded",
             AssetProviderId = "provider:modded",
             AssetManifestRecordRef = "eve:assets:modded",
+            AssetCatalogVersion = 23,
             Hangar = new AetheriaHangarState
             {
                 HangarId = "player:projection",
@@ -175,6 +176,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         Require(restored.Generation == projection.Generation &&
                 restored.AuthorityRuntimeId == projection.AuthorityRuntimeId &&
                 restored.AssetVerseId == projection.AssetVerseId &&
+                restored.AssetCatalogVersion == projection.AssetCatalogVersion &&
                 restored.Hangar.Revision == projection.Hangar.Revision &&
                 restored.Draft.Revision == projection.Draft.Revision &&
                 restored.Loadout?.RootEntity.Name == "ship:projection" &&
@@ -302,7 +304,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     assetVerseId: "gamecult.aetheria",
                     assetAuthorityRuntimeId: "aetheria-authority",
                     assetManifestRecordRef: "eve:assets:gamecult.aetheria",
-                    assetRendezvousEndpoints: new[] { "wss://odin.gamecult.net/cultmesh" });
+                    assetRendezvousEndpoints: new[] { "wss://odin.gamecult.net/cultmesh" },
+                    assetCatalogVersion: 23);
                 var world = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.world");
                 var previewShip = world.Children.Single(component => component.Kind == "world.entity3d");
                 var launcher = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.launcher");
@@ -313,6 +316,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         world.Props["assetVerseId"] == "gamecult.aetheria" &&
                         world.Props["assetAuthorityRuntimeId"] == "aetheria-authority" &&
                         world.Props["assetManifest"] == "eve:assets:gamecult.aetheria" &&
+                        world.Props["assetCatalogVersion"] == "23" &&
                         world.Props["assetRendezvousEndpoints"] == "wss://odin.gamecult.net/cultmesh" &&
                         surface.Surface.Root.Props["selectedMode"] == AetheriaGameModes.Terminus &&
                         Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.ship.id").Props["value"] == selectedShipId &&
@@ -590,7 +594,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 clientReceipt.CommandId == request.CommandId &&
                 clientReceipt.ProviderId == request.ProviderId &&
                 clientReceipt.SurfaceId == request.SurfaceId &&
-                clientReceipt.SourceVersion == 41 &&
+                clientReceipt.SourceVersion == remoteReceipt.SourceVersion &&
+                clientReceipt.PresentationSurfaceVersion == 41 &&
                 clientReceipt.InvocationHash == route.PayloadHash &&
                 clientReceipt.Navigation?.AuthorityRuntimeId == route.AuthorityRuntimeId,
             "verified remote finality must be re-enveloped by the local router while navigation preserves the remote run authority");
