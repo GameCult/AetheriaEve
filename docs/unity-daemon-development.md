@@ -61,6 +61,14 @@ ordinary persistence mechanism.
 The released launcher builds the daemon explicitly, then starts
 `dotnet Aetheria.State.Daemon.dll` directly; it never owns a `dotnet run`
 wrapper whose child could survive termination.
+The Electron launcher follows the same lifecycle boundary: it retains the
+daemon process until exit is observed, escalates the verified process tree, and
+keeps the application alive with the owned handle intact if termination cannot
+be proven.
+Shutdown stops new ingress polling and cancels remote progression forwarding,
+but it does not cancel an admitted local Hangar mutation. That command finishes
+or rolls back under its own transaction owner before the daemon writes the final
+frame and `stopped` runtime session.
 
 The editor connects through the daemon's `cultnet+tcp` control endpoint. The
 advertised session then selects the dedicated content and QUIC realtime planes;

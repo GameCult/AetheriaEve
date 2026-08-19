@@ -2754,8 +2754,10 @@ static async Task<bool> AcceptCoreEveInvocationsAsync(
             var requestActivatedSession = false;
             if (isHangarRequest)
             {
+                // Shutdown cancels remote forwarding and stops new polling, but
+                // an admitted local mutation owns its own commit/rollback boundary.
                 await using var mutation = await hangarProjection.EnterMutationAsync(
-                    progressionForwardingCancellation).ConfigureAwait(false);
+                    CancellationToken.None).ConfigureAwait(false);
                 requestActivatedSession = await node.CommitAsync(
                     () => AcceptCoreEveInvocationAsync(
                         node,

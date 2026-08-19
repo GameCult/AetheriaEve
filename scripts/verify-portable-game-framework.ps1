@@ -98,7 +98,7 @@ if ($daemonSource -match 'currentFrame\?\.AccountedCommandIds') {
 if ($daemonSource -notmatch 'DeleteDaemonCommandAsync\(commandId\)') {
     throw "Committed daemon commands must leave the transient command inbox."
 }
-if ($daemonSource -notmatch 'DeleteAsync<EveSurfaceCommandRequest>\(storedRequest\.Key\)') {
+if ($daemonSource -notmatch 'DeleteAsync<EveSurfaceCommandRequest>\(requestRecordKey\)') {
     throw "Handled Eve invocations must leave the transient inbox by their actual CultCache record identity."
 }
 if ($daemonSource -match 'Documents<EveCommandReceiptDocument>\(\).*ToHashSet' -or
@@ -152,6 +152,17 @@ if (-not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'EveInve
     -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'dropCommand.equipment') -or
     -not (Select-String -LiteralPath $hangarBuilder -Quiet -SimpleMatch 'payload.expectedHangarRevision')) {
     throw "The Hangar loadout must be a daemon-published Eve inventory grid with revision-bound typed drops."
+}
+$electronMain = Join-Path $Root "Aetheria.Rts.Web\Electron\main.ts"
+$electronSource = Get-Content -LiteralPath $electronMain -Raw
+foreach ($lifecycleBoundary in @('await stopChildGracefully(ownedDaemon)', 'terminateProcessTree', 'taskkill', 'process.kill(-pid, "SIGKILL")', 'Aetheria shutdown remains incomplete')) {
+    if ($electronSource -notmatch [regex]::Escape($lifecycleBoundary)) {
+        throw "Electron is missing verified daemon lifecycle boundary '$lifecycleBoundary'."
+    }
+}
+if ($electronSource -match 'daemonProcess\s*=\s*null\s*;\s*await\s+stopChildGracefully' -or
+    $electronSource -match 'shutdownOwnedRuntime\(\)\.finally\(\(\)\s*=>\s*app\.quit') {
+    throw "Electron cannot forget daemon ownership or quit before verified termination."
 }
 
 $hangarDocuments = Get-Content -LiteralPath (Join-Path $Root "Packages\org.gamecult.aetheria.state\Runtime\AetheriaRuntimeHangarDocuments.cs") -Raw

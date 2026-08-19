@@ -120,7 +120,13 @@ app.on("before-quit", event => {
 
   event.preventDefault();
   isQuitting = true;
-  void shutdownOwnedRuntime().finally(() => app.quit());
+  void shutdownOwnedRuntime()
+    .then(() => app.quit())
+    .catch(error => {
+      isQuitting = false;
+      console.error(`Aetheria shutdown remains incomplete: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+      void showFailure(error);
+    });
 });
 
 async function runElectronSmoke(window: BrowserWindow): Promise<Record<string, unknown>> {
@@ -270,26 +276,29 @@ function writeElectronSmokeResult(result: Record<string, unknown>): void {
 
 async function exitElectronSmoke(exitCode: number): Promise<void> {
   isQuitting = true;
-  await shutdownOwnedRuntime();
+  try {
+    await shutdownOwnedRuntime();
+  } catch (error) {
+    isQuitting = false;
+    throw error;
+  }
   mainWindow?.destroy();
   mainWindow = null;
   app.exit(exitCode);
 }
 
 async function shutdownOwnedRuntime(): Promise<void> {
-  const ownedHost = eveHost;
-  eveHost = null;
-  if (ownedHost) {
-    try {
-      await withTimeout(ownedHost.close(), 5000, "Eve host shutdown");
-    } catch (error) {
-      console.error(`Failed to close the Eve host cleanly: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
   const ownedDaemon = daemonProcess;
-  daemonProcess = null;
   await stopChildGracefully(ownedDaemon);
+  if (daemonProcess === ownedDaemon)
+    daemonProcess = null;
+
+  const ownedHost = eveHost;
+  if (ownedHost) {
+    await withTimeout(ownedHost.close(), 5000, "Eve host shutdown");
+    if (eveHost === ownedHost)
+      eveHost = null;
+  }
 }
 
 function withTimeout<T>(work: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -347,6 +356,7 @@ function startDotnet(name: string, dllPath: string, args: string[]): ChildProces
   mkdirSync(logsRoot, { recursive: true });
   const child = spawn("dotnet", [dllPath, ...args], {
     cwd: repoRoot,
+    detached: process.platform !== "win32",
     windowsHide: true,
   });
   pipeChildLogs(name, child);
@@ -400,8 +410,43 @@ async function stopChildGracefully(child: ChildProcessWithoutNullStreams | null)
   if (await waitForExit(exited, 5000))
     return;
 
-  child.kill();
-  await waitForExit(exited, 2000);
+  await terminateProcessTree(child);
+  if (!await waitForExit(exited, 5000))
+    throw new Error(`Aetheria daemon PID ${child.pid ?? "unknown"} survived graceful shutdown and process-tree termination.`);
+}
+
+async function terminateProcessTree(child: ChildProcessWithoutNullStreams): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null)
+    return;
+  const pid = child.pid;
+  if (!pid)
+    throw new Error("Cannot terminate the Aetheria daemon tree without its process identity.");
+
+  if (process.platform === "win32") {
+    const exitCode = await runExitCode("taskkill", ["/PID", pid.toString(), "/T", "/F"]);
+    if (exitCode !== 0 && child.exitCode === null && child.signalCode === null)
+      throw new Error(`taskkill could not terminate the Aetheria daemon tree (exit ${exitCode}).`);
+    return;
+  }
+
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch (error) {
+    if (child.exitCode === null && child.signalCode === null)
+      throw error;
+  }
+}
+
+function runExitCode(command: string, args: string[]): Promise<number | null> {
+  const child = spawn(command, args, {
+    cwd: repoRoot,
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  return new Promise((resolvePromise, reject) => {
+    child.once("error", reject);
+    child.once("exit", code => resolvePromise(code));
+  });
 }
 
 async function waitForExit(exited: Promise<void>, timeoutMs: number): Promise<boolean> {
