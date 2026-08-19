@@ -27,42 +27,57 @@ var smokeRoot = Path.Combine(Path.GetTempPath(), "aetheria-progression-verse-" +
 Directory.CreateDirectory(smokeRoot);
 Console.WriteLine($"Progression smoke state: {smokeRoot}");
 var localState = Path.Combine(smokeRoot, "local.cc");
-var remoteState = Path.Combine(smokeRoot, "remote.cc");
+var remoteState = Path.Combine(smokeRoot, "remote-a.cc");
+var remoteBState = Path.Combine(smokeRoot, "remote-b.cc");
 CopyState(seed, localState);
 CopyState(seed, remoteState);
+CopyState(seed, remoteBState);
 
 const string localVerse = "aetheria.progression-smoke.local";
 const string remoteVerse = "aetheria.progression-smoke.remote";
 const string poisonCommandId = "progression-smoke-poison-command";
 const string delayedRemoteCommandId = "progression-smoke-delayed-remote-command";
 var localTarget = new CultMeshSessionTarget(localVerse, "progression-local");
-var remoteTarget = new CultMeshSessionTarget(remoteVerse, "progression-remote");
+var remoteTarget = new CultMeshSessionTarget(remoteVerse, "progression-remote-a");
+var remoteBTarget = new CultMeshSessionTarget(remoteVerse, "progression-remote-b");
 var localPort = FreeTcpPort();
 var remotePort = FreeTcpPort();
+var remoteBPort = FreeTcpPort();
 var localEndpoint = $"cultnet+tcp://127.0.0.1:{localPort}";
 var remoteEndpoint = $"cultnet+tcp://127.0.0.1:{remotePort}";
+var remoteBEndpoint = $"cultnet+tcp://127.0.0.1:{remoteBPort}";
 var remoteLifecyclePipe = "aetheria-progression-smoke-" + Guid.NewGuid().ToString("N");
 Process? local = null;
 Process? remote = null;
+Process? remoteB = null;
 try
 {
-    remote = StartDaemon(root, remoteState, "progression-remote", remoteVerse, remotePort,
+    remote = StartDaemon(root, remoteState, "progression-remote-a", remoteVerse, remotePort,
         "--lifecycle-pipe", remoteLifecyclePipe,
         "--api-publication-interval-ms", "100000");
+    remoteB = StartDaemon(root, remoteBState, "progression-remote-b", remoteVerse, remoteBPort,
+        "--api-publication-interval-ms", "100000");
     await WaitForEndpointAsync(remote, remotePort, TimeSpan.FromSeconds(30));
+    await WaitForEndpointAsync(remoteB, remoteBPort, TimeSpan.FromSeconds(30));
     await WaitForVerseAdvertisementAsync(
         remoteEndpoint,
         remoteVerse,
-        "progression-remote",
+        "progression-remote-a",
+        TimeSpan.FromSeconds(45));
+    await WaitForVerseAdvertisementAsync(
+        remoteBEndpoint,
+        remoteVerse,
+        "progression-remote-b",
         TimeSpan.FromSeconds(45));
     var previousRouteDelayCommand = Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_COMMAND_ID");
     var previousRouteDelay = Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_MS");
     Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_COMMAND_ID", delayedRemoteCommandId);
-    Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_MS", "1500");
+    Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_MS", "4000");
     try
     {
         local = StartDaemon(root, localState, "progression-local", localVerse, localPort,
-            "--odin-discovery-endpoint", remoteEndpoint);
+            "--odin-discovery-endpoint", remoteEndpoint,
+            "--odin-discovery-endpoint", remoteBEndpoint);
     }
     finally
     {
@@ -73,6 +88,7 @@ try
 
     using (var client = Client(localEndpoint))
     using (var remoteClient = Client(remoteEndpoint))
+    using (var remoteBClient = Client(remoteBEndpoint))
     {
         var initialSource = await ReadUntilAsync(
             client,
@@ -80,7 +96,10 @@ try
             AetheriaStateNode.ProgressionSourceKey.ToString(),
             (AetheriaProgressionSourceDocument source) =>
                 source.UsesLocalProgression &&
-                source.AvailableVerses.Any(option => option.VerseId == remoteVerse),
+                source.AvailableVerses.Any(option =>
+                    option.VerseId == remoteVerse &&
+                    option.AuthorityRuntimeIds.Contains(remoteTarget.AuthorityRuntimeId, StringComparer.Ordinal) &&
+                    option.AuthorityRuntimeIds.Contains(remoteBTarget.AuthorityRuntimeId, StringComparer.Ordinal)),
             TimeSpan.FromSeconds(45));
         Require(initialSource.AvailableVerses.First().VerseId == AetheriaProgressionSources.Local,
             "Local must remain the first Hangar Verse option.");
@@ -186,6 +205,8 @@ try
                 Find(surface.Surface.Root, "aetheria.hangar.verse").Props["value"] == remoteVerse &&
                 Find(surface.Surface.Root, "aetheria.hangar.loadout.grid").Children.Count > 0,
             TimeSpan.FromSeconds(10));
+        Require(remoteSurface.Surface.Root.Props["progressionAuthorityRuntimeId"] == remoteTarget.AuthorityRuntimeId,
+            "The Hangar projection must identify the exact authority runtime that supplied the selected Verse view.");
         var loadoutGrid = Find(remoteSurface.Surface.Root, "aetheria.hangar.loadout.grid");
         var inventoryGrid = Find(remoteSurface.Surface.Root, "aetheria.hangar.inventory.grid");
         var remove = loadoutGrid.Children.First();
@@ -214,6 +235,11 @@ try
             removeRequest.ClientId,
             removeRequest.CommandBoundary,
             removeRequest.ReceiptSchema);
+        Require(removeRequest.PayloadFields[AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId] == remoteTarget.AuthorityRuntimeId,
+            "The Hangar command envelope must retain the exact authority that authored its source view.");
+        var remoteBHangarBefore = await remoteBClient.ReadAsync<AetheriaHangarState>(
+            remoteBTarget,
+            AetheriaStateNode.HangarKey.ToString());
         var removeReceiptTask = SubmitRequestAsync(client, localTarget, removeRequest!);
         var localFinality = Stopwatch.StartNew();
         var selectLocalReceipt = await SubmitAsync(
@@ -227,6 +253,26 @@ try
                 localFinality.Elapsed < TimeSpan.FromMilliseconds(1500) &&
                 !removeReceiptTask.IsCompleted,
             "a pre-route remote command must not hold the state gate or block a later Verse selection");
+        if (!Stop(remote, lifecyclePipeName: remoteLifecyclePipe))
+            throw new InvalidOperationException("The selected remote authority could not be stopped for the exact-authority witness.");
+        remote = null;
+        await Task.Delay(4500);
+        var remoteBHangarDuringOutage = await remoteBClient.ReadAsync<AetheriaHangarState>(
+            remoteBTarget,
+            AetheriaStateNode.HangarKey.ToString());
+        Require(remoteBHangarDuringOutage.Revision == remoteBHangarBefore.Revision &&
+                !removeReceiptTask.IsCompleted,
+            "An unavailable selected authority must not be substituted by another runtime advertising the same Verse.");
+        remote = StartDaemon(root, remoteState, "progression-remote-a", remoteVerse, remotePort,
+            "--lifecycle-pipe", remoteLifecyclePipe,
+            "--api-publication-interval-ms", "100000");
+        await WaitForEndpointAsync(remote, remotePort, TimeSpan.FromSeconds(30));
+        await WaitForVerseAdvertisementAsync(
+            remoteEndpoint,
+            remoteVerse,
+            remoteTarget.AuthorityRuntimeId,
+            TimeSpan.FromSeconds(45));
+        using var recoveredRemoteClient = Client(remoteEndpoint);
         var pinnedRemoveRoute = await ReadUntilAsync(
             client,
             localTarget,
@@ -234,11 +280,13 @@ try
             (AetheriaProgressionCommandRouteDocument route) =>
                 route.CommandId == removeRequest.CommandId &&
                 route.VerseId == remoteVerse &&
+                route.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId &&
                 route.ProgressionSourceRevision == long.Parse(
                     removeRequest.PayloadFields[AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision]),
             TimeSpan.FromSeconds(5));
-        Require(pinnedRemoveRoute.VerseId == remoteVerse,
-            "changing the Verse dropdown before route creation must not retarget the admitted command to Local");
+        Require(pinnedRemoveRoute.VerseId == remoteVerse &&
+                pinnedRemoveRoute.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
+            "changing discovery availability before route creation must not retarget the admitted command to Local or a sibling Verse authority");
         var localDuringRemoteWait = await ReadUntilAsync(
             client,
             localTarget,
@@ -256,7 +304,7 @@ try
         Require(removeReceipt.State == "accepted",
             "The remote progression Verse must accept the Eve loadout-to-storage drop.");
         var updatedRemoteHangar = await ReadUntilAsync(
-            remoteClient,
+            recoveredRemoteClient,
             remoteTarget,
             AetheriaStateNode.HangarKey.ToString(),
             (AetheriaHangarState hangar) => hangar.Revision > remoteRevision,
@@ -292,7 +340,7 @@ try
         Require(equipReceipt.State == "accepted",
             "The remote progression Verse must accept the Eve storage-to-loadout drop at the requested cells.");
         updatedRemoteHangar = await ReadUntilAsync(
-            remoteClient,
+            recoveredRemoteClient,
             remoteTarget,
             AetheriaStateNode.HangarKey.ToString(),
             (AetheriaHangarState hangar) => hangar.Revision > updatedRemoteHangar.Revision,
@@ -324,8 +372,8 @@ try
             "Remote Terminus launch must navigate the generic client to the Pilot surface.");
         Require(launchNavigation.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
             "Remote Terminus navigation must preserve the exact authority runtime that owns the accepted deployment.");
-        Require(launchNavigation.RendezvousEndpoints.SequenceEqual(new[] { remoteEndpoint }, StringComparer.Ordinal),
-            "Remote Terminus navigation must carry only the configured Odin rendezvous route, not flattened content or realtime provider routes.");
+        Require(launchNavigation.RendezvousEndpoints.SequenceEqual(new[] { remoteEndpoint, remoteBEndpoint }, StringComparer.Ordinal),
+            "Remote Terminus navigation must preserve the configured Odin failover list without flattening content or realtime provider routes.");
         using (var navigatedClient = Client(launchNavigation.RendezvousEndpoints[0]))
         {
             var navigationTarget = new CultMeshSessionTarget(
@@ -403,7 +451,7 @@ try
                 pinnedLaunchRoute.AuthorityRuntimeId == remoteTarget.AuthorityRuntimeId &&
                 pinnedLaunchRoute.PayloadHash == launchReceipt.InvocationHash,
             "The first remote launch attempt must durably pin its Verse and authority target.");
-        var canonicalRemoteLaunchReceipt = await remoteClient.ReadAsync<EveCommandReceiptDocument>(
+        var canonicalRemoteLaunchReceipt = await recoveredRemoteClient.ReadAsync<EveCommandReceiptDocument>(
             remoteTarget,
             AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(launchReceipt.CommandId).ToString());
         Require(canonicalRemoteLaunchReceipt.Authority == remoteTarget.AuthorityRuntimeId &&
@@ -464,7 +512,8 @@ try
     try
     {
         local = StartDaemon(root, localState, "progression-local", localVerse, localPort,
-            "--odin-discovery-endpoint", remoteEndpoint);
+            "--odin-discovery-endpoint", remoteEndpoint,
+            "--odin-discovery-endpoint", remoteBEndpoint);
     }
     finally
     {
@@ -509,14 +558,14 @@ try
             throw new InvalidOperationException("The remote daemon could not complete the graceful checkpoint witness.");
         remote = null;
     }
-    remote = StartDaemon(root, remoteState, "progression-remote", remoteVerse, remotePort,
+    remote = StartDaemon(root, remoteState, "progression-remote-a", remoteVerse, remotePort,
         "--lifecycle-pipe", remoteLifecyclePipe,
         "--api-publication-interval-ms", "100000");
     await WaitForEndpointAsync(remote, remotePort, TimeSpan.FromSeconds(30));
     await WaitForVerseAdvertisementAsync(
         remoteEndpoint,
         remoteVerse,
-        "progression-remote",
+        "progression-remote-a",
         TimeSpan.FromSeconds(45));
     using (var checkpointClient = Client(remoteEndpoint))
     {
@@ -527,23 +576,24 @@ try
             "Graceful shutdown must checkpoint the last authoritative frame even when periodic publication has not run.");
     }
 
-    Console.WriteLine("Aetheria Hangar Verse discovery, poison-command isolation, nonblocking pinned forwarding, remote spatial refit, Terminus launch/continue navigation, and graceful restart smoke passed.");
+    Console.WriteLine("Aetheria Hangar Verse discovery, exact-authority forwarding, poison-command isolation, remote spatial refit, Terminus launch/continue navigation, and graceful restart smoke passed.");
 }
 catch
 {
-    Console.Error.WriteLine($"Local daemon: {ProcessState(local)}; remote daemon: {ProcessState(remote)}.");
+    Console.Error.WriteLine($"Local daemon: {ProcessState(local)}; remote A daemon: {ProcessState(remote)}; remote B daemon: {ProcessState(remoteB)}.");
     throw;
 }
 finally
 {
     var localStopped = Stop(local);
     var remoteStopped = Stop(remote, lifecyclePipeName: remoteLifecyclePipe);
-    if (localStopped && remoteStopped &&
+    var remoteBStopped = Stop(remoteB);
+    if (localStopped && remoteStopped && remoteBStopped &&
         !string.Equals(Environment.GetEnvironmentVariable("AETHERIA_SMOKE_KEEP_STATE"), "1", StringComparison.Ordinal))
     {
         try { Directory.Delete(smokeRoot, recursive: true); } catch { }
     }
-    else if (!localStopped || !remoteStopped)
+    else if (!localStopped || !remoteStopped || !remoteBStopped)
     {
         Console.Error.WriteLine($"Aetheria progression smoke preserved '{smokeRoot}' because child termination was not confirmed.");
     }
@@ -617,7 +667,9 @@ static CultMeshOperationPayload TargetedPayload(EveSurfaceDocument surface)
         (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId,
             root.Props.TryGetValue("progressionVerseId", out var verseId) ? verseId : AetheriaProgressionSources.Local),
         (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision,
-            root.Props.TryGetValue("progressionSourceRevision", out var revision) ? revision : "0"));
+            root.Props.TryGetValue("progressionSourceRevision", out var revision) ? revision : "0"),
+        (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId,
+            root.Props.TryGetValue("progressionAuthorityRuntimeId", out var authorityRuntimeId) ? authorityRuntimeId : ""));
 }
 
 static async Task<EveCommandReceiptDocument> SubmitRequestAsync(
@@ -643,7 +695,7 @@ static async Task<EveCommandReceiptDocument> SubmitRequestAsync(
             target,
             AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId).ToString(),
             (EveCommandReceiptDocument receipt) => receipt.CommandId == request.CommandId,
-            TimeSpan.FromSeconds(10));
+            TimeSpan.FromSeconds(30));
     }
     catch (Exception error) when (!string.IsNullOrWhiteSpace(transportError))
     {
@@ -653,7 +705,7 @@ static async Task<EveCommandReceiptDocument> SubmitRequestAsync(
         client,
         target,
         requestRecordKey,
-        TimeSpan.FromSeconds(10));
+        TimeSpan.FromSeconds(30));
     return receipt;
 }
 

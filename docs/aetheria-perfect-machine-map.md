@@ -56,9 +56,11 @@ Date: 2026-06-13
 > page. Observer callbacks run only after that read lease is released.
 > `ActiveRunKey` is derived, and stale daemon frames cannot replace the
 > session-owned run identity. Every non-selector Hangar control stamps its
-> source Eve surface's Verse ID and progression-source revision into the
-> immutable command envelope at admission. Route resolution adds the authority
-> runtime and Odin route without consulting mutable dropdown state; a target
+> source Eve surface's Verse ID, exact supplying authority runtime ID, and
+> progression-source revision into the immutable command envelope at admission.
+> Route resolution verifies that authority and adds the Odin route without
+> consulting mutable dropdown state or substituting another authority that
+> advertises the same Verse; a target
 > daemon recognizes its own Verse and does not forward recursively. Later Verse
 > selection cannot retarget the pending command. A remote
 > provider validates its Odin route grant before opening public listeners.

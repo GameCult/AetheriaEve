@@ -2861,6 +2861,7 @@ static async Task ForwardProgressionCommandAsync(
             DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
         using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
         var targetVerseId = AetheriaHangarCommandJournal.ProgressionVerseId(request);
+        var targetAuthorityRuntimeId = AetheriaHangarCommandJournal.ProgressionAuthorityRuntimeId(request);
         var targetSourceRevision = AetheriaHangarCommandJournal.ProgressionSourceRevision(request);
         if (string.Equals(
                 Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_COMMAND_ID"),
@@ -2877,6 +2878,7 @@ static async Task ForwardProgressionCommandAsync(
             request,
             payloadHash,
             targetVerseId,
+            targetAuthorityRuntimeId,
             targetSourceRevision,
             DateTimeOffset.UtcNow.ToString("O"),
             cancellationToken).ConfigureAwait(false);
@@ -3042,13 +3044,17 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
         accepted = true;
     }
     else if (pinnedRoute != null ||
-        !(string.Equals(
+        !((string.Equals(
               AetheriaHangarCommandJournal.ProgressionVerseId(request),
               AetheriaProgressionSources.Local,
               StringComparison.Ordinal) ||
           string.Equals(
               AetheriaHangarCommandJournal.ProgressionVerseId(request),
               options.VerseId,
+              StringComparison.Ordinal)) &&
+          string.Equals(
+              AetheriaHangarCommandJournal.ProgressionAuthorityRuntimeId(request),
+              options.DaemonId,
               StringComparison.Ordinal)))
     {
         throw new InvalidOperationException(
@@ -3361,7 +3367,8 @@ static async Task PublishStateSurfacesCoreAsync(
                 hangarView.Loadout == null ? null : AetheriaRuntimeStateMapper.ToRuntimeLoadoutTemplate(hangarView.Loadout),
                 hangarView.Catalog,
                 hangarView.Source,
-                hangarView.Draft.ActiveView))
+                hangarView.Draft.ActiveView,
+                hangarView.AuthorityRuntimeId))
             .ConfigureAwait(false);
     }
 }
@@ -5205,6 +5212,16 @@ public static class AetheriaHangarCommandJournal
         return revision;
     }
 
+    public static string ProgressionAuthorityRuntimeId(EveSurfaceCommandRequest request)
+    {
+        if (!RequiresProgressionTarget(request))
+            return "";
+        var value = Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId).Trim();
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException("Hangar command is missing the authority runtime that supplied its progression view.");
+        return value;
+    }
+
     private static AetheriaHangarCommandEnvelopeDocument NewEnvelope(
         EveSurfaceCommandRequest request,
         string payloadHash,
@@ -5218,7 +5235,10 @@ public static class AetheriaHangarCommandJournal
             ProgressionVerseId = ProgressionVerseId(request, required: false),
             ProgressionSourceRevision = RequiresProgressionTarget(request)
                 ? ProgressionSourceRevision(request)
-                : -1
+                : -1,
+            ProgressionAuthorityRuntimeId = RequiresProgressionTarget(request)
+                ? ProgressionAuthorityRuntimeId(request)
+                : ""
         };
 
     private static void ValidateProgressionTarget(EveSurfaceCommandRequest request)
@@ -5227,6 +5247,7 @@ public static class AetheriaHangarCommandJournal
             return;
         _ = ProgressionVerseId(request);
         _ = ProgressionSourceRevision(request);
+        _ = ProgressionAuthorityRuntimeId(request);
     }
 
     private static bool RequiresProgressionTarget(EveSurfaceCommandRequest request) =>

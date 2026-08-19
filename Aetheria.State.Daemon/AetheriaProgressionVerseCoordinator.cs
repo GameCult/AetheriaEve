@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 internal sealed class AetheriaProgressionVerseView
 {
     public required AetheriaProgressionSourceDocument Source { get; init; }
+    public required string AuthorityRuntimeId { get; init; }
     public required AetheriaHangarState Hangar { get; init; }
     public required AetheriaHangarDraftState Draft { get; init; }
     public AetheriaLoadoutTemplate? Loadout { get; init; }
@@ -105,25 +106,39 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         }
         else
         {
-            try
+            var discovered = new List<CultMeshVerseDescriptor>();
+            var discoveryFailures = new List<string>();
+            foreach (var endpoint in _odinEndpoints)
             {
-                using var catalog = CultMesh.CreateVerseCatalog();
-                await _discovery.DiscoverAsync(catalog, _odinEndpoints, "cultmesh.v0").ConfigureAwait(false);
-                verses.AddRange(catalog.Verses
-                    .Where(verse => !string.Equals(verse.VerseId, _localVerseId, StringComparison.Ordinal))
-                    .Select(ToOption)
+                try
+                {
+                    using var catalog = CultMesh.CreateVerseCatalog();
+                    await _discovery.DiscoverAsync(catalog, new[] { endpoint }, "cultmesh.v0").ConfigureAwait(false);
+                    discovered.AddRange(catalog.Verses);
+                }
+                catch (Exception error) when (IsRemoteAvailabilityFailure(error))
+                {
+                    discoveryFailures.Add($"{endpoint}: {error.Message}");
+                }
+            }
+            if (discovered.Count > 0)
+            {
+                verses.AddRange(ToOptions(discovered)
+                    .Where(option => !string.Equals(option.VerseId, _localVerseId, StringComparison.Ordinal))
                     .OrderBy(option => option.DisplayName, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(option => option.VerseId, StringComparer.Ordinal));
                 discoverySucceeded = true;
             }
-            catch (Exception error) when (IsRemoteAvailabilityFailure(error))
+            else
             {
                 foreach (var option in existing.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
                 {
                     if (!string.Equals(option.VerseId, AetheriaProgressionSources.Local, StringComparison.Ordinal))
                         verses.Add(option);
                 }
-                discoveryDiagnostic = $"Odin discovery failed: {error.Message}";
+                discoveryDiagnostic = discoveryFailures.Count == 0
+                    ? "Odin discovery returned no Verse advertisements."
+                    : $"Odin discovery failed: {string.Join("; ", discoveryFailures)}";
             }
         }
         return await _node.CommitAsync(async () =>
@@ -214,6 +229,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             return new AetheriaProgressionVerseView
             {
                 Source = source,
+                AuthorityRuntimeId = target.AuthorityRuntimeId,
                 Hangar = hangar,
                 Draft = draft,
                 Loadout = loadout,
@@ -235,6 +251,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         EveSurfaceCommandRequest request,
         string payloadHash,
         string expectedVerseId,
+        string expectedAuthorityRuntimeId,
         long expectedProgressionSourceRevision,
         string now,
         CancellationToken cancellationToken = default)
@@ -244,6 +261,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         if (string.IsNullOrWhiteSpace(expectedVerseId) ||
             string.Equals(expectedVerseId, AetheriaProgressionSources.Local, StringComparison.Ordinal))
             throw new InvalidOperationException("Remote Hangar forwarding requires an immutable remote Verse target.");
+        if (string.IsNullOrWhiteSpace(expectedAuthorityRuntimeId))
+            throw new InvalidOperationException("Remote Hangar forwarding requires the authority runtime that supplied the Hangar view.");
         if (expectedProgressionSourceRevision < 0)
             throw new InvalidOperationException("Remote Hangar forwarding requires the progression-source revision that authored the command.");
         var routeKey = AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId);
@@ -269,7 +288,10 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             throw new InvalidOperationException("No Odin discovery endpoint is configured for the targeted Verse.");
         var targetedSource = Clone(source);
         targetedSource.SelectedVerseId = expectedVerseId.Trim();
-        var remote = await ResolveRemoteProgressionAsync(targetedSource, cancellationToken).ConfigureAwait(false);
+        var remote = await ResolveRemoteProgressionAsync(
+            targetedSource,
+            cancellationToken,
+            expectedAuthorityRuntimeId.Trim()).ConfigureAwait(false);
         var route = new AetheriaProgressionCommandRouteDocument
         {
             CommandId = request.CommandId,
@@ -467,6 +489,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         return new AetheriaProgressionVerseView
         {
             Source = source,
+            AuthorityRuntimeId = _runtimeId,
             Hangar = hangar,
             Draft = draft,
             Loadout = loadout,
@@ -502,6 +525,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
     private static AetheriaProgressionVerseView UnavailableView(AetheriaProgressionSourceDocument source) => new()
     {
         Source = source,
+        AuthorityRuntimeId = "",
         Hangar = new AetheriaHangarState
         {
             HangarId = source.SelectedVerseId,
@@ -527,32 +551,56 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         AuthorityRuntimeIds = new[] { _runtimeId }
     };
 
-    private static AetheriaProgressionVerseOption ToOption(CultMeshVerseDescriptor verse) => new()
-    {
-        VerseId = verse.VerseId,
-        DisplayName = verse.DisplayName,
-        AuthorityModel = verse.AuthorityModel.ToString(),
-        TransportVersion = verse.Compatibility.TransportVersion,
-        RulesHash = verse.Compatibility.RulesHash,
-        Description = verse.Description ?? "",
-        AuthorityRuntimeIds = verse.AuthorityRuntimeIds.ToArray(),
-        DiscoveryEndpoints = verse.DiscoveryEndpoints.ToArray()
-    };
+    private static IEnumerable<AetheriaProgressionVerseOption> ToOptions(
+        IEnumerable<CultMeshVerseDescriptor> verses) =>
+        verses.GroupBy(verse => verse.VerseId, StringComparer.Ordinal).Select(group =>
+        {
+            var ordered = group
+                .OrderBy(verse => verse.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(verse => verse.Compatibility.RulesHash, StringComparer.Ordinal)
+                .ToArray();
+            var first = ordered[0];
+            return new AetheriaProgressionVerseOption
+            {
+                VerseId = first.VerseId,
+                DisplayName = first.DisplayName,
+                AuthorityModel = first.AuthorityModel.ToString(),
+                TransportVersion = first.Compatibility.TransportVersion,
+                RulesHash = first.Compatibility.RulesHash,
+                Description = first.Description ?? "",
+                AuthorityRuntimeIds = ordered
+                    .SelectMany(verse => verse.AuthorityRuntimeIds)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(id => id, StringComparer.Ordinal)
+                    .ToArray(),
+                DiscoveryEndpoints = ordered
+                    .SelectMany(verse => verse.DiscoveryEndpoints)
+                    .Where(endpoint => !string.IsNullOrWhiteSpace(endpoint))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(endpoint => endpoint, StringComparer.Ordinal)
+                    .ToArray()
+            };
+        });
 
     private async Task<RemoteProgression> ResolveRemoteProgressionAsync(
         AetheriaProgressionSourceDocument source,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string requiredAuthorityRuntimeId = "")
     {
         if (_remote == null)
             throw new InvalidOperationException("No Odin discovery endpoint is configured for remote progression.");
         var selected = (source.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
             .FirstOrDefault(option => string.Equals(option.VerseId, source.SelectedVerseId, StringComparison.Ordinal));
-        var authorityRuntimeIds = (selected?.AuthorityRuntimeIds ?? Array.Empty<string>())
+        var advertisedAuthorityRuntimeIds = (selected?.AuthorityRuntimeIds ?? Array.Empty<string>())
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())
             .Distinct(StringComparer.Ordinal)
             .OrderBy(id => id, StringComparer.Ordinal)
             .ToArray();
+        var authorityRuntimeIds = string.IsNullOrWhiteSpace(requiredAuthorityRuntimeId)
+            ? advertisedAuthorityRuntimeIds
+            : new[] { requiredAuthorityRuntimeId.Trim() };
         if (authorityRuntimeIds.Length == 0)
             throw new InvalidOperationException(
                 $"Verse '{source.SelectedVerseId}' does not advertise an authority runtime that can be probed for progression.");

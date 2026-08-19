@@ -144,10 +144,11 @@ sidecars, and hard-coded remote endpoints cannot select progression truth.
 The public document plane accepts typed Eve command intents only; transport
 session identity is checked before an intent enters the daemon-owned command
 inbox. Generic raw document puts cannot mutate gameplay or progression. Remote
-Hangar controls stamp the Verse and source revision of their published Eve
-surface into every non-selector command. The immutable journal owns that target
-from admission onward; route resolution adds the authority runtime and Odin
-route set without consulting the dropdown again. The target Verse's own daemon
+Hangar controls stamp the Verse, exact supplying authority runtime, and source
+revision of their published Eve surface into every non-selector command. The
+immutable journal owns that target from admission onward; route resolution
+verifies the named authority and adds the Odin route set without consulting the
+dropdown or choosing a sibling authority. The target Verse's own daemon
 executes the command locally instead of recursively forwarding it. Retries do
 not follow later dropdown changes. Route grants are verified against configured Odin roots.
 This proves provider-route identity, not player identity: the Aetheria daemon

@@ -243,14 +243,16 @@ remote receipt later enters one short finality transaction with the local
 receipt and inbox deletion. Timeout leaves that request pending without
 blocking local commands, ticks, or other state writers.
 Every non-selector Hangar control and inventory-drop target carries the
-progression Verse ID and progression-source revision of the Eve surface that
-authored it. Admission preserves both fields in the immutable command journal.
+progression Verse ID, exact authority runtime ID, and progression-source
+revision of the Eve surface that authored it. Admission preserves all three
+fields in the immutable command journal.
 Classification and route creation read that envelope, never the dropdown's
 current value. A command targeting `Local` executes against the routing
 daemon's local store; a command targeting the daemon's own Verse executes
 there; only a foreign Verse enters forwarding. If the advertised target is no
 longer resolvable, the command remains pinned and fails closed rather than
-falling through to another Verse.
+falling through to another Verse or another authority advertising the same
+Verse.
 The receipt must match the immutable request and pinned Verse/authority route;
 a typed document under the expected key with another command, provider,
 surface, authority, or navigation Verse is rejected and leaves the request
@@ -261,8 +263,9 @@ the selected progression source outside the mutation transaction, then commits
 only if no newer Hangar mutation overtook that candidate. Commands mark the
 projection dirty and never launch their own surface publisher, so a delayed
 remote read cannot overwrite a newer selection. Odin discovery owns only the
-available-Verse observation. It merges that observation into the latest
-progression-source revision and cannot write or roll back `SelectedVerseId`;
+available-Verse observation. It merges observations from configured Odin
+endpoints by stable Verse identity while preserving every advertised authority
+runtime as a distinct possible supplier. It cannot write or roll back `SelectedVerseId`;
 an availability failure for an old selection likewise cannot poison the new
 selection.
 
@@ -289,9 +292,9 @@ The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and
 binds `ClientId` to the runtime identity established for that transport session;
 it cannot apply arbitrary raw document puts to Hangar, draft, run, or policy
-state. Admission durably binds command ID and payload hash to the Verse and
-progression-source revision printed on its source Eve surface; forwarding then
-pins the resolved authority runtime and Odin endpoint set. A later dropdown
+state. Admission durably binds command ID and payload hash to the Verse, exact
+authority runtime, and progression-source revision printed on its source Eve
+surface; forwarding verifies that authority and pins the Odin endpoint set. A later dropdown
 change affects only commands authored from the newly published surface. The pending command
 retries that same target until its canonical receipt arrives;
 the forwarding daemon cannot manufacture a denial after the remote authority
