@@ -13,10 +13,11 @@ The game begins in the shared Hangar and launches three modes:
   AI-policy training and build balancing.
 
 All three modes share Hangar progression, ships, equipment, and fitting rules.
-Their target CultMesh configurations are distinct. The current minimal launcher
-boots all three through one trusted-co-op command-admission policy; it does not
-yet prove Arena server authority or Starbridge Pilot correction. Those modes
-must not advertise an installed `ModePolicyId` until their live gates exist.
+Their CultMesh configurations are distinct. Arena deployment now installs its
+server-authority policy and a durable controller-to-actor operation binding;
+the daemon alone authors resulting facts while retaining controller provenance.
+The multi-controller match/score harness and Starbridge Pilot correction remain
+unproven.
 
 ## Projects
 

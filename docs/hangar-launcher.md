@@ -148,8 +148,10 @@ gameplay-state writer.
   saved template;
 - all three modes pass through the same admission primitive;
 - Arena deployment, active session, and authority policy carry the same
-  nonempty policy id; host commands pass and non-host commands fail before and
-  after durable reopen;
+  nonempty policy id; a bound controller may propose movement/combat only for
+  its actor, cross-actor and privileged operations fail, and resulting facts
+  remain daemon-authored with separate proposer provenance before and after
+  durable reopen;
 - flush/reopen preserves the Hangar revision, ship deployment state, and
   receipts;
 - a published Eve drag can remove an installed item, restore it at explicit

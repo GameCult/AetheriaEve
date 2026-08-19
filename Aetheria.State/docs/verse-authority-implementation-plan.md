@@ -54,6 +54,15 @@ sole local-daemon authority for the same shared pilot mechanics. All three modes
 must run headlessly; renderer attachment cannot become an authority input. The
 cross-mode contract is defined in `docs/game-modes-and-progression.md`.
 
+Arena therefore has two typed gates, not one ambiguous authority switch. A
+durable controller binding admits a runtime's operation only for its active
+session, assigned actor, and allowed claim kinds. The host-authoritative Verse
+policy governs fact production and finality. Accepted controller operations
+retain proposer provenance, while every resulting committed fact is authored by
+the Arena daemon. An AI policy uses the same actor-scoped movement, targeting,
+combat, and interaction operations as a human controller; the run-wide `ai`
+claim is not a controller privilege.
+
 These modes are the CultMesh authority runway: Terminus proves local authority,
 Arena proves server authority, and Starbridge proves mixed authority.
 Witness-authoritative operation is the next milestone only after the Arena and
@@ -311,6 +320,8 @@ Supported now:
 - `host-authoritative`
 - `delegated-runtime`
 - `interest-lease`
+- Arena controller bindings for session/runtime/actor/claim-scoped operation
+  admission under a separate `host-authoritative` fact policy
 
 Represented but fail closed:
 

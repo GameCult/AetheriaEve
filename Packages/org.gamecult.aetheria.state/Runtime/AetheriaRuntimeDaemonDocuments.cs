@@ -84,6 +84,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string StarbridgePlayerSeat = "gamecult.aetheria.starbridge_player_seat.v1";
         public const string VerseAuthorityPolicy = AetheriaRuntimeVerseAuthoritySchemas.Policy;
         public const string AuthorityLease = AetheriaRuntimeVerseAuthoritySchemas.Lease;
+        public const string ArenaControllerBinding = AetheriaRuntimeVerseAuthoritySchemas.ArenaControllerBinding;
         public const string SoaView = "gamecult.aetheria.daemon_soa_view.v1";
         public const string ProviderAdvertisement = "gamecult.aetheria.daemon_provider_advertisement.v1";
         public const string Health = "gamecult.aetheria.daemon_health.v1";
@@ -333,7 +334,8 @@ namespace GameCult.Aetheria.State.Verse
                     AetheriaRuntimeDaemonSchemas.StarbridgeSessionSummary,
                     AetheriaRuntimeDaemonSchemas.StarbridgePlayerSeat,
                     AetheriaRuntimeDaemonSchemas.VerseAuthorityPolicy,
-                    AetheriaRuntimeDaemonSchemas.AuthorityLease
+                    AetheriaRuntimeDaemonSchemas.AuthorityLease,
+                    AetheriaRuntimeDaemonSchemas.ArenaControllerBinding
                 },
                 CommandBoundaryIds = new[] { "aetheria.daemon.commands" }
             };
@@ -763,6 +765,9 @@ namespace GameCult.Aetheria.State.Verse
         [Key(14)]
         public string RejectionReason { get; set; } = "";
 
+        [Key(15)]
+        public string ProposedByRuntimeId { get; set; } = "";
+
         public static AetheriaRuntimeCommittedCommandFactDocument FromAppliedCommand(
             AetheriaRuntimeDaemonFrameDocument frame,
             AetheriaRuntimeDaemonCommandDocument command,
@@ -792,7 +797,7 @@ namespace GameCult.Aetheria.State.Verse
         {
             frame ??= new AetheriaRuntimeDaemonFrameDocument();
             command ??= new AetheriaRuntimeDaemonCommandDocument();
-            var sourceRuntimeId = string.IsNullOrWhiteSpace(command.AuthorRuntimeId)
+            var proposedByRuntimeId = string.IsNullOrWhiteSpace(command.AuthorRuntimeId)
                 ? command.ClientId ?? ""
                 : command.AuthorRuntimeId;
             var subjectKey = AetheriaRuntimeAuthorityRouter.ResolveSubjectKey(command);
@@ -807,7 +812,7 @@ namespace GameCult.Aetheria.State.Verse
                     string.IsNullOrWhiteSpace(command.CommandId) ? Guid.NewGuid().ToString("N") : command.CommandId,
                     string.IsNullOrWhiteSpace(outcome) ? AetheriaRuntimeCommandFactOutcomes.Applied : outcome),
                 VerseId = string.IsNullOrWhiteSpace(verseId) ? "aetheria.local" : verseId,
-                SourceRuntimeId = sourceRuntimeId,
+                SourceRuntimeId = frame.DaemonId ?? "",
                 SourceDaemonId = frame.DaemonId ?? "",
                 SessionId = frame.SessionId ?? command.SessionId ?? "",
                 SourceFrameId = frame.FrameId,
@@ -822,6 +827,7 @@ namespace GameCult.Aetheria.State.Verse
                         ? rejectionReason ?? ""
                         : "",
                 CommittedAtUtc = DateTime.UtcNow.ToString("O"),
+                ProposedByRuntimeId = proposedByRuntimeId,
                 Command = command
             };
         }

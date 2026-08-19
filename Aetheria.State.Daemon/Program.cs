@@ -542,12 +542,23 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     var starbridgeScenario = ingressState.StarbridgeScenario;
     var starbridgeSession = ingressState.StarbridgeSession;
     var authorityLeases = ingressState.AuthorityLeases;
-    var authorizedCommands = AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
-        pendingObservedCommands,
-        authorityPolicy,
-        authorityLeases,
-        options.DaemonId,
-        policyRejectedCommandIds);
+    var authorizedCommands = string.Equals(ingressState.GameMode, AetheriaGameModes.Arena, StringComparison.Ordinal)
+        ? AetheriaRuntimeArenaOperationAdmission.AuthorizedCommands(
+            pendingObservedCommands,
+            ingressState.GameMode,
+            ingressState.SessionId,
+            ingressState.RunId,
+            ingressState.ModePolicyId,
+            authorityPolicy,
+            ingressState.ArenaControllerBindings,
+            options.DaemonId,
+            policyRejectedCommandIds)
+        : AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
+            pendingObservedCommands,
+            authorityPolicy,
+            authorityLeases,
+            options.DaemonId,
+            policyRejectedCommandIds);
     var terminus = string.Equals(ingressState.GameMode, AetheriaGameSessionState.TerminusMode, StringComparison.Ordinal);
     var simulationClockCommands = authorizedCommands
         .Where(command => command.Kind == AetheriaRuntimeDaemonCommandKinds.SetSimulationRate ||
@@ -783,6 +794,7 @@ static async Task RefreshControlPlaneInputsAsync(
         .MutableDocument<AetheriaRuntimeStarbridgeSessionDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeSessionLatest)
         .ReadAsync().ConfigureAwait(false);
     ingressState.AuthorityLeases = node.Documents<AetheriaRuntimeAuthorityLeaseDocument>().ToArray();
+    ingressState.ArenaControllerBindings = node.Documents<AetheriaRuntimeArenaControllerBindingDocument>().ToArray();
     ingressState.ControlPlaneInitialized = true;
 }
 
@@ -796,6 +808,7 @@ static async Task RefreshGameSessionInputsAsync(
     ingressState.SessionId = gameSession?.SessionId ?? "";
     ingressState.RunId = gameSession?.RunId ?? "";
     ingressState.RunRecordKey = gameSession?.RunRecordKey ?? "";
+    ingressState.ModePolicyId = gameSession?.ModePolicyId ?? "";
     ingressState.RequestedSimulationRate = gameSession?.SimulationRate ?? 0;
     ingressState.SimulationRate = gameSession?.EffectiveSimulationRate ?? gameSession?.SimulationRate ?? 0;
 }
@@ -3401,6 +3414,7 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                     options.SessionId,
                     options.VerseId,
                     options.DaemonId,
+                    request.ClientId,
                     expectedRevision,
                     now).ConfigureAwait(false);
                 accepted = receipt.Accepted;
@@ -3426,6 +3440,7 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                     request.CommandId,
                     options.VerseId,
                     options.DaemonId,
+                    request.ClientId,
                     now).ConfigureAwait(false);
                 accepted = deployment != null;
                 diagnostic = accepted ? "" : "No resumable deployment exists for the selected ship and mode.";
@@ -5130,6 +5145,7 @@ internal sealed class AetheriaDaemonIngressState
     public string SessionId { get; set; } = "";
     public string RunId { get; set; } = "";
     public string RunRecordKey { get; set; } = "";
+    public string ModePolicyId { get; set; } = "";
     public double RequestedSimulationRate { get; set; }
     public double SimulationRate { get; set; }
     public double SimulationStepAccumulator { get; set; }
@@ -5139,6 +5155,7 @@ internal sealed class AetheriaDaemonIngressState
     public AetheriaRuntimeStarbridgeScenarioDocument? StarbridgeScenario { get; set; }
     public AetheriaRuntimeStarbridgeSessionDocument? StarbridgeSession { get; set; }
     public AetheriaRuntimeAuthorityLeaseDocument[] AuthorityLeases { get; set; } = [];
+    public AetheriaRuntimeArenaControllerBindingDocument[] ArenaControllerBindings { get; set; } = [];
 
     public int TakeTerminusSimulationSteps()
     {

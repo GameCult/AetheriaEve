@@ -30,7 +30,10 @@ all of them to be implemented at once.
 - `any-trusted-runtime`: a trusted runtime may submit matching operations or
   candidates. It does not gain canonical finality.
 - `host-authoritative`: only the configured host runtime is eligible to produce
-  matching candidates or operations.
+  and finalize matching canonical facts. Controller-operation admission is a
+  separate policy boundary; Arena uses durable session/runtime/actor/claim
+  bindings so authenticated humans and AIs can propose bounded operations
+  without acquiring fact authority.
 - `delegated-runtime`: one configured runtime may submit matching operations or
   candidates.
 - `owning-runtime`: the runtime assigned to the subject is eligible to produce
@@ -67,6 +70,12 @@ subject key: entity/run/zone/item key affected by the operation
 claim kind: movement, targeting, combat, inventory, economy, ai, metadata...
 author runtime: command.AuthorRuntimeId, falling back to ClientId
 ```
+
+In Arena that author identity is proposer provenance. The active controller
+binding decides whether the operation may enter simulation; the committed fact
+uses the Arena daemon as `SourceRuntimeId` and preserves the proposer separately
+as `ProposedByRuntimeId`. Rewriting a remote proposal as host-authored input is
+forbidden because it erases the admission boundary.
 
 For example:
 

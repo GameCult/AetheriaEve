@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using GameCult.Caching;
 using MessagePack;
 
@@ -12,6 +14,7 @@ namespace GameCult.Aetheria.State.Verse
     {
         public const string Policy = "gamecult.aetheria.verse_authority_policy.v1";
         public const string Lease = "gamecult.aetheria.authority_lease.v1";
+        public const string ArenaControllerBinding = "gamecult.aetheria.arena_controller_binding.v1";
     }
 
     public static class AetheriaRuntimeAuthorityModes
@@ -200,6 +203,176 @@ namespace GameCult.Aetheria.State.Verse
                 return emptyIsActive;
             return DateTimeOffset.TryParse(value, out var parsed) && now < parsed;
         }
+    }
+
+    public static class AetheriaRuntimeArenaControllerBindingStatuses
+    {
+        public const string Active = "active";
+        public const string Revoked = "revoked";
+    }
+
+    [CultDocument("gamecult.aetheria.arena_controller_binding", "gamecult.aetheria.arena_controller_binding.v1")]
+    [MessagePackObject]
+    public sealed class AetheriaRuntimeArenaControllerBindingDocument
+    {
+        [Key(0)] public string Schema { get; set; } = AetheriaRuntimeVerseAuthoritySchemas.ArenaControllerBinding;
+        [Key(1)] public string BindingId { get; set; } = "";
+        [Key(2)] public string VerseId { get; set; } = "aetheria.local";
+        [Key(3)] public string SessionId { get; set; } = "";
+        [Key(4)] public string RunId { get; set; } = "";
+        [Key(5)] public string ControllerRuntimeId { get; set; } = "";
+        [Key(6)] public string ControlledEntityKey { get; set; } = "";
+        [Key(7)] public string[] AllowedClaimKinds { get; set; } = Array.Empty<string>();
+        [Key(8)] public string Status { get; set; } = AetheriaRuntimeArenaControllerBindingStatuses.Active;
+        [Key(9)] public long Revision { get; set; }
+        [Key(10)] public string UpdatedAtUtc { get; set; } = "";
+
+        public static string RecordKey(string sessionId, string controlledEntityKey)
+        {
+            return $"arena:controller:{StableToken(sessionId)}:{StableToken(controlledEntityKey)}:v1";
+        }
+
+        public bool IsActiveFor(string sessionId, string runId)
+        {
+            return string.Equals(Status, AetheriaRuntimeArenaControllerBindingStatuses.Active, StringComparison.Ordinal) &&
+                string.Equals(SessionId, sessionId ?? "", StringComparison.Ordinal) &&
+                string.Equals(RunId, runId ?? "", StringComparison.Ordinal);
+        }
+
+        private static string StableToken(string value)
+        {
+            value ??= "";
+            var label = new string(value
+                .Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-')
+                .ToArray());
+            while (label.Contains("--", StringComparison.Ordinal))
+                label = label.Replace("--", "-", StringComparison.Ordinal);
+            label = label.Trim('-');
+            if (label.Length > 24)
+                label = label.Substring(0, 24);
+            using var sha256 = SHA256.Create();
+            var digest = sha256.ComputeHash(Encoding.UTF8.GetBytes(value));
+            var suffix = BitConverter.ToString(digest, 0, 8).Replace("-", "").ToLowerInvariant();
+            return $"{(string.IsNullOrWhiteSpace(label) ? "empty" : label)}-{suffix}";
+        }
+    }
+
+    public static class AetheriaRuntimeArenaOperationAdmission
+    {
+        public static AetheriaRuntimeAuthorityDecision Authorize(
+            AetheriaRuntimeDaemonCommandDocument command,
+            string gameMode,
+            string sessionId,
+            string runId,
+            string modePolicyId,
+            AetheriaRuntimeVerseAuthorityPolicyDocument? factPolicy,
+            IEnumerable<AetheriaRuntimeArenaControllerBindingDocument>? bindings,
+            string hostRuntimeId)
+        {
+            if (command == null)
+                return Denied("missing-command", "", "", "", "");
+
+            var subjectKey = AetheriaRuntimeAuthorityRouter.ResolveSubjectKey(command);
+            var claimKind = AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind);
+            var proposerRuntimeId = string.IsNullOrWhiteSpace(command.AuthorRuntimeId)
+                ? command.ClientId ?? ""
+                : command.AuthorRuntimeId;
+
+            if (!string.Equals(gameMode, AetheriaGameModes.Arena, StringComparison.Ordinal) ||
+                !string.Equals(modePolicyId, AetheriaModePolicies.ArenaServerAuthoritative, StringComparison.Ordinal) ||
+                factPolicy == null ||
+                !string.Equals(factPolicy.PolicyId, modePolicyId, StringComparison.Ordinal) ||
+                !string.Equals(factPolicy.DefaultMode, AetheriaRuntimeAuthorityModes.HostAuthoritative, StringComparison.Ordinal) ||
+                !string.Equals(factPolicy.HostRuntimeId, hostRuntimeId ?? "", StringComparison.Ordinal))
+            {
+                return Denied("arena-server-authority-not-active", subjectKey, claimKind, proposerRuntimeId, "");
+            }
+
+            if (!string.IsNullOrWhiteSpace(command.ClientId) &&
+                !string.IsNullOrWhiteSpace(command.AuthorRuntimeId) &&
+                !string.Equals(command.ClientId, command.AuthorRuntimeId, StringComparison.Ordinal))
+            {
+                return Denied("controller-identity-mismatch", subjectKey, claimKind, proposerRuntimeId, "");
+            }
+
+            if (string.Equals(proposerRuntimeId, hostRuntimeId ?? "", StringComparison.Ordinal))
+                return Allowed(subjectKey, claimKind, proposerRuntimeId, "arena.host-operation");
+
+            if (!string.Equals(command.SessionId ?? "", sessionId ?? "", StringComparison.Ordinal))
+                return Denied("controller-session-mismatch", subjectKey, claimKind, proposerRuntimeId, "");
+            if (string.IsNullOrWhiteSpace(command.ActorEntityKey))
+                return Denied("controller-actor-required", subjectKey, claimKind, proposerRuntimeId, "");
+
+            var binding = (bindings ?? Enumerable.Empty<AetheriaRuntimeArenaControllerBindingDocument>())
+                .Where(candidate => candidate != null && candidate.IsActiveFor(sessionId ?? "", runId ?? ""))
+                .Where(candidate => string.Equals(candidate.ControllerRuntimeId, proposerRuntimeId, StringComparison.Ordinal))
+                .Where(candidate => string.Equals(candidate.ControlledEntityKey, command.ActorEntityKey, StringComparison.Ordinal))
+                .OrderByDescending(candidate => candidate.Revision)
+                .FirstOrDefault();
+            if (binding == null)
+                return Denied("arena-controller-binding-required", subjectKey, claimKind, proposerRuntimeId, "");
+            if (!(binding.AllowedClaimKinds ?? Array.Empty<string>()).Any(candidate =>
+                    string.Equals(candidate, AetheriaRuntimeClaimKinds.Any, StringComparison.Ordinal) ||
+                    string.Equals(candidate, claimKind, StringComparison.Ordinal)))
+            {
+                return Denied("arena-controller-claim-not-allowed", subjectKey, claimKind, proposerRuntimeId, binding.BindingId);
+            }
+
+            return Allowed(subjectKey, claimKind, proposerRuntimeId, binding.BindingId);
+        }
+
+        public static IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> AuthorizedCommands(
+            IEnumerable<AetheriaRuntimeDaemonCommandDocument> commands,
+            string gameMode,
+            string sessionId,
+            string runId,
+            string modePolicyId,
+            AetheriaRuntimeVerseAuthorityPolicyDocument? factPolicy,
+            IEnumerable<AetheriaRuntimeArenaControllerBindingDocument>? bindings,
+            string hostRuntimeId,
+            ICollection<string>? rejectedCommandIds = null)
+        {
+            var accepted = new List<AetheriaRuntimeDaemonCommandDocument>();
+            foreach (var command in commands ?? Enumerable.Empty<AetheriaRuntimeDaemonCommandDocument>())
+            {
+                var decision = Authorize(
+                    command, gameMode, sessionId, runId, modePolicyId, factPolicy, bindings, hostRuntimeId);
+                if (decision.Authorized)
+                    accepted.Add(command);
+                else if (!string.IsNullOrWhiteSpace(command?.CommandId))
+                    rejectedCommandIds?.Add(command.CommandId);
+            }
+            return accepted;
+        }
+
+        private static AetheriaRuntimeAuthorityDecision Allowed(
+            string subjectKey,
+            string claimKind,
+            string proposerRuntimeId,
+            string bindingId) =>
+            new AetheriaRuntimeAuthorityDecision(
+                true,
+                "",
+                "arena-controller-operation",
+                subjectKey,
+                claimKind,
+                proposerRuntimeId,
+                bindingId);
+
+        private static AetheriaRuntimeAuthorityDecision Denied(
+            string reason,
+            string subjectKey,
+            string claimKind,
+            string proposerRuntimeId,
+            string bindingId) =>
+            new AetheriaRuntimeAuthorityDecision(
+                false,
+                reason,
+                "arena-controller-operation",
+                subjectKey,
+                claimKind,
+                proposerRuntimeId,
+                bindingId);
     }
 
     public sealed class AetheriaRuntimeAuthorityDecision

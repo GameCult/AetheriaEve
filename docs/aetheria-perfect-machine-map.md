@@ -90,9 +90,11 @@ Date: 2026-06-13
 > Provider-route authentication is implemented, but remote player/account
 > authentication and per-principal Hangar/draft keys are not. Local is the only
 > progression path currently proven end to end; the daemon refuses non-loopback
-> publication until that boundary exists. Mode-policy receipt identities also
-> remain empty until Arena server authority and Starbridge Pilot correction are
-> installed and proven; mode labels alone are not authority evidence.
+> publication until that boundary exists. Arena deployment installs
+> `aetheria.mode.arena.server.v1` plus a durable controller-to-actor operation
+> binding while the daemon remains the sole committed-fact author. Starbridge's
+> mode-policy identity remains empty until Pilot correction is installed and
+> proven; mode labels alone are not authority evidence.
 
 This is the Proprioception and Imagination pass for turning Aetheria from a
 Unity project with ancestral cache/network/UI machinery into a coherent
