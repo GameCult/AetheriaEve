@@ -144,37 +144,37 @@
       "hash": "c5a4a75c1b727499b16c2dae1895f29e2a9f72f0"
     },
     "org.gamecult.eve.surface": {
-      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#351f7021e279c3ac7a261540883d60002044c261",
+      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#351f70245bd27552ed1921861ddf36dbef32dcba",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "org.gamecult.cultlib": "1.0.45"
       },
-      "hash": "351f7021e279c3ac7a261540883d60002044c261"
+      "hash": "351f70245bd27552ed1921861ddf36dbef32dcba"
     },
     "org.gamecult.eve.unity-scene": {
-      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#781e6128ff41457c27dcd0cafb094c171dcb0736",
+      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#039c979e72e1109e220157623ef9c625f88029e0",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "org.gamecult.cultlib": "1.0.56",
         "org.gamecult.eve.plugin-fields": "0.2.3",
         "org.gamecult.eve.surface": "0.3.3",
-        "org.gamecult.eve.unity-uitoolkit": "0.1.6",
+        "org.gamecult.eve.unity-uitoolkit": "0.1.7",
         "com.unity.mathematics": "1.3.2",
         "com.unity.render-pipelines.universal": "17.4.0",
         "com.unity.modules.particlesystem": "1.0.0"
       },
-      "hash": "781e6128ff41457c27dcd0cafb094c171dcb0736"
+      "hash": "039c979e72e1109e220157623ef9c625f88029e0"
     },
     "org.gamecult.eve.unity-uitoolkit": {
-      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#781e6128ff41457c27dcd0cafb094c171dcb0736",
+      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#039c979e72e1109e220157623ef9c625f88029e0",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "org.gamecult.eve.surface": "0.3.3"
       },
-      "hash": "781e6128ff41457c27dcd0cafb094c171dcb0736"
+      "hash": "039c979e72e1109e220157623ef9c625f88029e0"
     },
     "com.unity.modules.assetbundle": {
       "version": "1.0.0",

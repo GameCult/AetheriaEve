@@ -257,6 +257,11 @@ progression-source revision and cannot write or roll back `SelectedVerseId`;
 an availability failure for an old selection likewise cannot poison the new
 selection.
 
+Inventory ghost placement is lowerer-local presentation only. Drag and click
+gestures emit the provider-advertised typed refit operation even when the local
+preview predicts rejection; only the progression authority's receipt accepts
+or denies the mutation.
+
 The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and
 binds `ClientId` to the runtime identity established for that transport session;
