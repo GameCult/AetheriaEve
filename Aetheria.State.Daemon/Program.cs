@@ -341,6 +341,7 @@ while (!stopped.Task.IsCompleted)
         latestFrame = null;
     using var worldPhysics = new AetheriaYmirWorldPhysics();
     await EnsureGameSessionAsync(node, options, startedAtUtc, latestFrame).ConfigureAwait(false);
+    await EnsureVerseAuthorityPolicyAsync(node, options).ConfigureAwait(false);
     TraceStartup("game-session");
     using var physicsPersistence = await AetheriaYmirPersistenceCoordinator.OpenAsync(
         node,
@@ -628,6 +629,13 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
             ingressState.ArenaRoster,
             options.DaemonId,
             policyRejectedCommandIds)
+        : string.Equals(ingressState.GameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
+            ? SelectStarbridgeCandidates(
+                pendingObservedCommands,
+                ingressState,
+                currentFrame?.FrameId ?? -1,
+                options.DaemonId,
+                policyRejectedCommandIds)
         : AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
             pendingObservedCommands,
             authorityPolicy,
@@ -868,6 +876,11 @@ static async Task RefreshControlPlaneInputsAsync(
     ingressState.StarbridgeSession = await node
         .MutableDocument<AetheriaRuntimeStarbridgeSessionDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeSessionLatest)
         .ReadAsync().ConfigureAwait(false);
+    ingressState.StarbridgePlayerSeats = node.Documents<AetheriaRuntimeStarbridgePlayerSeatDocument>()
+        .Where(value => value != null &&
+            string.Equals(value.SessionId, ingressState.SessionId, StringComparison.Ordinal) &&
+            string.Equals(value.RunId, ingressState.RunId, StringComparison.Ordinal))
+        .ToArray();
     ingressState.AuthorityLeases = node.Documents<AetheriaRuntimeAuthorityLeaseDocument>().ToArray();
     ingressState.ArenaRoster = node.Documents<AetheriaRuntimeArenaRosterDocument>()
         .SingleOrDefault(value => value != null &&
@@ -889,6 +902,28 @@ static async Task RefreshGameSessionInputsAsync(
     ingressState.ModePolicyId = gameSession?.ModePolicyId ?? "";
     ingressState.RequestedSimulationRate = gameSession?.SimulationRate ?? 0;
     ingressState.SimulationRate = gameSession?.EffectiveSimulationRate ?? gameSession?.SimulationRate ?? 0;
+}
+
+static IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> SelectStarbridgeCandidates(
+    IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> candidates,
+    AetheriaDaemonIngressState ingressState,
+    long currentFrameId,
+    string hostRuntimeId,
+    ICollection<string> rejectedCommandIds)
+{
+    var selection = AetheriaRuntimeStarbridgeCandidateFinality.Select(
+        candidates,
+        ingressState.GameMode,
+        ingressState.ModePolicyId,
+        ingressState.SessionId,
+        ingressState.RunId,
+        currentFrameId,
+        ingressState.AuthorityPolicy,
+        ingressState.StarbridgePlayerSeats,
+        hostRuntimeId);
+    foreach (var rejected in selection.RejectedCommandIds)
+        rejectedCommandIds.Add(rejected);
+    return selection.Selected;
 }
 
 static async Task ApplySimulationClockCommandsAsync(
@@ -4773,9 +4808,7 @@ static async Task EnsureGameSessionCoreAsync(
     var expectedMode = string.IsNullOrWhiteSpace(run.GameMode)
         ? run.IsTutorial ? AetheriaGameSessionState.AetheriaMode : AetheriaGameSessionState.TerminusMode
         : run.GameMode;
-    var expectedModePolicyId = string.Equals(expectedMode, AetheriaGameModes.Arena, StringComparison.Ordinal)
-        ? AetheriaModePolicies.ArenaServerAuthoritative
-        : existing?.ModePolicyId ?? "";
+    var expectedModePolicyId = AetheriaModePolicies.ForMode(expectedMode);
     var initialSimulationRate = options.UseTerminusFixture ? 0 : 1;
     if (existing != null &&
         string.Equals(existing.Mode, expectedMode, StringComparison.Ordinal) &&
@@ -4811,39 +4844,32 @@ static async Task EnsureVerseAuthorityPolicyAsync(
     var existing = await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy).ReadAsync().ConfigureAwait(false);
     var session = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
         .ReadAsync().ConfigureAwait(false);
-    if (string.Equals(session?.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
-    {
-        var arena = AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(
-            options.VerseId,
-            options.DaemonId);
-        if (existing != null &&
-            string.Equals(existing.Schema, AetheriaRuntimeVerseAuthoritySchemas.Policy, StringComparison.Ordinal) &&
-            string.Equals(existing.PolicyId, arena.PolicyId, StringComparison.Ordinal) &&
-            string.Equals(existing.HostRuntimeId, arena.HostRuntimeId, StringComparison.Ordinal) &&
-            string.Equals(existing.DefaultMode, AetheriaRuntimeAuthorityModes.HostAuthoritative, StringComparison.Ordinal) &&
-            string.Equals(session.ModePolicyId, arena.PolicyId, StringComparison.Ordinal))
-        {
-            return;
-        }
+    var policy = string.Equals(session?.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
+        ? AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(options.VerseId, options.DaemonId)
+        : string.Equals(session?.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
+            ? AetheriaRuntimeVerseAuthorityPolicyDocument.StarbridgeCommanderPilotVeto(options.VerseId, options.DaemonId)
+            : AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(options.VerseId, options.DaemonId);
+    var expectedModePolicyId = AetheriaModePolicies.ForMode(session?.Mode);
+    if (existing != null &&
+        string.Equals(existing.Schema, AetheriaRuntimeVerseAuthoritySchemas.Policy, StringComparison.Ordinal) &&
+        string.Equals(existing.PolicyId, policy.PolicyId, StringComparison.Ordinal) &&
+        string.Equals(existing.HostRuntimeId, policy.HostRuntimeId, StringComparison.Ordinal) &&
+        string.Equals(existing.DefaultMode, policy.DefaultMode, StringComparison.Ordinal) &&
+        (session == null || string.Equals(session.ModePolicyId, expectedModePolicyId, StringComparison.Ordinal)))
+        return;
 
-        await node.CommitAsync(async () =>
+    await node.CommitAsync(async () =>
+    {
+        await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
+            .ReplaceAsync(policy).ConfigureAwait(false);
+        if (session != null)
         {
-            session!.ModePolicyId = arena.PolicyId;
+            session.ModePolicyId = expectedModePolicyId;
             session.UpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O");
-            await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
-                .ReplaceAsync(arena).ConfigureAwait(false);
             await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
                 .ReplaceAsync(session).ConfigureAwait(false);
-        }).ConfigureAwait(false);
-        return;
-    }
-    if (existing != null && string.Equals(existing.Schema, AetheriaRuntimeVerseAuthoritySchemas.Policy, StringComparison.Ordinal))
-        return;
-
-    var policy = AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(options.VerseId, options.DaemonId);
-    await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
-        .ReplaceAsync(policy)
-        .ConfigureAwait(false);
+        }
+    }).ConfigureAwait(false);
 }
 
 static async Task<AetheriaRuntimeRunCheckpointCommit?> ReadRuntimeRunCheckpointAsync(
@@ -5708,6 +5734,7 @@ internal sealed class AetheriaDaemonIngressState
     public AetheriaRuntimeVerseAuthorityPolicyDocument? AuthorityPolicy { get; set; }
     public AetheriaRuntimeStarbridgeScenarioDocument? StarbridgeScenario { get; set; }
     public AetheriaRuntimeStarbridgeSessionDocument? StarbridgeSession { get; set; }
+    public AetheriaRuntimeStarbridgePlayerSeatDocument[] StarbridgePlayerSeats { get; set; } = [];
     public AetheriaRuntimeAuthorityLeaseDocument[] AuthorityLeases { get; set; } = [];
     public AetheriaRuntimeArenaRosterDocument? ArenaRoster { get; set; }
 

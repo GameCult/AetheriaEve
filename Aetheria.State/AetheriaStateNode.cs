@@ -178,6 +178,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
             typeof(AetheriaNameFile),
             typeof(AetheriaLoadoutTemplate),
             typeof(AetheriaRuntimeAuthorityLeaseDocument),
+            typeof(AetheriaRuntimeStarbridgePlayerSeatDocument),
             typeof(AetheriaRuntimeArenaRosterDocument),
             typeof(AetheriaRuntimeDaemonCommandDocument),
             typeof(AetheriaRuntimeCommittedCommandFactDocument),

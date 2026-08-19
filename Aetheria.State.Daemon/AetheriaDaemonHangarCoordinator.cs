@@ -224,7 +224,7 @@ public static class AetheriaDaemonHangarCoordinator
                 verseId,
                 hostRuntimeId,
                 controllerRuntimeId,
-                createArenaRoster: true,
+                createModeBindings: true,
                 now).ConfigureAwait(false);
             return receipt;
         }).ConfigureAwait(false);
@@ -260,7 +260,7 @@ public static class AetheriaDaemonHangarCoordinator
                 verseId,
                 hostRuntimeId,
                 controllerRuntimeId: "",
-                createArenaRoster: false,
+                createModeBindings: false,
                 now).ConfigureAwait(false);
             return deployment;
         }).ConfigureAwait(false);
@@ -275,18 +275,20 @@ public static class AetheriaDaemonHangarCoordinator
         string verseId,
         string hostRuntimeId,
         string controllerRuntimeId,
-        bool createArenaRoster,
+        bool createModeBindings,
         string now)
     {
         var policy = string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
             ? AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(verseId, hostRuntimeId)
-            : AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(verseId, hostRuntimeId);
-        if (string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) &&
-            !string.Equals(deployment.ModePolicyId, policy.PolicyId, StringComparison.Ordinal))
+            : string.Equals(deployment.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
+                ? AetheriaRuntimeVerseAuthorityPolicyDocument.StarbridgeCommanderPilotVeto(verseId, hostRuntimeId)
+                : AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(verseId, hostRuntimeId);
+        if (!string.Equals(deployment.ModePolicyId, AetheriaModePolicies.ForMode(deployment.Mode), StringComparison.Ordinal) ||
+            (!string.IsNullOrWhiteSpace(deployment.ModePolicyId) &&
+             !string.Equals(deployment.ModePolicyId, policy.PolicyId, StringComparison.Ordinal)))
         {
-            throw new InvalidOperationException("Arena deployment does not own the installed server-authority policy.");
+            throw new InvalidOperationException("Deployment does not own the installed mode authority policy.");
         }
-
         var settingsPointer = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey);
         var settings = await settingsPointer.ReadAsync().ConfigureAwait(false) ?? new AetheriaPlayerSettings();
         settings.ActiveRunKey = deployment.RunRecordKey;
@@ -312,7 +314,7 @@ public static class AetheriaDaemonHangarCoordinator
 
         if (string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
         {
-            if (createArenaRoster)
+            if (createModeBindings)
             {
                 await CreateArenaRosterCoreAsync(
                     node, sessionId, run, verseId, hostRuntimeId, controllerRuntimeId, now).ConfigureAwait(false);
@@ -339,7 +341,68 @@ public static class AetheriaDaemonHangarCoordinator
                     StationEntityKey = run.CurrentEntityKey,
                     Phase = "active"
                 }).ConfigureAwait(false);
+            if (createModeBindings)
+            {
+                await CreateStarbridgeSeatsCoreAsync(
+                    node, sessionId, run, hostRuntimeId, controllerRuntimeId, now).ConfigureAwait(false);
+            }
+            else
+            {
+                var matchingSeats = node.Documents<AetheriaRuntimeStarbridgePlayerSeatDocument>()
+                    .Where(value => value != null &&
+                        string.Equals(value.SessionId, sessionId, StringComparison.Ordinal) &&
+                        string.Equals(value.RunId, run.RunId, StringComparison.Ordinal))
+                    .ToArray();
+                if (!matchingSeats.Any(value =>
+                        string.Equals(value.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Commander, StringComparison.Ordinal) &&
+                        string.Equals(value.RuntimeId, hostRuntimeId, StringComparison.Ordinal)))
+                    throw new InvalidOperationException("Continued Starbridge deployment has no matching Commander seat.");
+            }
         }
+    }
+
+    private static async Task CreateStarbridgeSeatsCoreAsync(
+        AetheriaStateNode node,
+        string sessionId,
+        AetheriaRunState run,
+        string hostRuntimeId,
+        string controllerRuntimeId,
+        string now)
+    {
+        var stamp = DateTimeOffset.TryParse(now, out var parsed) ? parsed : DateTimeOffset.UtcNow;
+        var commander = AetheriaRuntimeStarbridgePlayerSeatDocument.Create(
+            $"{sessionId}:commander",
+            hostRuntimeId,
+            sessionId,
+            "hangar-deployment",
+            run.RunId,
+            AetheriaRuntimeStarbridgePlayerSeatRoles.Commander,
+            hostRuntimeId,
+            stamp);
+        commander.ClaimKinds = [AetheriaRuntimeClaimKinds.Any];
+        await node.MutableDocument<AetheriaRuntimeStarbridgePlayerSeatDocument>(
+                new CultRecordKey(AetheriaRuntimeStarbridgePlayerSeatDocument.RecordKey(commander.SeatId)))
+            .ReplaceAsync(commander).ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(controllerRuntimeId) ||
+            string.Equals(controllerRuntimeId, hostRuntimeId, StringComparison.Ordinal))
+            return;
+        var pilot = AetheriaRuntimeStarbridgePlayerSeatDocument.Create(
+            $"{sessionId}:pilot:0",
+            controllerRuntimeId,
+            sessionId,
+            "hangar-deployment",
+            run.RunId,
+            AetheriaRuntimeStarbridgePlayerSeatRoles.Pilot,
+            controllerRuntimeId,
+            stamp);
+        pilot.ControlledEntityKey = run.CurrentEntityKey;
+        pilot.ShipEntityKey = run.CurrentEntityKey;
+        pilot.ClaimKinds = [AetheriaRuntimeClaimKinds.Movement];
+        pilot.AuthorityLeaseId = $"starbridge:{sessionId}:pilot:0:movement";
+        await node.MutableDocument<AetheriaRuntimeStarbridgePlayerSeatDocument>(
+                new CultRecordKey(AetheriaRuntimeStarbridgePlayerSeatDocument.RecordKey(pilot.SeatId)))
+            .ReplaceAsync(pilot).ConfigureAwait(false);
     }
 
     public static Task<AetheriaRuntimeArenaSeat?> JoinArenaAsync(

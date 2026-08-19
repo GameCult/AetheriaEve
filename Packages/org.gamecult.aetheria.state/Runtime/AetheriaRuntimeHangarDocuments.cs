@@ -21,14 +21,17 @@ namespace GameCult.Aetheria.State.Verse
 
     public static class AetheriaModePolicies
     {
+        public const string StarbridgeCommanderPilotVeto = "aetheria.mode.starbridge.commander-pilot-veto.v1";
         public const string ArenaServerAuthoritative = "aetheria.mode.arena.server.v1";
 
         // A blank id means that mode's distinct CultMesh authority policy has not
-        // yet earned a product contract. Arena is the first installed mode policy.
+        // yet earned a product contract. Starbridge and Arena install explicit policies.
         public static string ForMode(string? mode) =>
-            string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
-                ? ArenaServerAuthoritative
-                : "";
+            string.Equals(mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
+                ? StarbridgeCommanderPilotVeto
+                : string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
+                    ? ArenaServerAuthoritative
+                    : "";
     }
 
     public static class AetheriaHangarShipStatuses

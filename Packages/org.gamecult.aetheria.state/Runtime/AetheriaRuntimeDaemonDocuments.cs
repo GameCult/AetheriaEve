@@ -840,6 +840,12 @@ namespace GameCult.Aetheria.State.Verse
         [Key(15)]
         public string ProposedByRuntimeId { get; set; } = "";
 
+        [Key(16)]
+        public string FinalityMode { get; set; } = "";
+
+        [Key(17)]
+        public string CandidateSlotKey { get; set; } = "";
+
         public static AetheriaRuntimeCommittedCommandFactDocument FromAppliedCommand(
             AetheriaRuntimeDaemonFrameDocument frame,
             AetheriaRuntimeDaemonCommandDocument command,
@@ -900,6 +906,17 @@ namespace GameCult.Aetheria.State.Verse
                         : "",
                 CommittedAtUtc = DateTime.UtcNow.ToString("O"),
                 ProposedByRuntimeId = proposedByRuntimeId,
+                FinalityMode = string.Equals(frame.GameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
+                    ? !string.Equals(outcome, AetheriaRuntimeCommandFactOutcomes.Applied, StringComparison.Ordinal)
+                        ? AetheriaRuntimeStarbridgeFinalityModes.CandidateRejected
+                        : string.Equals(proposedByRuntimeId, frame.DaemonId, StringComparison.Ordinal)
+                            ? AetheriaRuntimeStarbridgeFinalityModes.CommanderDefault
+                            : AetheriaRuntimeStarbridgeFinalityModes.PilotVeto
+                    : "",
+                CandidateSlotKey = string.Equals(frame.GameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
+                    ? AetheriaRuntimeStarbridgeCandidateFinality.CandidateSlotKey(
+                        frame.SessionId, Math.Max(command.ObservedFrameId, -1), subjectKey, claimKind)
+                    : "",
                 Command = command
             };
         }

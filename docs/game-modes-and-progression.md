@@ -400,8 +400,15 @@ until that principal boundary exists. Arena deployments carry
 `aetheria.mode.arena.server.v1`, install the matching host-finality policy, and
 create one authoritative session roster in the same transaction. The roster,
 not Continue or a client-supplied actor id, owns controller assignment.
-Starbridge still leaves `ModePolicyId` empty until its Pilot-correction protocol
-is installed.
+Starbridge deployments now carry
+`aetheria.mode.starbridge.commander-pilot-veto.v1`. Launch installs that policy,
+one durable Commander seat, and an optional Pilot seat bound to the deployed
+ship. The first live correction slice is deliberately narrow: for the exact
+current frame, a bound Pilot may submit `SetMoveVector` for that ship; when the
+Commander has a candidate for the same movement slot, the validated Pilot
+candidate replaces it before the daemon applies the operation and authors the
+canonical fact. Unbound, wrong-subject, and late candidates fail closed. The
+fact remains daemon-authored and records the Pilot as proposer.
 Settlement, currencies/unlocks, richer fitting
 interaction, complete Starbridge admission, and the Arena scored match harness
 still need to enter
@@ -415,12 +422,15 @@ observation/operation replay witness. Its minimal daemon session now preserves
   per-seat Eve pilot surfaces and visibility-filtered observation bodies, roster-backed
   snapshot/subscription admission, roster-derived command actors, and the
   operation/fact split in managed verification, but does
-  not yet prove a complete PvP or balance run through a real transport. Starbridge's
-minimal session bootstrap likewise does not by itself prove pilot-veto
-convergence.
+  not yet prove a complete PvP or balance run through a real transport.
+Starbridge does not yet independently simulate or transport targeting, combat,
+nearest-environment, or engagement facts, nor prove rollback/replay across a
+networked Pilot daemon. The movement slice proves policy/session durability,
+slot selection, Pilot mismatch priority, daemon-only fact authorship, and late
+candidate rejection; it is not the completed mixed-authority protocol.
 
-The next state-architecture cut is exactly-once Settlement plus Starbridge
-admission and the Arena match/score/replay family. Until those cuts land, documentation
+The next state-architecture cut is exactly-once Settlement plus the remaining
+Starbridge candidate transport/replay domains and the Arena match/score/replay family. Until those cuts land, documentation
 and verification must not describe the local starter Hangar as completed
 cross-mode progression, or a generic simulation smoke as Arena authority proof.
 

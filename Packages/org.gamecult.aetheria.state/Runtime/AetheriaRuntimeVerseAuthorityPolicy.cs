@@ -149,6 +149,45 @@ namespace GameCult.Aetheria.State.Verse
                 }
             };
         }
+
+        public static AetheriaRuntimeVerseAuthorityPolicyDocument StarbridgeCommanderPilotVeto(
+            string verseId,
+            string hostRuntimeId)
+        {
+            var host = string.IsNullOrWhiteSpace(hostRuntimeId) ? "aetheria-daemon" : hostRuntimeId;
+            return new AetheriaRuntimeVerseAuthorityPolicyDocument
+            {
+                VerseId = string.IsNullOrWhiteSpace(verseId) ? "aetheria.local" : verseId,
+                PolicyId = AetheriaModePolicies.StarbridgeCommanderPilotVeto,
+                HostRuntimeId = host,
+                DefaultMode = AetheriaRuntimeAuthorityModes.HostAuthoritative,
+                DeploymentMode = AetheriaRuntimeVerseDeploymentModes.DistributedTrusted,
+                UpdatedAtUtc = DateTime.UtcNow.ToString("O"),
+                RuntimeRoles = new[]
+                {
+                    new AetheriaRuntimeAuthorityRuntimeRole
+                    {
+                        RuntimeId = host,
+                        Roles = new[]
+                        {
+                            AetheriaRuntimeVerseRuntimeRoles.DedicatedDaemon,
+                            AetheriaRuntimeVerseRuntimeRoles.SimulationHost,
+                            AetheriaRuntimeVerseRuntimeRoles.StarbridgeCommander
+                        }
+                    }
+                },
+                Rules = new[]
+                {
+                    new AetheriaRuntimeAuthorityRule
+                    {
+                        RuleId = "starbridge.commander.default",
+                        SubjectPrefix = "*",
+                        ClaimKinds = new[] { AetheriaRuntimeClaimKinds.Any },
+                        Mode = AetheriaRuntimeAuthorityModes.HostAuthoritative
+                    }
+                }
+            };
+        }
     }
 
     [MessagePackObject]

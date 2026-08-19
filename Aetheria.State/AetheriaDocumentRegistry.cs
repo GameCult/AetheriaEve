@@ -70,6 +70,7 @@ public static class AetheriaDocumentRegistry
         typeof(AetheriaRuntimeStarbridgeScenarioDocument),
         typeof(AetheriaRuntimeStarbridgeSessionDocument),
         typeof(AetheriaRuntimeStarbridgeSessionSummaryDocument),
+        typeof(AetheriaRuntimeStarbridgePlayerSeatDocument),
         typeof(EveFieldsSplatsDocument),
         typeof(EveInputCapabilityDocument),
         typeof(AetheriaRuntimeDaemonSoaViewDocument),
