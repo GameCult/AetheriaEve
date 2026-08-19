@@ -140,7 +140,10 @@ The authority policy differs without changing the document model:
   and reconnect. Those paths consume one resolved exposure context:
   `Inactive`, `ActiveValid`, or `ActiveInvalid`. Missing or stale roster/frame
   state in an active Arena is `ActiveInvalid` and exports nothing; it is never
-  treated as ordinary non-Arena play. Arena realtime broadcast is disabled
+  treated as ordinary non-Arena play. The daemon reconciles live subscriptions
+  when that authority generation changes. CultMesh diffs each peer's delivered
+  projection, sends removals for state that is no longer visible, and withdraws
+  its hot-body demand; dropping future updates alone is not revocation. Arena realtime broadcast is disabled
   until the QUIC path can identify and filter each receiving controller; local
   headless and rendered clients consume the same authenticated document/body
   boundary meanwhile.

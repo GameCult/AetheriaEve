@@ -497,10 +497,19 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     });
                 var validExposure = AetheriaArenaExposurePolicy.Resolve(
                     arenaSession, arenaRoster, matchingExposureFrame);
+                var revisedRoster = MessagePackSerializer.Deserialize<AetheriaRuntimeArenaRosterDocument>(
+                    MessagePackSerializer.Serialize(arenaRoster));
+                revisedRoster.Revision++;
+                var revisedExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, revisedRoster, matchingExposureFrame);
                 Require(missingRosterExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
                         missingFrameExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
                         staleFrameExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
                         validExposure.Kind == AetheriaArenaExposureKind.ActiveValid &&
+                        AetheriaArenaExposurePolicy.Generation(missingRosterExposure) !=
+                            AetheriaArenaExposurePolicy.Generation(validExposure) &&
+                        AetheriaArenaExposurePolicy.Generation(validExposure) !=
+                            AetheriaArenaExposurePolicy.Generation(revisedExposure) &&
                         !AetheriaArenaExposurePolicy.CanReadRecord(
                             node,
                             "pilot-runtime",

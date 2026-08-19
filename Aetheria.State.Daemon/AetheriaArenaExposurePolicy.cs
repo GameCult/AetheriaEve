@@ -51,6 +51,25 @@ internal sealed class AetheriaArenaExposureContext
 /// </summary>
 internal static class AetheriaArenaExposurePolicy
 {
+    public static string Generation(AetheriaArenaExposureContext context) =>
+        context.Kind switch
+        {
+            AetheriaArenaExposureKind.Inactive => "inactive",
+            AetheriaArenaExposureKind.ActiveInvalid => string.Join(
+                "\u001f",
+                "invalid",
+                context.Session?.SessionId ?? "",
+                context.Session?.RunId ?? "",
+                context.Session?.RunRecordKey ?? ""),
+            _ => string.Join(
+                "\u001f",
+                "active",
+                context.Session!.SessionId,
+                context.Session.RunId,
+                context.Session.RunRecordKey,
+                context.Roster!.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture))
+        };
+
     public static AetheriaArenaExposureContext Resolve(
         AetheriaStateNode node,
         AetheriaRuntimeDaemonFrameDocument? frame)

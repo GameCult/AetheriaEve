@@ -105,6 +105,9 @@ Date: 2026-06-13
 > admission. `Inactive` is ordinary non-Arena play, `ActiveValid` requires an
 > exact session/roster/frame generation, and `ActiveInvalid` exports nothing.
 > Missing Arena truth can never widen authority by masquerading as inactivity.
+> CultMesh keeps a per-subscription delivered-record ledger. An exposure-generation
+> change reconciles that ledger, emits peer-specific removals and projection
+> updates, and withdraws body demand before the next hot-body publication.
 > Arena deployment installs
 > `aetheria.mode.arena.server.v1` plus one daemon-owned session roster. Launch
 > assigns a seat once, Continue cannot reassign it, and the Arena lobby command

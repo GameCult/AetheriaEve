@@ -184,7 +184,11 @@ gameplay-state writer.
   resolver distinguishes non-Arena play, a complete active Arena generation,
   and an active Arena whose session, roster, or frame disagree. That last state
   fails closed for records, subscriptions, bodies, and provider projection; it
-  can never inherit the non-Arena export boundary. Arena does not
+  can never inherit the non-Arena export boundary. The subscription server owns
+  a delivered-record ledger for each peer. An Arena exposure-generation change
+  reconciles that ledger, emits tombstones for records that lost visibility,
+  updates changed per-peer projections, and withdraws body demand before the
+  next hot-body publication. Arena does not
   use global realtime broadcast until that transport has per-peer identity.
   Headless and graphical controllers therefore observe the same bounded world
   around the ship they can command. Resulting facts

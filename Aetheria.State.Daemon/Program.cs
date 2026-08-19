@@ -160,6 +160,17 @@ using var clientSubscriptions = new CultNetDatabaseSubscriptionServer(
         return ProjectProviderAdvertisementRecord(
             node, options, AetheriaArenaExposurePolicy.Resolve(node, latestFrame), runtimeId, record);
     });
+var reconciledArenaExposureGeneration = AetheriaArenaExposurePolicy.Generation(
+    AetheriaArenaExposurePolicy.Resolve(node, latestFrame));
+void ReconcileArenaExposure()
+{
+    var generation = AetheriaArenaExposurePolicy.Generation(
+        AetheriaArenaExposurePolicy.Resolve(node, latestFrame));
+    if (string.Equals(generation, reconciledArenaExposureGeneration, StringComparison.Ordinal))
+        return;
+    clientSubscriptions.Reconcile();
+    reconciledArenaExposureGeneration = generation;
+}
 var playableWorldDemand = new AetheriaPlayableWorldDemandState();
 clientSubscriptions.DemandChanged += playableWorldDemand.Observe;
 var managedViewportDemand = new AetheriaManagedViewportDemandState();
@@ -273,6 +284,7 @@ while (!stopped.Task.IsCompleted)
                 hangarProjection,
                 progressionForwardingShutdown.Token).ConfigureAwait(false);
             await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
+            ReconcileArenaExposure();
             if (options.OdinDiscoveryEndpoints.Count > 0 && DateTimeOffset.UtcNow >= nextProgressionRefreshUtc)
             {
                 hangarProjection.RequestRefresh();
@@ -341,6 +353,7 @@ while (!stopped.Task.IsCompleted)
             physicsPersistence);
         initialPublication = initialPrepared.Publication;
     }
+    ReconcileArenaExposure();
     if (!publishRestoredFrame)
     {
         await node.CommitAsync(() => PublishClientGameplayDocumentsAsync(
@@ -408,6 +421,7 @@ while (!stopped.Task.IsCompleted)
             progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token).ConfigureAwait(false);
         ThrowIfClientHostFaulted(cultMeshClientHost);
         latestFrame = tick.Frame;
+        ReconcileArenaExposure();
         await PublishHotEntityStateAsync(
             node, soaPublisher, hotState, tick.Frame, ingressState.Catalog, cultMeshClientHost,
             AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest,
