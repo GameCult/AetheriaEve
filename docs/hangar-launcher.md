@@ -153,8 +153,11 @@ gameplay-state writer.
   human or headless AI the next open actor. Admission uses exact operation kinds,
   so target/global administration cannot hide behind a coarse combat claim.
   Launch/join navigation points each controller at a roster-specific Eve pilot
-  surface. The daemon derives the actor from authenticated runtime plus roster
-  at command ingress, ignoring caller-supplied actor overrides. Resulting facts
+  surface. The roster retains a stable entity identity rather than a zone/index
+  key; projection and ingress resolve its current key from the canonical run,
+  failing closed on zero or multiple matches. The daemon therefore derives the
+  actor from authenticated runtime plus roster at command ingress, ignoring
+  caller-supplied actor overrides even after zone transfer or restart. Resulting facts
   remain daemon-authored with separate proposer provenance;
 - flush/reopen preserves the Hangar revision, ship deployment state, and
   receipts;

@@ -110,15 +110,18 @@ The authority policy differs without changing the document model:
 - **Arena:** the authoritative server decides all gameplay state; humans and
   AIs submit operations and consume observations. The current minimal Arena
   bootstrap installs `aetheria.mode.arena.server.v1` atomically with deployment
-  activation. One daemon-owned roster assigns exact actors and operation kinds
+  activation. One daemon-owned roster assigns stable entity identities and exact operation kinds
   to controller runtimes. Launch may fill the first seat once; Continue cannot
   rewrite it. Additional humans and headless AIs request the next open seat
   through the same Hangar Eve command, without choosing their own actor. Each
   active seat receives a daemon-authored Eve pilot surface whose player,
   camera, and controllable entity are derived from that roster assignment.
-  At ingress the daemon derives the command actor again from the authenticated
-  runtime and current roster, so a stale/global surface or forged entity payload
-  cannot choose another seat. Those operations remain proposals: the
+  At projection and ingress the daemon resolves that stable identity against
+  the canonical run to obtain the entity's current zone/index key. Movement,
+  zone transfer, compaction, and restart therefore cannot transfer a seat when
+  another entity inherits its old positional key. A missing or duplicate stable
+  identity fails closed. A stale/global surface or forged entity payload cannot
+  choose another seat. Those operations remain proposals: the
   daemon validates and simulates them, authors the committed fact, and records
   the proposing runtime separately. Controller identity is never rewritten as
   host identity, and no controller may author canonical facts directly.
@@ -361,8 +364,9 @@ Terminus proof profiles remain verification-only inputs.
 
 Arena still lacks its complete match/score document family and public
 observation/operation replay witness. Its minimal daemon session now preserves
-  multiple controller seats, per-seat Eve pilot projections, roster-derived
-  command actors, and the operation/fact split in managed verification, but does
+  multiple controller seats, stable entity identity across positional reindex,
+  per-seat Eve pilot projections, roster-derived command actors, and the
+  operation/fact split in managed verification, but does
   not yet prove a complete PvP or balance run through a real transport. Starbridge's
 minimal session bootstrap likewise does not by itself prove pilot-veto
 convergence.

@@ -302,6 +302,27 @@ namespace GameCult.Aetheria.State.Verse
             return EntityRecordKey(RunId, zoneIndex, entityIndex);
         }
 
+        public bool TryResolveEntityId(string entityId, out string entityKey)
+        {
+            entityKey = "";
+            if (string.IsNullOrWhiteSpace(entityId))
+                return false;
+
+            var matches = (Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
+                .Where(zone => zone != null)
+                .SelectMany(zone => (zone.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
+                    .Where(entity => entity != null && entity.IsActive &&
+                        string.Equals(entity.EntityId, entityId, StringComparison.Ordinal))
+                    .Select(entity => EntityRecordKey(zone.ZoneIndex, entity.EntityIndex)))
+                .Take(2)
+                .ToArray();
+            if (matches.Length != 1)
+                return false;
+
+            entityKey = matches[0];
+            return true;
+        }
+
         public static string EntityRecordKey(string runId, int zoneIndex, int entityIndex)
         {
             return $"global:aetheria.run_state.{(string.IsNullOrWhiteSpace(runId) ? "local" : runId)}.zone.{zoneIndex}.entity.{entityIndex}.v1";

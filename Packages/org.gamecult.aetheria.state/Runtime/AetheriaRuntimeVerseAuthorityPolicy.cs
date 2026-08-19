@@ -14,7 +14,7 @@ namespace GameCult.Aetheria.State.Verse
     {
         public const string Policy = "gamecult.aetheria.verse_authority_policy.v1";
         public const string Lease = "gamecult.aetheria.authority_lease.v1";
-        public const string ArenaRoster = "gamecult.aetheria.arena_roster.v1";
+        public const string ArenaRoster = "gamecult.aetheria.arena_roster.v2";
     }
 
     public static class AetheriaRuntimeAuthorityModes
@@ -216,18 +216,18 @@ namespace GameCult.Aetheria.State.Verse
     public sealed class AetheriaRuntimeArenaSeat
     {
         [Key(0)] public string SeatId { get; set; } = "";
-        [Key(1)] public string ControlledEntityKey { get; set; } = "";
+        [Key(1)] public string ControlledEntityId { get; set; } = "";
         [Key(2)] public string ControllerRuntimeId { get; set; } = "";
         [Key(3)] public AetheriaRuntimeDaemonCommandKinds[] AllowedOperationKinds { get; set; } = Array.Empty<AetheriaRuntimeDaemonCommandKinds>();
         [Key(4)] public string Status { get; set; } = AetheriaRuntimeArenaSeatStatuses.Open;
 
-        public bool IsActiveFor(string runtimeId, string actorEntityKey) =>
+        public bool IsActiveFor(string runtimeId, string controlledEntityId) =>
             string.Equals(Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
             string.Equals(ControllerRuntimeId, runtimeId ?? "", StringComparison.Ordinal) &&
-            string.Equals(ControlledEntityKey, actorEntityKey ?? "", StringComparison.Ordinal);
+            string.Equals(ControlledEntityId, controlledEntityId ?? "", StringComparison.Ordinal);
     }
 
-    [CultDocument("gamecult.aetheria.arena_roster", "gamecult.aetheria.arena_roster.v1")]
+    [CultDocument("gamecult.aetheria.arena_roster", "gamecult.aetheria.arena_roster.v2")]
     [MessagePackObject]
     public sealed class AetheriaRuntimeArenaRosterDocument
     {
@@ -242,7 +242,7 @@ namespace GameCult.Aetheria.State.Verse
 
         public static string RecordKey(string sessionId)
         {
-            return $"arena:roster:{StableToken(sessionId)}:v1";
+            return $"arena:roster:{StableToken(sessionId)}:v2";
         }
 
         public bool IsActiveFor(string sessionId, string runId)
@@ -276,6 +276,7 @@ namespace GameCult.Aetheria.State.Verse
             string surfaceId,
             string sessionId,
             string runId,
+            AetheriaRuntimeRunCheckpointCommit? run,
             AetheriaRuntimeArenaRosterDocument? roster,
             string hostRuntimeId)
         {
@@ -301,12 +302,14 @@ namespace GameCult.Aetheria.State.Verse
                 return Denied("arena-controller-seat-required", "", AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, "");
 
             var seat = seats[0];
+            if (run == null || !run.TryResolveEntityId(seat.ControlledEntityId, out var controlledEntityKey))
+                return Denied("arena-controller-entity-required", "", AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, seat.SeatId);
             var expectedSurfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(proposerRuntimeId);
             if (!string.Equals(surfaceId ?? "", expectedSurfaceId, StringComparison.Ordinal))
-                return Denied("arena-controller-surface-required", seat.ControlledEntityKey, AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, seat.SeatId);
+                return Denied("arena-controller-surface-required", controlledEntityKey, AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, seat.SeatId);
 
             command.SessionId = sessionId ?? "";
-            command.ActorEntityKey = seat.ControlledEntityKey;
+            command.ActorEntityKey = controlledEntityKey;
             return Allowed(command.ActorEntityKey, AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind), proposerRuntimeId, seat.SeatId);
         }
 
@@ -317,6 +320,7 @@ namespace GameCult.Aetheria.State.Verse
             string runId,
             string modePolicyId,
             AetheriaRuntimeVerseAuthorityPolicyDocument? factPolicy,
+            AetheriaRuntimeRunCheckpointCommit? run,
             AetheriaRuntimeArenaRosterDocument? roster,
             string hostRuntimeId)
         {
@@ -356,11 +360,16 @@ namespace GameCult.Aetheria.State.Verse
 
             if (roster == null || !roster.IsActiveFor(sessionId ?? "", runId ?? ""))
                 return Denied("arena-roster-required", subjectKey, claimKind, proposerRuntimeId, "");
-            var seat = (roster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
-                .SingleOrDefault(candidate => candidate != null &&
-                    candidate.IsActiveFor(proposerRuntimeId, command.ActorEntityKey));
-            if (seat == null)
+            var seats = (roster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
+                .Where(candidate => candidate != null &&
+                    string.Equals(candidate.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
+                    string.Equals(candidate.ControllerRuntimeId, proposerRuntimeId, StringComparison.Ordinal))
+                .ToArray();
+            if (seats.Length != 1 || run == null ||
+                !run.TryResolveEntityId(seats[0].ControlledEntityId, out var controlledEntityKey) ||
+                !string.Equals(controlledEntityKey, command.ActorEntityKey, StringComparison.Ordinal))
                 return Denied("arena-controller-seat-required", subjectKey, claimKind, proposerRuntimeId, "");
+            var seat = seats[0];
             if (!(seat.AllowedOperationKinds ?? Array.Empty<AetheriaRuntimeDaemonCommandKinds>()).Contains(command.Kind))
             {
                 return Denied("arena-controller-operation-not-allowed", subjectKey, claimKind, proposerRuntimeId, seat.SeatId);
@@ -376,6 +385,7 @@ namespace GameCult.Aetheria.State.Verse
             string runId,
             string modePolicyId,
             AetheriaRuntimeVerseAuthorityPolicyDocument? factPolicy,
+            AetheriaRuntimeRunCheckpointCommit? run,
             AetheriaRuntimeArenaRosterDocument? roster,
             string hostRuntimeId,
             ICollection<string>? rejectedCommandIds = null)
@@ -384,7 +394,7 @@ namespace GameCult.Aetheria.State.Verse
             foreach (var command in commands ?? Enumerable.Empty<AetheriaRuntimeDaemonCommandDocument>())
             {
                 var decision = Authorize(
-                    command, gameMode, sessionId, runId, modePolicyId, factPolicy, roster, hostRuntimeId);
+                    command, gameMode, sessionId, runId, modePolicyId, factPolicy, run, roster, hostRuntimeId);
                 if (decision.Authorized)
                     accepted.Add(command);
                 else if (!string.IsNullOrWhiteSpace(command?.CommandId))

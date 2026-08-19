@@ -544,6 +544,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
             ingressState.RunId,
             ingressState.ModePolicyId,
             authorityPolicy,
+            run,
             ingressState.ArenaRoster,
             options.DaemonId,
             policyRejectedCommandIds)
@@ -2361,7 +2362,7 @@ static async Task PublishClientGameplayDocumentsAsync(
         : null;
     if (publishTopology)
         await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement)
-            .ReplaceAsync(BuildCoreProviderAdvertisement(options, result.Frame.PublishedAtUtc, arenaRoster))
+            .ReplaceAsync(BuildCoreProviderAdvertisement(options, result.Frame.PublishedAtUtc, arenaRoster, result.Frame.Run))
             .ConfigureAwait(false);
     TraceClientDocumentPhase("provider-advertisements");
     if (publishTopology && result.AssetManifest != null)
@@ -2417,6 +2418,8 @@ static async Task PublishClientGameplayDocumentsAsync(
                          string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
                          !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId)))
             {
+                if (!result.Frame.Run.TryResolveEntityId(seat.ControlledEntityId, out var controlledEntityKey))
+                    continue;
                 var seatSurfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId);
                 var seatSurface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
                     result.Frame,
@@ -2424,7 +2427,7 @@ static async Task PublishClientGameplayDocumentsAsync(
                     result.CommandBoundary ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId),
                     activeMainMenuSurfaceId,
                     inputCatalog,
-                    seat.ControlledEntityKey,
+                    controlledEntityKey,
                     seatSurfaceId);
                 await node.MutableDocument<EveSurfaceDocument>(
                         AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId))
@@ -2489,7 +2492,8 @@ static async Task PublishDaemonSectorMapSurfaceAsync(
 static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
     AetheriaDaemonHostOptions options,
     string updatedAtUtc,
-    AetheriaRuntimeArenaRosterDocument? arenaRoster = null)
+    AetheriaRuntimeArenaRosterDocument? arenaRoster = null,
+    AetheriaRuntimeRunCheckpointCommit? arenaRun = null)
 {
     var interaction = new EveWorldInteractionAdvertisement(
         "provider-authored-world-surface",
@@ -2549,7 +2553,8 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
     surfaces.AddRange((arenaRoster?.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
         .Where(seat => seat != null &&
             string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
-            !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId))
+            !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId) &&
+            arenaRun?.TryResolveEntityId(seat.ControlledEntityId, out _) == true)
         .Select(seat => new EveAdvertisedSurface(
             AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId),
             EveSurfaceDocument.SchemaId,
@@ -3298,11 +3303,16 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
                 var roster = await node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
                         new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(activeSession!.SessionId)))
                     .ReadAsync().ConfigureAwait(false);
+                var activeRun = FrameBelongsToSession(currentFrame, activeSession)
+                    ? currentFrame!.Run
+                    : await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, activeSession.RunRecordKey)
+                        .ConfigureAwait(false);
                 var binding = AetheriaRuntimeArenaOperationAdmission.BindAuthenticatedSurfaceActor(
                     command,
                     request.SurfaceId,
                     activeSession.SessionId,
                     activeSession.RunId,
+                    activeRun,
                     roster,
                     options.DaemonId);
                 if (!binding.Authorized)
@@ -3639,7 +3649,8 @@ static AetheriaRuntimeArenaSeat? FindArenaSeat(
     var roster = node.Cache.Get<AetheriaRuntimeArenaRosterDocument>(
         new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(sessionId)));
     return roster?.Seats?.SingleOrDefault(seat => seat != null &&
-        seat.IsActiveFor(controllerRuntimeId, seat.ControlledEntityKey));
+        string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
+        string.Equals(seat.ControllerRuntimeId, controllerRuntimeId, StringComparison.Ordinal));
 }
 
 static async Task<string> PublishArenaSeatSurfaceAsync(
@@ -3674,13 +3685,15 @@ static async Task<string> PublishArenaSeatSurfaceAsync(
     var boundary = await node.MutableDocument<AetheriaRuntimeDaemonCommandBoundaryDocument>(AetheriaRuntimeVerseRecordKeys.DaemonCommandBoundary)
         .ReadAsync().ConfigureAwait(false) ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId);
     var surfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId);
+    if (!frame.Run.TryResolveEntityId(seat.ControlledEntityId, out var controlledEntityKey))
+        throw new InvalidOperationException("Arena seat projection cannot resolve its stable controlled entity.");
     var surface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
         frame,
         health,
         boundary,
         "",
         node.RuntimeCatalog().Latest(),
-        seat.ControlledEntityKey,
+        controlledEntityKey,
         surfaceId);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId))
         .ReplaceAsync(surface).ConfigureAwait(false);
@@ -3689,7 +3702,7 @@ static async Task<string> PublishArenaSeatSurfaceAsync(
         .ReadAsync().ConfigureAwait(false)
         ?? throw new InvalidOperationException("Arena seat projection requires the daemon-owned roster.");
     await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement)
-        .ReplaceAsync(BuildCoreProviderAdvertisement(options, frame.PublishedAtUtc, roster)).ConfigureAwait(false);
+        .ReplaceAsync(BuildCoreProviderAdvertisement(options, frame.PublishedAtUtc, roster, frame.Run)).ConfigureAwait(false);
     return surfaceId;
 }
 

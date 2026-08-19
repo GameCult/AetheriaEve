@@ -447,7 +447,7 @@ public static class AetheriaDaemonHangarCoordinator
         var seats = ordered.Select((entityKey, index) => new AetheriaRuntimeArenaSeat
         {
             SeatId = $"{key}:seat:{index}",
-            ControlledEntityKey = entityKey,
+            ControlledEntityId = entityKey,
             ControllerRuntimeId = index == 0 && !string.IsNullOrWhiteSpace(controllerRuntimeId) &&
                 !string.Equals(controllerRuntimeId, hostRuntimeId, StringComparison.Ordinal)
                     ? controllerRuntimeId
@@ -475,7 +475,7 @@ public static class AetheriaDaemonHangarCoordinator
     private static AetheriaRuntimeArenaSeat CloneSeat(AetheriaRuntimeArenaSeat seat) => new()
     {
         SeatId = seat.SeatId,
-        ControlledEntityKey = seat.ControlledEntityKey,
+        ControlledEntityId = seat.ControlledEntityId,
         ControllerRuntimeId = seat.ControllerRuntimeId,
         AllowedOperationKinds = (seat.AllowedOperationKinds ?? Array.Empty<AetheriaRuntimeDaemonCommandKinds>()).ToArray(),
         Status = seat.Status
