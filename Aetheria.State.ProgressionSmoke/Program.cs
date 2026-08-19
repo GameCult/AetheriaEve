@@ -207,6 +207,42 @@ try
             TimeSpan.FromSeconds(10));
         Require(remoteSurface.Surface.Root.Props["progressionAuthorityRuntimeId"] == remoteTarget.AuthorityRuntimeId,
             "The Hangar projection must identify the exact authority runtime that supplied the selected Verse view.");
+        var remoteBDraftBeforeForgery = await remoteBClient.ReadAsync<AetheriaHangarDraftState>(
+            remoteBTarget,
+            AetheriaStateNode.HangarDraftKey.ToString());
+        const string forgedAuthorityCommandId = "progression-smoke-forged-authority";
+        var forgedAuthorityRequest = new EveSurfaceCommandRequest(
+            remoteSurface.ProviderId,
+            remoteSurface.Surface.Id,
+            CultMesh.OperationInvocation(
+                remoteSurface.Commands.Single(template => template.Command == AetheriaRuntimeHangarCommands.SelectArena).Operation,
+                idempotencyKey: forgedAuthorityCommandId),
+            CultMesh.OperationPayload(
+                (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, remoteVerse),
+                (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision,
+                    remoteSurface.Surface.Root.Props["progressionSourceRevision"]),
+                (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId, remoteBTarget.AuthorityRuntimeId),
+                (AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion,
+                    remoteSurface.Version.ToString(System.Globalization.CultureInfo.InvariantCulture))),
+            DateTimeOffset.UtcNow,
+            "progression-verse-smoke");
+        await client.SubmitDocumentAsync(
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + forgedAuthorityCommandId,
+            forgedAuthorityRequest,
+            "progression-verse-smoke",
+            "headless-smoke");
+        await Task.Delay(500);
+        await RequireMissingAsync<AetheriaProgressionCommandRouteDocument>(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(forgedAuthorityCommandId).ToString());
+        var remoteBDraftAfterForgery = await remoteBClient.ReadAsync<AetheriaHangarDraftState>(
+            remoteBTarget,
+            AetheriaStateNode.HangarDraftKey.ToString());
+        Require(remoteBDraftAfterForgery.Revision == remoteBDraftBeforeForgery.Revision &&
+                remoteBDraftAfterForgery.SelectedMode == remoteBDraftBeforeForgery.SelectedMode,
+            "A client-authored authority hint must not redirect a provider-bound Hangar command into a sibling Verse authority.");
         var loadoutGrid = Find(remoteSurface.Surface.Root, "aetheria.hangar.loadout.grid");
         var inventoryGrid = Find(remoteSurface.Surface.Root, "aetheria.hangar.inventory.grid");
         var remove = loadoutGrid.Children.First();
@@ -241,6 +277,14 @@ try
             remoteBTarget,
             AetheriaStateNode.HangarKey.ToString());
         var removeReceiptTask = SubmitRequestAsync(client, localTarget, removeRequest!);
+        await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(removeRequest.CommandId).ToString(),
+            (AetheriaHangarCommandEnvelopeDocument envelope) =>
+                envelope.ProgressionVerseId == remoteVerse &&
+                envelope.ProgressionAuthorityRuntimeId == remoteTarget.AuthorityRuntimeId,
+            TimeSpan.FromSeconds(5));
         var localFinality = Stopwatch.StartNew();
         var selectLocalReceipt = await SubmitAsync(
             client,
@@ -669,7 +713,27 @@ static CultMeshOperationPayload TargetedPayload(EveSurfaceDocument surface)
         (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision,
             root.Props.TryGetValue("progressionSourceRevision", out var revision) ? revision : "0"),
         (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId,
-            root.Props.TryGetValue("progressionAuthorityRuntimeId", out var authorityRuntimeId) ? authorityRuntimeId : ""));
+            root.Props.TryGetValue("progressionAuthorityRuntimeId", out var authorityRuntimeId) ? authorityRuntimeId : ""),
+        (AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion,
+            surface.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+}
+
+static async Task RequireMissingAsync<T>(
+    CultMeshClient client,
+    CultMeshSessionTarget target,
+    string recordKey)
+    where T : class
+{
+    try
+    {
+        await client.ReadAsync<T>(target, recordKey, TimeSpan.FromMilliseconds(500));
+    }
+    catch (Exception error) when (error is KeyNotFoundException || error is InvalidOperationException ||
+        error is TimeoutException || error is CultMeshSessionException)
+    {
+        return;
+    }
+    throw new InvalidOperationException($"Unexpected record '{recordKey}' was published.");
 }
 
 static async Task<EveCommandReceiptDocument> SubmitRequestAsync(

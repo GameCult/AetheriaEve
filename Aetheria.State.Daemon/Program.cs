@@ -1546,7 +1546,9 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                 node,
                 new CultRecordKey(expectedRecordKey),
                 request,
-                DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
+                DateTimeOffset.UtcNow.ToString("O"),
+                options.VerseId,
+                options.DaemonId).ConfigureAwait(false);
         }
         catch (Exception error)
         {
@@ -2800,7 +2802,9 @@ static bool ShouldForwardHangarRequest(
     if (node.Cache.Get<AetheriaProgressionCommandRouteDocument>(
             AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId)) != null)
         return true;
-    var targetVerseId = AetheriaHangarCommandJournal.ProgressionVerseId(request, required: false);
+    var envelope = node.Cache.Get<AetheriaHangarCommandEnvelopeDocument>(
+        AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId));
+    var targetVerseId = envelope?.ProgressionVerseId ?? "";
     return !string.IsNullOrWhiteSpace(targetVerseId) &&
         !string.Equals(targetVerseId, AetheriaProgressionSources.Local, StringComparison.Ordinal) &&
         !string.Equals(targetVerseId, options.VerseId, StringComparison.Ordinal);
@@ -2858,11 +2862,16 @@ static async Task ForwardProgressionCommandAsync(
         var payloadHash = await node.CommitAsync(() => AetheriaHangarCommandJournal.ValidateAsync(
             node,
             request,
-            DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+            DateTimeOffset.UtcNow.ToString("O"),
+            options.VerseId,
+            options.DaemonId)).ConfigureAwait(false);
         using var progressionVerses = CreateProgressionVerseCoordinator(node, options);
-        var targetVerseId = AetheriaHangarCommandJournal.ProgressionVerseId(request);
-        var targetAuthorityRuntimeId = AetheriaHangarCommandJournal.ProgressionAuthorityRuntimeId(request);
-        var targetSourceRevision = AetheriaHangarCommandJournal.ProgressionSourceRevision(request);
+        var envelope = node.Cache.Get<AetheriaHangarCommandEnvelopeDocument>(
+                AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId))
+            ?? throw new InvalidOperationException("Progression forwarding lost its provider-bound command envelope.");
+        var targetVerseId = envelope.ProgressionVerseId;
+        var targetAuthorityRuntimeId = envelope.ProgressionAuthorityRuntimeId;
+        var targetSourceRevision = envelope.ProgressionSourceRevision;
         if (string.Equals(
                 Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_COMMAND_ID"),
                 request.CommandId,
@@ -2944,7 +2953,9 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
             payloadHash = await AetheriaHangarCommandJournal.ValidateAsync(
                 node,
                 request,
-                DateTimeOffset.UtcNow.ToString("O")).ConfigureAwait(false);
+                DateTimeOffset.UtcNow.ToString("O"),
+                options.VerseId,
+                options.DaemonId).ConfigureAwait(false);
         }
         catch (InvalidOperationException error)
         {
@@ -3038,6 +3049,10 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
     var pinnedRoute = await node.MutableDocument<AetheriaProgressionCommandRouteDocument>(
             AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId))
         .ReadAsync().ConfigureAwait(false);
+    var envelope = await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(
+            AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId))
+        .ReadAsync().ConfigureAwait(false)
+        ?? throw new InvalidOperationException("Hangar command has no provider-bound admission envelope.");
     if (string.Equals(command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal))
     {
         await progressionVerses.SelectAsync(Payload(request, "value"), now).ConfigureAwait(false);
@@ -3045,15 +3060,15 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
     }
     else if (pinnedRoute != null ||
         !((string.Equals(
-              AetheriaHangarCommandJournal.ProgressionVerseId(request),
+              envelope.ProgressionVerseId,
               AetheriaProgressionSources.Local,
               StringComparison.Ordinal) ||
           string.Equals(
-              AetheriaHangarCommandJournal.ProgressionVerseId(request),
+              envelope.ProgressionVerseId,
               options.VerseId,
               StringComparison.Ordinal)) &&
           string.Equals(
-              AetheriaHangarCommandJournal.ProgressionAuthorityRuntimeId(request),
+              envelope.ProgressionAuthorityRuntimeId,
               options.DaemonId,
               StringComparison.Ordinal)))
     {
@@ -5137,16 +5152,20 @@ public static class AetheriaHangarCommandJournal
         AetheriaStateNode node,
         CultRecordKey requestRecordKey,
         EveSurfaceCommandRequest request,
-        string now)
+        string now,
+        string localVerseId,
+        string localAuthorityRuntimeId)
     {
         return await node.CommitAsync(async () =>
         {
-            ValidateProgressionTarget(request);
             var payloadHash = PayloadHash(request);
             var envelopeKey = AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId);
             var envelope = await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
                 .ReadAsync().ConfigureAwait(false);
             ValidateEnvelope(envelope, request, payloadHash);
+            var progressionTarget = envelope == null
+                ? ResolveProgressionTarget(node, request, localVerseId, localAuthorityRuntimeId)
+                : ProgressionTarget.None;
 
             var pending = await node.MutableDocument<EveSurfaceCommandRequest>(requestRecordKey)
                 .ReadAsync().ConfigureAwait(false);
@@ -5156,7 +5175,7 @@ public static class AetheriaHangarCommandJournal
             if (envelope == null)
             {
                 await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
-                    .ReplaceAsync(NewEnvelope(request, payloadHash, now)).ConfigureAwait(false);
+                    .ReplaceAsync(NewEnvelope(request, payloadHash, now, progressionTarget)).ConfigureAwait(false);
             }
             if (pending == null)
                 await node.Database.PutAsync(requestRecordKey, request).ConfigureAwait(false);
@@ -5167,20 +5186,24 @@ public static class AetheriaHangarCommandJournal
     public static async Task<string> ValidateAsync(
         AetheriaStateNode node,
         EveSurfaceCommandRequest request,
-        string now)
+        string now,
+        string localVerseId,
+        string localAuthorityRuntimeId)
     {
         return await node.CommitAsync(async () =>
         {
-            ValidateProgressionTarget(request);
             var payloadHash = PayloadHash(request);
             var envelopeKey = AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(request.CommandId);
             var envelope = await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
                 .ReadAsync().ConfigureAwait(false);
             ValidateEnvelope(envelope, request, payloadHash);
+            var progressionTarget = envelope == null
+                ? ResolveProgressionTarget(node, request, localVerseId, localAuthorityRuntimeId)
+                : ProgressionTarget.None;
             if (envelope == null)
             {
                 await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
-                    .ReplaceAsync(NewEnvelope(request, payloadHash, now)).ConfigureAwait(false);
+                    .ReplaceAsync(NewEnvelope(request, payloadHash, now, progressionTarget)).ConfigureAwait(false);
             }
             return payloadHash;
         }).ConfigureAwait(false);
@@ -5189,66 +5212,73 @@ public static class AetheriaHangarCommandJournal
     public static string PayloadHash(EveSurfaceCommandRequest request)
         => EveCommandInvocationHash.Compute(request);
 
-    public static string ProgressionVerseId(EveSurfaceCommandRequest request, bool required = true)
-    {
-        if (!RequiresProgressionTarget(request))
-            return "";
-        var value = Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId).Trim();
-        if (required && string.IsNullOrWhiteSpace(value))
-            throw new InvalidOperationException("Hangar command is missing its immutable progression Verse target.");
-        return value;
-    }
-
-    public static long ProgressionSourceRevision(EveSurfaceCommandRequest request)
-    {
-        if (!RequiresProgressionTarget(request))
-            return -1;
-        if (!long.TryParse(
-                Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision),
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture,
-                out var revision) || revision < 0)
-            throw new InvalidOperationException("Hangar command is missing the progression-source revision that authored it.");
-        return revision;
-    }
-
-    public static string ProgressionAuthorityRuntimeId(EveSurfaceCommandRequest request)
-    {
-        if (!RequiresProgressionTarget(request))
-            return "";
-        var value = Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId).Trim();
-        if (string.IsNullOrWhiteSpace(value))
-            throw new InvalidOperationException("Hangar command is missing the authority runtime that supplied its progression view.");
-        return value;
-    }
-
     private static AetheriaHangarCommandEnvelopeDocument NewEnvelope(
         EveSurfaceCommandRequest request,
         string payloadHash,
-        string now) =>
+        string now,
+        ProgressionTarget progressionTarget) =>
         new()
         {
             CommandId = request.CommandId,
             PayloadHash = payloadHash,
             ClientId = request.ClientId,
             CreatedAtUtc = now ?? "",
-            ProgressionVerseId = ProgressionVerseId(request, required: false),
-            ProgressionSourceRevision = RequiresProgressionTarget(request)
-                ? ProgressionSourceRevision(request)
-                : -1,
-            ProgressionAuthorityRuntimeId = RequiresProgressionTarget(request)
-                ? ProgressionAuthorityRuntimeId(request)
-                : ""
+            ProgressionVerseId = progressionTarget.VerseId,
+            ProgressionSourceRevision = progressionTarget.SourceRevision,
+            ProgressionAuthorityRuntimeId = progressionTarget.AuthorityRuntimeId
         };
 
-    private static void ValidateProgressionTarget(EveSurfaceCommandRequest request)
+    private static ProgressionTarget ResolveProgressionTarget(
+        AetheriaStateNode node,
+        EveSurfaceCommandRequest request,
+        string localVerseId,
+        string localAuthorityRuntimeId)
     {
         if (!RequiresProgressionTarget(request))
-            return;
-        _ = ProgressionVerseId(request);
-        _ = ProgressionSourceRevision(request);
-        _ = ProgressionAuthorityRuntimeId(request);
+            return ProgressionTarget.None;
+
+        var requestedVerseId = Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId).Trim();
+        var requestedAuthorityRuntimeId = Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId).Trim();
+        if (!long.TryParse(
+                Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var requestedSourceRevision) || requestedSourceRevision < 0)
+            throw new InvalidOperationException("Hangar command is missing the progression-source revision that authored it.");
+
+        if (request.Delegation != null)
+        {
+            if (!string.Equals(requestedVerseId, localVerseId, StringComparison.Ordinal) ||
+                !string.Equals(requestedAuthorityRuntimeId, localAuthorityRuntimeId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Delegated Hangar command does not target this Verse authority.");
+            return new ProgressionTarget(requestedVerseId, requestedAuthorityRuntimeId, requestedSourceRevision);
+        }
+
+        if (!long.TryParse(
+                Payload(request, AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var expectedSurfaceVersion) || expectedSurfaceVersion < 0)
+            throw new InvalidOperationException("Hangar command is missing its provider-issued surface version.");
+        var surface = node.Cache.Get<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.HangarSurface)
+            ?? throw new InvalidOperationException("The canonical Hangar Eve surface is unavailable.");
+        if (surface.Version != expectedSurfaceVersion)
+            throw new InvalidOperationException("Hangar command targets a stale Eve surface projection.");
+        var root = surface.Surface.Root;
+        var verseId = Prop(root, "progressionVerseId");
+        var authorityRuntimeId = Prop(root, "progressionAuthorityRuntimeId");
+        if (!long.TryParse(Prop(root, "progressionSourceRevision"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var sourceRevision) ||
+            sourceRevision < 0 || string.IsNullOrWhiteSpace(verseId) || string.IsNullOrWhiteSpace(authorityRuntimeId))
+            throw new InvalidOperationException("The canonical Hangar Eve surface has no complete progression binding.");
+        if (!string.Equals(requestedVerseId, verseId, StringComparison.Ordinal) ||
+            !string.Equals(requestedAuthorityRuntimeId, authorityRuntimeId, StringComparison.Ordinal) ||
+            requestedSourceRevision != sourceRevision)
+            throw new InvalidOperationException("Hangar command progression hints do not match the provider-owned Eve projection.");
+        return new ProgressionTarget(verseId, authorityRuntimeId, sourceRevision);
     }
+
+    private static string Prop(EveSurfaceComponent component, string key) =>
+        component.Props.TryGetValue(key, out var value) ? value ?? "" : "";
 
     private static bool RequiresProgressionTarget(EveSurfaceCommandRequest request) =>
         string.Equals(request.SurfaceId, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal) &&
@@ -5274,4 +5304,9 @@ public static class AetheriaHangarCommandJournal
 
     private static InvalidOperationException Collision(string commandId) =>
         new($"Hangar command id '{commandId}' was reused with a different immutable envelope.");
+
+    private readonly record struct ProgressionTarget(string VerseId, string AuthorityRuntimeId, long SourceRevision)
+    {
+        public static readonly ProgressionTarget None = new("", "", -1);
+    }
 }

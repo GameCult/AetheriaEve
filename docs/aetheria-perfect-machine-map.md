@@ -55,9 +55,12 @@ Date: 2026-06-13
 > selected manifest generation until a reader has hydrated every referenced
 > page. Observer callbacks run only after that read lease is released.
 > `ActiveRunKey` is derived, and stale daemon frames cannot replace the
-> session-owned run identity. Every non-selector Hangar control stamps its
-> source Eve surface's Verse ID, exact supplying authority runtime ID, and
-> progression-source revision into the immutable command envelope at admission.
+> session-owned run identity. Every non-selector Hangar control carries its
+> provider-issued Eve surface version plus Verse, supplying authority, and
+> source-revision hints. Admission resolves the canonical tuple from the
+> daemon's stored Hangar projection and rejects stale references or altered
+> hints before writing the immutable command envelope; client fields do not own
+> routing.
 > Route resolution verifies that authority and adds the Odin route without
 > consulting mutable dropdown state or substituting another authority that
 > advertises the same Verse; a target

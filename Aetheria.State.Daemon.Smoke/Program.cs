@@ -383,6 +383,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         try
         {
             using var node = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
+            PublishHangarProjection(node, AetheriaProgressionSources.Local, "daemon-smoke", 0, 1);
             var commandId = "hangar-command-race";
             EveSurfaceCommandRequest Request(string shipId) => new(
                 AetheriaRuntimeProviderIdentity.ProviderId,
@@ -394,15 +395,18 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ("shipId", shipId),
                     (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, AetheriaProgressionSources.Local),
                     (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision, "0"),
-                    (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId, "daemon-smoke")),
+                    (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId, "daemon-smoke"),
+                    (AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion, "1")),
                 DateTimeOffset.Parse("2026-08-19T00:00:00Z", CultureInfo.InvariantCulture),
                 "pilot:journal-smoke");
 
             var recordKey = AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + commandId;
             var first = AetheriaHangarCommandJournal.AdmitAsync(
-                node, new CultRecordKey(recordKey), Request("ship:first"), "2026-08-19T00:00:00Z");
+                node, new CultRecordKey(recordKey), Request("ship:first"), "2026-08-19T00:00:00Z",
+                AetheriaProgressionSources.Local, "daemon-smoke");
             var second = AetheriaHangarCommandJournal.AdmitAsync(
-                node, new CultRecordKey(recordKey), Request("ship:second"), "2026-08-19T00:00:00Z");
+                node, new CultRecordKey(recordKey), Request("ship:second"), "2026-08-19T00:00:00Z",
+                AetheriaProgressionSources.Local, "daemon-smoke");
             try
             {
                 Task.WhenAll(first, second).GetAwaiter().GetResult();
@@ -592,6 +596,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     Revision = 1,
                     UpdatedAtUtc = "2026-08-19T00:00:00Z"
                 }).GetAwaiter().GetResult();
+            PublishHangarProjection(node, AetheriaProgressionSources.Local, "daemon-smoke", 1, 1);
 
             var before = node.MutableDocument<AetheriaHangarDraftState>(AetheriaStateNode.HangarDraftKey)
                 .ReadAsync().GetAwaiter().GetResult()!;
@@ -636,14 +641,17 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ("shipId", before.SelectedShipId),
                     (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, AetheriaProgressionSources.Local),
                     (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision, "1"),
-                    (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId, "daemon-smoke")),
+                    (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId, "daemon-smoke"),
+                    (AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion, "1")),
                 DateTimeOffset.Parse("2026-08-19T00:00:01Z", CultureInfo.InvariantCulture),
                 "pilot:commit-smoke");
             var ingress = AetheriaHangarCommandJournal.AdmitAsync(
                 node,
                 new CultRecordKey(AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + commandId),
                 request,
-                "2026-08-19T00:00:01Z");
+                "2026-08-19T00:00:01Z",
+                AetheriaProgressionSources.Local,
+                "daemon-smoke");
             Require(!ingress.Wait(TimeSpan.FromMilliseconds(100)),
                 "command ingress must not flush while another state-node generation is staged");
 
@@ -696,6 +704,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             {
                 AetheriaDaemonHangarCoordinator.EnsureAsync(node, runtimeCatalog, "2026-08-19T00:00:00Z")
                     .GetAwaiter().GetResult();
+                PublishHangarProjection(node, AetheriaProgressionSources.Local, "daemon-smoke", 0, 1);
                 var hangar = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
                     .ReadAsync().GetAwaiter().GetResult()!;
                 originalRevision = hangar.Revision;
@@ -710,14 +719,17 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         ("expectedHangarRevision", originalRevision.ToString(CultureInfo.InvariantCulture)),
                         (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, AetheriaProgressionSources.Local),
                         (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision, "0"),
-                        (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId, "daemon-smoke")),
+                        (AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId, "daemon-smoke"),
+                        (AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion, "1")),
                     DateTimeOffset.Parse("2026-08-19T00:00:01Z", CultureInfo.InvariantCulture),
                     "pilot:rollback-smoke");
                 AetheriaHangarCommandJournal.AdmitAsync(
                         node,
                         new CultRecordKey(requestRecordKey),
                         request,
-                        "2026-08-19T00:00:01Z")
+                        "2026-08-19T00:00:01Z",
+                        AetheriaProgressionSources.Local,
+                        "daemon-smoke")
                     .GetAwaiter().GetResult();
 
                 var rolledBack = false;
@@ -9860,6 +9872,39 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
             throw new InvalidOperationException($"{message}. Expected {expected}; actual {actual}.");
+    }
+
+    private static void PublishHangarProjection(
+        AetheriaStateNode node,
+        string verseId,
+        string authorityRuntimeId,
+        long sourceRevision,
+        long surfaceVersion)
+    {
+        var root = new EveSurfaceComponent(
+            "aetheria.hangar.root",
+            "column",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["progressionVerseId"] = verseId,
+                ["progressionAuthorityRuntimeId"] = authorityRuntimeId,
+                ["progressionSourceRevision"] = sourceRevision.ToString(CultureInfo.InvariantCulture)
+            },
+            Array.Empty<EveSurfaceComponent>());
+        var surface = new EveSurfaceDocument(
+            AetheriaRuntimeProviderIdentity.ProviderId,
+            "game.hangar",
+            "Aetheria Hangar",
+            surfaceVersion,
+            "2026-08-19T00:00:00Z",
+            new EveSurfaceTree(
+                AetheriaRuntimeHangarCommands.SurfaceId,
+                root,
+                Array.Empty<EveStyleToken>()),
+            Array.Empty<EveCommandTemplate>());
+        node.CommitAsync(() => node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.HangarSurface)
+                .ReplaceAsync(surface))
+            .GetAwaiter().GetResult();
     }
 
     private static void Require(bool condition, string message)

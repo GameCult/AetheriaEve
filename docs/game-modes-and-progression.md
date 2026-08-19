@@ -242,10 +242,11 @@ simulation tick. The first attempt commits only the immutable route pin. A
 remote receipt later enters one short finality transaction with the local
 receipt and inbox deletion. Timeout leaves that request pending without
 blocking local commands, ticks, or other state writers.
-Every non-selector Hangar control and inventory-drop target carries the
-progression Verse ID, exact authority runtime ID, and progression-source
-revision of the Eve surface that authored it. Admission preserves all three
-fields in the immutable command journal.
+Every non-selector Hangar control and inventory-drop target carries a
+provider-issued Hangar surface version plus Verse, authority, and source-revision
+hints. Admission resolves the canonical tuple from the daemon's stored Eve
+projection, rejects stale versions or altered hints, and only then preserves
+that provider-owned binding in the immutable command journal.
 Classification and route creation read that envelope, never the dropdown's
 current value. A command targeting `Local` executes against the routing
 daemon's local store; a command targeting the daemon's own Verse executes
@@ -292,9 +293,10 @@ The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and
 binds `ClientId` to the runtime identity established for that transport session;
 it cannot apply arbitrary raw document puts to Hangar, draft, run, or policy
-state. Admission durably binds command ID and payload hash to the Verse, exact
-authority runtime, and progression-source revision printed on its source Eve
-surface; forwarding verifies that authority and pins the Odin endpoint set. A later dropdown
+state. Admission durably binds command ID and payload hash to the provider-owned
+Verse, exact authority runtime, and progression-source revision resolved from
+the referenced Eve surface; client payload strings are consistency hints, not
+route authority. Forwarding verifies that authority and pins the Odin endpoint set. A later dropdown
 change affects only commands authored from the newly published surface. The pending command
 retries that same target until its canonical receipt arrives;
 the forwarding daemon cannot manufacture a denial after the remote authority

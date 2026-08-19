@@ -25,6 +25,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string ExpectedProgressionVerseId = "expectedProgressionVerseId";
         public const string ExpectedProgressionSourceRevision = "expectedProgressionSourceRevision";
         public const string ExpectedProgressionAuthorityRuntimeId = "expectedProgressionAuthorityRuntimeId";
+        public const string ExpectedHangarSurfaceVersion = "expectedHangarSurfaceVersion";
     }
 
     public static class AetheriaRuntimeHangarSurfaceBuilder
@@ -85,18 +86,18 @@ namespace GameCult.Aetheria.State.Verse
                     Component("aetheria.hangar.launcher", "row", Props(), new[]
                     {
                         VerseSelect(progressionSource),
-                        Button("aetheria.hangar.mode.terminus", "TERMINUS", AetheriaRuntimeHangarCommands.SelectTerminus, progressionSource, progressionAuthorityRuntimeId,
+                        Button("aetheria.hangar.mode.terminus", "TERMINUS", AetheriaRuntimeHangarCommands.SelectTerminus, progressionSource, progressionAuthorityRuntimeId, version,
                             ("selected", (mode == AetheriaGameModes.Terminus).ToString().ToLowerInvariant())),
-                        Button("aetheria.hangar.mode.starbridge", "STARBRIDGE", AetheriaRuntimeHangarCommands.SelectStarbridge, progressionSource, progressionAuthorityRuntimeId,
+                        Button("aetheria.hangar.mode.starbridge", "STARBRIDGE", AetheriaRuntimeHangarCommands.SelectStarbridge, progressionSource, progressionAuthorityRuntimeId, version,
                             ("selected", (mode == AetheriaGameModes.Starbridge).ToString().ToLowerInvariant())),
-                        Button("aetheria.hangar.mode.arena", "ARENA", AetheriaRuntimeHangarCommands.SelectArena, progressionSource, progressionAuthorityRuntimeId,
+                        Button("aetheria.hangar.mode.arena", "ARENA", AetheriaRuntimeHangarCommands.SelectArena, progressionSource, progressionAuthorityRuntimeId, version,
                             ("selected", (mode == AetheriaGameModes.Arena).ToString().ToLowerInvariant())),
-                        Button("aetheria.hangar.launch", "LAUNCH", AetheriaRuntimeHangarCommands.Launch, progressionSource, progressionAuthorityRuntimeId,
+                        Button("aetheria.hangar.launch", "LAUNCH", AetheriaRuntimeHangarCommands.Launch, progressionSource, progressionAuthorityRuntimeId, version,
                             ("disabled", (!canLaunch).ToString().ToLowerInvariant()),
                             ("shipId", selected?.ShipId ?? ""),
                             ("mode", mode),
                             ("expectedHangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture))),
-                        Button("aetheria.hangar.continue", "CONTINUE", AetheriaRuntimeHangarCommands.Continue, progressionSource, progressionAuthorityRuntimeId,
+                        Button("aetheria.hangar.continue", "CONTINUE", AetheriaRuntimeHangarCommands.Continue, progressionSource, progressionAuthorityRuntimeId, version,
                             ("disabled", (!canContinue).ToString().ToLowerInvariant()),
                             ("shipId", selected?.ShipId ?? ""),
                             ("deploymentId", selected?.ActiveDeploymentId ?? ""))
@@ -118,7 +119,7 @@ namespace GameCult.Aetheria.State.Verse
                             {
                                 Component("aetheria.hangar.inventory.scroll", "scroll", Props(), new[]
                                 {
-                                    HangarInventoryGrid(selected, inventory, hangar.Revision, progressionSource, progressionAuthorityRuntimeId, catalog)
+                                    HangarInventoryGrid(selected, inventory, hangar.Revision, progressionSource, progressionAuthorityRuntimeId, version, catalog)
                                 }, Layout(("flexGrow", "1"), ("overflowY", "auto")))
                             })
                         }, Layout(("minWidth", "260"), ("maxWidth", "360"), ("height", "100%"), ("overflow", "hidden"))),
@@ -131,7 +132,7 @@ namespace GameCult.Aetheria.State.Verse
                                     Text("aetheria.hangar.loadout.help", "Drag equipment between the Hangar inventory and valid ship cells."),
                                     Component("aetheria.hangar.loadout.scroll", "scroll", Props(), new[]
                                     {
-                                        LoadoutGrid(selected, equipment, hangar.Revision, progressionSource, progressionAuthorityRuntimeId, catalog)
+                                        LoadoutGrid(selected, equipment, hangar.Revision, progressionSource, progressionAuthorityRuntimeId, version, catalog)
                                     }, Layout(("flexGrow", "1"), ("overflowY", "auto")))
                                 })
                             }
@@ -157,7 +158,7 @@ namespace GameCult.Aetheria.State.Verse
                                 {
                                     Component("aetheria.hangar.loadout.scroll", "scroll", Props(), new[]
                                     {
-                                        LoadoutGrid(selected, equipment, hangar.Revision, progressionSource, progressionAuthorityRuntimeId, catalog)
+                                        LoadoutGrid(selected, equipment, hangar.Revision, progressionSource, progressionAuthorityRuntimeId, version, catalog)
                                     }, Layout(("flexGrow", "1"), ("overflowY", "auto")))
                                 })
                             },
@@ -178,6 +179,7 @@ namespace GameCult.Aetheria.State.Verse
                                     loadoutView ? AetheriaRuntimeHangarCommands.ShowOverview : AetheriaRuntimeHangarCommands.EditLoadout,
                                     progressionSource,
                                     progressionAuthorityRuntimeId,
+                                    version,
                                     ("targetSurfaceId", AetheriaRuntimeHangarCommands.SurfaceId))
                             })
                         }, Layout(("minWidth", "280"), ("maxWidth", "360"), ("height", "100%")))
@@ -189,6 +191,7 @@ namespace GameCult.Aetheria.State.Verse
                             AetheriaRuntimeHangarCommands.SelectShip,
                             progressionSource,
                             progressionAuthorityRuntimeId,
+                            version,
                             ("shipId", ship.ShipId),
                             ("selected", string.Equals(ship.ShipId, selected?.ShipId, StringComparison.Ordinal) ? "true" : "false"),
                             ("status", ship.Status))).ToArray(),
@@ -234,6 +237,7 @@ namespace GameCult.Aetheria.State.Verse
             long hangarRevision,
             AetheriaProgressionSourceDocument progressionSource,
             string progressionAuthorityRuntimeId,
+            long hangarSurfaceVersion,
             AetheriaRuntimeCatalogSnapshot? catalog)
         {
             var hull = catalog?.FindItem(ship?.HullItemKey ?? "");
@@ -275,7 +279,7 @@ namespace GameCult.Aetheria.State.Verse
                         ("payload.shipId", ship?.ShipId ?? ""),
                         ("payload.expectedHangarRevision", hangarRevision.ToString(CultureInfo.InvariantCulture))
                     }
-                    .Concat(TargetPayloadProps(progressionSource, progressionAuthorityRuntimeId))
+                    .Concat(TargetPayloadProps(progressionSource, progressionAuthorityRuntimeId, hangarSurfaceVersion))
                     .ToArray()),
                 children);
         }
@@ -286,6 +290,7 @@ namespace GameCult.Aetheria.State.Verse
             long hangarRevision,
             AetheriaProgressionSourceDocument progressionSource,
             string progressionAuthorityRuntimeId,
+            long hangarSurfaceVersion,
             AetheriaRuntimeCatalogSnapshot? catalog)
         {
             const int minimumColumns = 8;
@@ -328,7 +333,7 @@ namespace GameCult.Aetheria.State.Verse
                         ("payload.shipId", ship?.ShipId ?? ""),
                         ("payload.expectedHangarRevision", hangarRevision.ToString(CultureInfo.InvariantCulture))
                     }
-                    .Concat(TargetPayloadProps(progressionSource, progressionAuthorityRuntimeId))
+                    .Concat(TargetPayloadProps(progressionSource, progressionAuthorityRuntimeId, hangarSurfaceVersion))
                     .ToArray()),
                 children);
         }
@@ -391,13 +396,14 @@ namespace GameCult.Aetheria.State.Verse
             string command,
             AetheriaProgressionSourceDocument progressionSource,
             string progressionAuthorityRuntimeId,
+            long hangarSurfaceVersion,
             params (string Key, string Value)[] extra) =>
             Component(
                 id,
                 "control.button",
                 Props(new[] { ("label", label), ("command", command) }
                     .Concat(extra)
-                    .Concat(TargetPayloadProps(progressionSource, progressionAuthorityRuntimeId))
+                    .Concat(TargetPayloadProps(progressionSource, progressionAuthorityRuntimeId, hangarSurfaceVersion))
                     .ToArray()),
                 Array.Empty<EveSurfaceComponent>());
 
@@ -408,14 +414,17 @@ namespace GameCult.Aetheria.State.Verse
 
         private static (string Key, string Value)[] TargetPayloadProps(
             AetheriaProgressionSourceDocument source,
-            string progressionAuthorityRuntimeId) =>
+            string progressionAuthorityRuntimeId,
+            long hangarSurfaceVersion) =>
             new[]
             {
                 ("payload." + AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, ProgressionVerseId(source)),
                 ("payload." + AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision,
                     source.Revision.ToString(CultureInfo.InvariantCulture)),
                 ("payload." + AetheriaRuntimeHangarCommands.ExpectedProgressionAuthorityRuntimeId,
-                    progressionAuthorityRuntimeId ?? "")
+                    progressionAuthorityRuntimeId ?? ""),
+                ("payload." + AetheriaRuntimeHangarCommands.ExpectedHangarSurfaceVersion,
+                    hangarSurfaceVersion.ToString(CultureInfo.InvariantCulture))
             };
 
         private static EveSurfaceComponent VerseSelect(AetheriaProgressionSourceDocument source)
