@@ -557,6 +557,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             string surfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
             string authority = "aetheria-authority",
             string navigationVerse = "gamecult.aetheria",
+            long sourceVersion = 1,
             string? invocationHash = null) => new(
                 "receipt:" + receiptCommandId,
                 receiptCommandId,
@@ -568,7 +569,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 surfaceId,
                 "",
                 "2026-08-19T00:00:01Z",
-                1,
+                sourceVersion,
                 new EveSurfaceNavigationTarget(
                     navigationVerse,
                     providerId,
@@ -613,6 +614,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     request, route, Receipt(surfaceId: "another-surface"))) &&
                 Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
                     request, route, Receipt(authority: "another-authority"))) &&
+                Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
+                    request, route, Receipt(sourceVersion: 0))) &&
                 Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(
                     request, route, Receipt(invocationHash: "sha256:another-envelope"))) &&
                 Rejects(() => AetheriaProgressionVerseCoordinator.ValidateRemoteReceipt(

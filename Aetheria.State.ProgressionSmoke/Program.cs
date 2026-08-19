@@ -441,29 +441,29 @@ try
             AetheriaRuntimeHangarCommands.SelectVerse,
             new Dictionary<string, string> { ["value"] = remoteVerse });
         var removeReceipt = await removeReceiptTask;
-        Require(removeReceipt.State == "accepted",
-            "The remote progression Verse must accept the Eve loadout-to-storage drop.");
-        var updatedRemoteHangar = await ReadUntilAsync(
-            recoveredRemoteClient,
+        Require(removeReceipt.State == "accepted" && removeReceipt.SourceVersion > 0,
+            "The remote progression Verse must accept the Eve loadout-to-storage drop and name its causal projection generation.");
+        var removeProjection = await recoveredRemoteClient.ReadAsync<AetheriaHangarProjectionDocument>(
             remoteTarget,
-            AetheriaStateNode.HangarKey.ToString(),
-            (AetheriaHangarState hangar) => hangar.Revision > remoteRevision,
-            TimeSpan.FromSeconds(10));
+            AetheriaRuntimeVerseRecordKeys.HangarProjection.ToString());
+        Require(removeProjection.Generation >= removeReceipt.SourceVersion &&
+                removeProjection.Hangar.Revision > remoteRevision,
+            "An accepted remote refit receipt must be published with the Hangar projection generation that contains it.");
+        var updatedRemoteHangar = removeProjection.Hangar;
         var localHangarAfterRemote = await client.ReadAsync<AetheriaHangarState>(
             localTarget,
             AetheriaStateNode.HangarKey.ToString());
         Require(localHangarAfterRemote.Revision == localHangarBeforeRemote.Revision,
             "a remote command delayed before route creation must never fall through into Local progression after a dropdown switch");
 
-        var refitSurface = await ReadUntilAsync(
-            client,
+        var refitSurface = await client.ReadAsync<EveSurfaceDocument>(
             localTarget,
-            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
-            (EveSurfaceDocument surface) =>
-                Find(surface.Surface.Root, "aetheria.hangar.inventory.grid").Children
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
+        Require(Find(refitSurface.Surface.Root, "aetheria.hangar.inventory.grid").Children
                     .Any(item => item.Props["itemKey"] == removedItemKey) &&
-                Find(surface.Surface.Root, "aetheria.hangar.loadout.grid").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),
-            TimeSpan.FromSeconds(10));
+                Find(refitSurface.Surface.Root, "aetheria.hangar.loadout.grid").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString() &&
+                long.Parse(refitSurface.Surface.Root.Props["progressionProjectionGeneration"]) >= removeReceipt.SourceVersion,
+            "The routing daemon must commit the matching remote projection before exposing its accepted receipt.");
         var refitInventory = Find(refitSurface.Surface.Root, "aetheria.hangar.inventory.grid");
         var refitLoadout = Find(refitSurface.Surface.Root, "aetheria.hangar.loadout.grid");
         var equip = refitInventory.Children.First(item => item.Props["itemKey"] == removedItemKey);
@@ -477,23 +477,22 @@ try
                 out var equipRequest),
             "The Hangar Eve surface must translate storage-to-loadout drag into a typed positioned equip operation.");
         var equipReceipt = await SubmitRequestAsync(client, localTarget, equipRequest!);
-        Require(equipReceipt.State == "accepted",
-            "The remote progression Verse must accept the Eve storage-to-loadout drop at the requested cells.");
-        updatedRemoteHangar = await ReadUntilAsync(
-            recoveredRemoteClient,
+        Require(equipReceipt.State == "accepted" && equipReceipt.SourceVersion > removeReceipt.SourceVersion,
+            "The remote progression Verse must accept the Eve storage-to-loadout drop at a newer causal projection generation.");
+        var equipProjection = await recoveredRemoteClient.ReadAsync<AetheriaHangarProjectionDocument>(
             remoteTarget,
-            AetheriaStateNode.HangarKey.ToString(),
-            (AetheriaHangarState hangar) => hangar.Revision > updatedRemoteHangar.Revision,
-            TimeSpan.FromSeconds(10));
+            AetheriaRuntimeVerseRecordKeys.HangarProjection.ToString());
+        Require(equipProjection.Generation >= equipReceipt.SourceVersion &&
+                equipProjection.Hangar.Revision > updatedRemoteHangar.Revision,
+            "The accepted equip receipt must name a projection containing the committed refit.");
+        updatedRemoteHangar = equipProjection.Hangar;
 
-        var launchSurface = await ReadUntilAsync(
-            client,
+        var launchSurface = await client.ReadAsync<EveSurfaceDocument>(
             localTarget,
-            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
-            (EveSurfaceDocument surface) =>
-                Find(surface.Surface.Root, "aetheria.hangar.launch").Props["disabled"] == "false" &&
-                Find(surface.Surface.Root, "aetheria.hangar.launch").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),
-            TimeSpan.FromSeconds(10));
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
+        Require(Find(launchSurface.Surface.Root, "aetheria.hangar.launch").Props["disabled"] == "false" &&
+                Find(launchSurface.Surface.Root, "aetheria.hangar.launch").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),
+            "The accepted equip receipt must not precede the matching launch-ready routing surface.");
         var launch = Find(launchSurface.Surface.Root, "aetheria.hangar.launch");
         var launchReceipt = await SubmitAsync(
             client,

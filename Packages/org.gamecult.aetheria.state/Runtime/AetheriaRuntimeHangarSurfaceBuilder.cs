@@ -45,7 +45,8 @@ namespace GameCult.Aetheria.State.Verse
             string assetVerseId = "",
             string assetAuthorityRuntimeId = "",
             string assetManifestRecordRef = "",
-            IReadOnlyList<string>? assetRendezvousEndpoints = null)
+            IReadOnlyList<string>? assetRendezvousEndpoints = null,
+            long progressionProjectionGeneration = 0)
         {
             if (hangar == null) throw new ArgumentNullException(nameof(hangar));
             var ships = hangar.Ships ?? Array.Empty<AetheriaHangarShip>();
@@ -85,6 +86,7 @@ namespace GameCult.Aetheria.State.Verse
                     ("hangarRevision", hangar.Revision.ToString(CultureInfo.InvariantCulture)),
                     ("progressionVerseId", ProgressionVerseId(progressionSource)),
                     ("progressionSourceRevision", progressionSource.Revision.ToString(CultureInfo.InvariantCulture)),
+                    ("progressionProjectionGeneration", Math.Max(0, progressionProjectionGeneration).ToString(CultureInfo.InvariantCulture)),
                     ("progressionAuthorityRuntimeId", progressionAuthorityRuntimeId ?? "")),
                 new[]
                 {

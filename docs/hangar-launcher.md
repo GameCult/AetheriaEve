@@ -67,6 +67,14 @@ one `gamecult.aetheria.hangar_projection.v1` generation for routers and
 lowerers; this projection is derived from one committed state generation and
 owns no mutations.
 
+Hangar command finality includes projection finality. The progression authority
+commits the canonical mutation, its new projection generation, and the terminal
+receipt in one state transaction; `sourceVersion` names that generation. A
+routing daemon must observe at least that generation and, while the same Verse
+remains selected, commit its Eve Hangar surface before publishing the
+client-facing receipt. Periodic projection refresh is recovery and discovery,
+not the first publisher of command-caused truth.
+
 Derived state: selected bay, selected mode, preview, fit metrics, affordability,
 compatibility warnings, and launch readiness are UI projections. The preview
 and metrics never become equipment or deployment owners.
@@ -113,6 +121,8 @@ path. Generic New Game must not return as a gameplay-state writer.
 - a remote refit concurrent with projection refresh yields either the complete
   earlier projection generation or the complete later generation, never a
   Hangar/loadout/catalog mixture;
+- an accepted remote refit receipt has a positive projection generation, and
+  the matching routing surface is already visible when that receipt is read;
 - the portable surface exposes owned bays, ship preview, fit summary, existing
   inventory/refit entry, three mode selectors, and Launch;
 - on a fresh daemon with no run, the preview lowers one visible entity for the

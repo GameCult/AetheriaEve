@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 
 internal sealed class AetheriaProgressionVerseView
 {
+    public required long ProjectionGeneration { get; init; }
     public required AetheriaProgressionSourceDocument Source { get; init; }
     public required string AuthorityRuntimeId { get; init; }
     public required string AssetVerseId { get; init; }
@@ -211,6 +212,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             var projection = remote.Projection;
             return new AetheriaProgressionVerseView
             {
+                ProjectionGeneration = projection.Generation,
                 Source = source,
                 AuthorityRuntimeId = target.AuthorityRuntimeId,
                 AssetVerseId = projection.AssetVerseId,
@@ -367,6 +369,69 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         throw new TimeoutException($"Verse '{route.VerseId}' did not publish a Hangar receipt for '{request.CommandId}'.");
     }
 
+    public async Task<AetheriaHangarProjectionDocument> ReadProjectionAtLeastAsync(
+        AetheriaProgressionCommandRouteDocument route,
+        long minimumGeneration,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (route == null) throw new ArgumentNullException(nameof(route));
+        if (minimumGeneration <= 0)
+            throw new InvalidDataException("Remote Hangar finality requires a positive projection generation.");
+        if (_remote == null)
+            throw new InvalidOperationException("No Odin discovery endpoint is configured for the pinned Verse.");
+
+        var target = new CultMeshSessionTarget(route.VerseId, route.AuthorityRuntimeId);
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(2);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var projection = await _remote.ReadAsync<AetheriaHangarProjectionDocument>(
+                    target,
+                    AetheriaRuntimeVerseRecordKeys.HangarProjection.ToString(),
+                    TimeSpan.FromMilliseconds(500),
+                    cancellationToken).ConfigureAwait(false);
+                ValidateProjection(target, projection);
+                if (projection.Generation >= minimumGeneration)
+                    return projection;
+            }
+            catch (Exception error) when (IsRemoteAvailabilityFailure(error))
+            {
+            }
+            await Task.Delay(25, cancellationToken).ConfigureAwait(false);
+        }
+        throw new TimeoutException(
+            $"Verse '{route.VerseId}' did not publish Hangar projection generation {minimumGeneration}.");
+    }
+
+    internal AetheriaProgressionVerseView CreateRemoteView(
+        AetheriaProgressionSourceDocument source,
+        AetheriaProgressionCommandRouteDocument route,
+        AetheriaHangarProjectionDocument projection)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (route == null) throw new ArgumentNullException(nameof(route));
+        if (projection == null) throw new ArgumentNullException(nameof(projection));
+        var target = new CultMeshSessionTarget(route.VerseId, route.AuthorityRuntimeId);
+        ValidateProjection(target, projection);
+        return new AetheriaProgressionVerseView
+        {
+            ProjectionGeneration = projection.Generation,
+            Source = source,
+            AuthorityRuntimeId = route.AuthorityRuntimeId,
+            AssetVerseId = projection.AssetVerseId,
+            AssetProviderId = projection.AssetProviderId,
+            AssetManifestRecordRef = projection.AssetManifestRecordRef,
+            AssetRendezvousEndpoints = source.OdinDiscoveryEndpoints?.ToArray() ?? _odinEndpoints,
+            Hangar = projection.Hangar,
+            Draft = projection.Draft,
+            Loadout = projection.Loadout,
+            Catalog = projection.Catalog
+        };
+    }
+
     internal static void ValidateRemoteReceipt(
         EveSurfaceCommandRequest request,
         AetheriaProgressionCommandRouteDocument route,
@@ -381,6 +446,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             !string.Equals(receipt.SurfaceId, request.SurfaceId, StringComparison.Ordinal) ||
             !string.Equals(receipt.Authority, route.AuthorityRuntimeId, StringComparison.Ordinal) ||
             !string.Equals(receipt.InvocationHash, route.ForwardedInvocationHash, StringComparison.Ordinal) ||
+            receipt.SourceVersion <= 0 ||
             !(string.Equals(receipt.State, "accepted", StringComparison.Ordinal) ||
               string.Equals(receipt.State, "denied", StringComparison.Ordinal)))
         {
@@ -475,6 +541,8 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
                 .ReadAsync().ConfigureAwait(false);
         return new AetheriaProgressionVerseView
         {
+            ProjectionGeneration = Math.Max(1, _node.Cache.Get<AetheriaHangarProjectionDocument>(
+                AetheriaRuntimeVerseRecordKeys.HangarProjection)?.Generation ?? 1),
             Source = source,
             AuthorityRuntimeId = _runtimeId,
             AssetVerseId = _localVerseId,
@@ -515,6 +583,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
 
     private static AetheriaProgressionVerseView UnavailableView(AetheriaProgressionSourceDocument source) => new()
     {
+        ProjectionGeneration = 0,
         Source = source,
         AuthorityRuntimeId = "",
         AssetVerseId = "",
