@@ -55,9 +55,12 @@ Date: 2026-06-13
 > selected manifest generation until a reader has hydrated every referenced
 > page. Observer callbacks run only after that read lease is released.
 > `ActiveRunKey` is derived, and stale daemon frames cannot replace the
-> session-owned run identity. Forwarded remote operations persist an immutable
-> command envelope and Verse/authority/route target before uncertain timeout;
-> later Verse selection cannot retarget the retry. A remote
+> session-owned run identity. Every non-selector Hangar control stamps its
+> source Eve surface's Verse ID and progression-source revision into the
+> immutable command envelope at admission. Route resolution adds the authority
+> runtime and Odin route without consulting mutable dropdown state; a target
+> daemon recognizes its own Verse and does not forward recursively. Later Verse
+> selection cannot retarget the pending command. A remote
 > provider validates its Odin route grant before opening public listeners.
 > EveUnity lowers navigation under a separate inactive root. It quiesces the
 > outgoing root while the old Verse route still owns its shutdown callbacks,

@@ -234,11 +234,18 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
     public async Task<AetheriaProgressionCommandRouteDocument> ResolveOrPinForwardingRouteAsync(
         EveSurfaceCommandRequest request,
         string payloadHash,
+        string expectedVerseId,
+        long expectedProgressionSourceRevision,
         string now,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (request == null) throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(expectedVerseId) ||
+            string.Equals(expectedVerseId, AetheriaProgressionSources.Local, StringComparison.Ordinal))
+            throw new InvalidOperationException("Remote Hangar forwarding requires an immutable remote Verse target.");
+        if (expectedProgressionSourceRevision < 0)
+            throw new InvalidOperationException("Remote Hangar forwarding requires the progression-source revision that authored the command.");
         var routeKey = AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(request.CommandId);
         var forwardedRequest = CreateForwardedRequest(request, payloadHash, _runtimeId);
         var forwardedInvocationHash = EveCommandInvocationHash.Compute(forwardedRequest);
@@ -254,11 +261,15 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
 
         var source = await _node.MutableDocument<AetheriaProgressionSourceDocument>(AetheriaStateNode.ProgressionSourceKey)
             .ReadAsync().ConfigureAwait(false);
-        if (source == null || source.UsesLocalProgression)
-            throw new InvalidOperationException("Remote Hangar forwarding requires a selected remote Verse.");
+        if (source == null)
+            throw new InvalidOperationException("Remote Hangar forwarding requires the progression source catalog.");
+        if (expectedProgressionSourceRevision > source.Revision)
+            throw new InvalidOperationException("The Hangar command names a progression-source revision that has not been published.");
         if (_remote == null)
-            throw new InvalidOperationException("No Odin discovery endpoint is configured for the selected Verse.");
-        var remote = await ResolveRemoteProgressionAsync(source, cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("No Odin discovery endpoint is configured for the targeted Verse.");
+        var targetedSource = Clone(source);
+        targetedSource.SelectedVerseId = expectedVerseId.Trim();
+        var remote = await ResolveRemoteProgressionAsync(targetedSource, cancellationToken).ConfigureAwait(false);
         var route = new AetheriaProgressionCommandRouteDocument
         {
             CommandId = request.CommandId,
@@ -266,7 +277,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             ForwardedInvocationHash = forwardedInvocationHash,
             VerseId = remote.Target.VerseId,
             AuthorityRuntimeId = remote.Target.AuthorityRuntimeId,
-            ProgressionSourceRevision = source.Revision,
+            ProgressionSourceRevision = expectedProgressionSourceRevision,
             OdinDiscoveryEndpoints = (source.OdinDiscoveryEndpoints ?? Array.Empty<string>()).ToArray(),
             CreatedAtUtc = now ?? ""
         };

@@ -55,8 +55,20 @@ try
         remoteVerse,
         "progression-remote",
         TimeSpan.FromSeconds(45));
-    local = StartDaemon(root, localState, "progression-local", localVerse, localPort,
-        "--odin-discovery-endpoint", remoteEndpoint);
+    var previousRouteDelayCommand = Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_COMMAND_ID");
+    var previousRouteDelay = Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_MS");
+    Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_COMMAND_ID", delayedRemoteCommandId);
+    Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_MS", "1500");
+    try
+    {
+        local = StartDaemon(root, localState, "progression-local", localVerse, localPort,
+            "--odin-discovery-endpoint", remoteEndpoint);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_COMMAND_ID", previousRouteDelayCommand);
+        Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_ROUTE_MS", previousRouteDelay);
+    }
     await WaitForEndpointAsync(local, localPort, TimeSpan.FromSeconds(30));
 
     using (var client = Client(localEndpoint))
@@ -93,7 +105,7 @@ try
             CultMesh.OperationInvocation(
                 "aetheria.hangar.injected-failure",
                 idempotencyKey: poisonCommandId),
-            CultMesh.OperationPayload(),
+            TargetedPayload(initialSurface),
             DateTimeOffset.UtcNow,
             "progression-verse-smoke");
         const string validModeCommandId = "progression-smoke-valid-after-poison";
@@ -103,7 +115,7 @@ try
             CultMesh.OperationInvocation(
                 initialSurface.Commands.Single(template => template.Command == AetheriaRuntimeHangarCommands.SelectArena).Operation,
                 idempotencyKey: validModeCommandId),
-            CultMesh.OperationPayload(),
+            TargetedPayload(initialSurface),
             DateTimeOffset.UtcNow.AddTicks(1),
             "progression-verse-smoke");
         await client.SubmitDocumentAsync(
@@ -133,6 +145,10 @@ try
         Require(validModeReceipt.CommandId == validModeCommandId &&
                 draftAfterPoison.SelectedMode == AetheriaGameModes.Arena,
             "one poison Hangar request must remain isolated while a later valid command reaches independent finality");
+
+        var localHangarBeforeRemote = await client.ReadAsync<AetheriaHangarState>(
+            localTarget,
+            AetheriaStateNode.HangarKey.ToString());
 
         await SubmitAsync(
             client,
@@ -199,13 +215,6 @@ try
             removeRequest.CommandBoundary,
             removeRequest.ReceiptSchema);
         var removeReceiptTask = SubmitRequestAsync(client, localTarget, removeRequest!);
-        await ReadUntilAsync(
-            client,
-            localTarget,
-            AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(removeRequest!.CommandId).ToString(),
-            (AetheriaProgressionCommandRouteDocument route) =>
-                route.CommandId == removeRequest.CommandId && route.VerseId == remoteVerse,
-            TimeSpan.FromSeconds(5));
         var localFinality = Stopwatch.StartNew();
         var selectLocalReceipt = await SubmitAsync(
             client,
@@ -217,7 +226,19 @@ try
         Require(selectLocalReceipt.State == "accepted" &&
                 localFinality.Elapsed < TimeSpan.FromMilliseconds(1500) &&
                 !removeReceiptTask.IsCompleted,
-            "remote receipt waiting must not hold the state gate or block an unrelated local command");
+            "a pre-route remote command must not hold the state gate or block a later Verse selection");
+        var pinnedRemoveRoute = await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(removeRequest!.CommandId).ToString(),
+            (AetheriaProgressionCommandRouteDocument route) =>
+                route.CommandId == removeRequest.CommandId &&
+                route.VerseId == remoteVerse &&
+                route.ProgressionSourceRevision == long.Parse(
+                    removeRequest.PayloadFields[AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision]),
+            TimeSpan.FromSeconds(5));
+        Require(pinnedRemoveRoute.VerseId == remoteVerse,
+            "changing the Verse dropdown before route creation must not retarget the admitted command to Local");
         var localDuringRemoteWait = await ReadUntilAsync(
             client,
             localTarget,
@@ -240,6 +261,11 @@ try
             AetheriaStateNode.HangarKey.ToString(),
             (AetheriaHangarState hangar) => hangar.Revision > remoteRevision,
             TimeSpan.FromSeconds(10));
+        var localHangarAfterRemote = await client.ReadAsync<AetheriaHangarState>(
+            localTarget,
+            AetheriaStateNode.HangarKey.ToString());
+        Require(localHangarAfterRemote.Revision == localHangarBeforeRemote.Revision,
+            "a remote command delayed before route creation must never fall through into Local progression after a dropdown switch");
 
         var refitSurface = await ReadUntilAsync(
             client,
@@ -564,6 +590,13 @@ static async Task<EveCommandReceiptDocument> SubmitAsync(
     string command,
     IReadOnlyDictionary<string, string> payload)
 {
+    var commandPayload = new Dictionary<string, string>(payload, StringComparer.Ordinal);
+    if (!string.Equals(command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal) &&
+        string.Equals(surface.Surface.Id, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal))
+    {
+        foreach (var field in TargetedPayload(surface))
+            commandPayload[field.Key] = field.Value;
+    }
     var operation = CultMesh.OperationInvocation(
         surface.Commands.Single(template => template.Command == command).Operation,
         idempotencyKey: "progression-verse-smoke-" + Guid.NewGuid().ToString("N"));
@@ -571,10 +604,20 @@ static async Task<EveCommandReceiptDocument> SubmitAsync(
         surface.ProviderId,
         surface.Surface.Id,
         operation,
-        CultMesh.OperationPayload(payload),
+        CultMesh.OperationPayload(commandPayload),
         DateTimeOffset.UtcNow,
         "progression-verse-smoke");
     return await SubmitRequestAsync(client, target, request);
+}
+
+static CultMeshOperationPayload TargetedPayload(EveSurfaceDocument surface)
+{
+    var root = surface?.Surface?.Root ?? throw new ArgumentNullException(nameof(surface));
+    return CultMesh.OperationPayload(
+        (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId,
+            root.Props.TryGetValue("progressionVerseId", out var verseId) ? verseId : AetheriaProgressionSources.Local),
+        (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision,
+            root.Props.TryGetValue("progressionSourceRevision", out var revision) ? revision : "0"));
 }
 
 static async Task<EveCommandReceiptDocument> SubmitRequestAsync(

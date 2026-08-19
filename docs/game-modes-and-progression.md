@@ -242,6 +242,15 @@ simulation tick. The first attempt commits only the immutable route pin. A
 remote receipt later enters one short finality transaction with the local
 receipt and inbox deletion. Timeout leaves that request pending without
 blocking local commands, ticks, or other state writers.
+Every non-selector Hangar control and inventory-drop target carries the
+progression Verse ID and progression-source revision of the Eve surface that
+authored it. Admission preserves both fields in the immutable command journal.
+Classification and route creation read that envelope, never the dropdown's
+current value. A command targeting `Local` executes against the routing
+daemon's local store; a command targeting the daemon's own Verse executes
+there; only a foreign Verse enters forwarding. If the advertised target is no
+longer resolvable, the command remains pinned and fails closed rather than
+falling through to another Verse.
 The receipt must match the immutable request and pinned Verse/authority route;
 a typed document under the expected key with another command, provider,
 surface, authority, or navigation Verse is rejected and leaves the request
@@ -280,9 +289,10 @@ The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and
 binds `ClientId` to the runtime identity established for that transport session;
 it cannot apply arbitrary raw document puts to Hangar, draft, run, or policy
-state. The first forwarding attempt durably pins command ID and payload hash to
-one Verse, authority runtime, progression-source revision, and Odin endpoint
-set. A later dropdown change affects only later commands. The pending command
+state. Admission durably binds command ID and payload hash to the Verse and
+progression-source revision printed on its source Eve surface; forwarding then
+pins the resolved authority runtime and Odin endpoint set. A later dropdown
+change affects only commands authored from the newly published surface. The pending command
 retries that same target until its canonical receipt arrives;
 the forwarding daemon cannot manufacture a denial after the remote authority
 may have committed. Remote providers validate every Odin-issued route grant

@@ -241,6 +241,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 var world = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.world");
                 var launcher = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.launcher");
                 var verse = launcher.Children.Single(component => component.Id == "aetheria.hangar.verse");
+                var launchControl = launcher.Children.Single(component => component.Id == "aetheria.hangar.launch");
                 Require(surface.Surface.Id == AetheriaRuntimeHangarCommands.SurfaceId &&
                         surface.Surface.Root.Props["selectedMode"] == AetheriaGameModes.Terminus &&
                         Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.ship.id").Props["value"] == selectedShipId &&
@@ -248,6 +249,9 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         world.Props.Any(prop => prop.Key == "entityBodyId" && !string.IsNullOrWhiteSpace(prop.Value)) &&
                         verse.Kind == "control.select" &&
                         verse.Props["value"] == "gamecult.aetheria" &&
+                        surface.Surface.Root.Props["progressionVerseId"] == "gamecult.aetheria" &&
+                        launchControl.Props["payload." + AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId] == "gamecult.aetheria" &&
+                        launchControl.Props["payload." + AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision] == "0" &&
                         verse.Children.Count == 2 &&
                         verse.Children.All(option => option.Kind == "control.option") &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.SelectVerse) &&
@@ -383,7 +387,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 new CultMeshOperationInvocationDescriptor(
                     AetheriaRuntimeHangarCommands.SelectShip,
                     idempotencyKey: commandId),
-                CultMesh.OperationPayload(("shipId", shipId)),
+                CultMesh.OperationPayload(
+                    ("shipId", shipId),
+                    (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, AetheriaProgressionSources.Local),
+                    (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision, "0")),
                 DateTimeOffset.Parse("2026-08-19T00:00:00Z", CultureInfo.InvariantCulture),
                 "pilot:journal-smoke");
 
@@ -409,6 +416,9 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 .ReadAsync().GetAwaiter().GetResult()!;
             Require(string.Equals(envelope.PayloadHash, AetheriaHangarCommandJournal.PayloadHash(pending), StringComparison.Ordinal),
                 "the durable Hangar command envelope and executable request must describe the same winning payload");
+            Require(envelope.ProgressionVerseId == AetheriaProgressionSources.Local &&
+                    envelope.ProgressionSourceRevision == 0,
+                "the immutable Hangar command envelope must retain the progression target that authored the request");
         }
         finally
         {
@@ -425,7 +435,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             new CultMeshOperationInvocationDescriptor(
                 AetheriaRuntimeHangarCommands.SelectShip,
                 idempotencyKey: commandId),
-            CultMesh.OperationPayload(("shipId", "ship:one")),
+            CultMesh.OperationPayload(
+                ("shipId", "ship:one"),
+                (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, "gamecult.aetheria"),
+                (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision, "4")),
             DateTimeOffset.Parse("2026-08-19T00:00:00Z", CultureInfo.InvariantCulture),
             "pilot:receipt-smoke");
         var route = new AetheriaProgressionCommandRouteDocument
@@ -613,7 +626,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 new CultMeshOperationInvocationDescriptor(
                     AetheriaRuntimeHangarCommands.SelectShip,
                     idempotencyKey: commandId),
-                CultMesh.OperationPayload(("shipId", before.SelectedShipId)),
+                CultMesh.OperationPayload(
+                    ("shipId", before.SelectedShipId),
+                    (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, AetheriaProgressionSources.Local),
+                    (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision, "1")),
                 DateTimeOffset.Parse("2026-08-19T00:00:01Z", CultureInfo.InvariantCulture),
                 "pilot:commit-smoke");
             var ingress = AetheriaHangarCommandJournal.AdmitAsync(
@@ -683,7 +699,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     new CultMeshOperationInvocationDescriptor(
                         AetheriaRuntimeHangarCommands.Launch,
                         idempotencyKey: commandId),
-                    CultMesh.OperationPayload(("expectedHangarRevision", originalRevision.ToString(CultureInfo.InvariantCulture))),
+                    CultMesh.OperationPayload(
+                        ("expectedHangarRevision", originalRevision.ToString(CultureInfo.InvariantCulture)),
+                        (AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId, AetheriaProgressionSources.Local),
+                        (AetheriaRuntimeHangarCommands.ExpectedProgressionSourceRevision, "0")),
                     DateTimeOffset.Parse("2026-08-19T00:00:01Z", CultureInfo.InvariantCulture),
                     "pilot:rollback-smoke");
                 AetheriaHangarCommandJournal.AdmitAsync(
