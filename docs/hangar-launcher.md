@@ -157,7 +157,10 @@ gameplay-state writer.
   key; projection and ingress resolve its current key from the canonical run,
   failing closed on zero or multiple matches. The daemon therefore derives the
   actor from authenticated runtime plus roster at command ingress, ignoring
-  caller-supplied actor overrides even after zone transfer or restart. Resulting facts
+  caller-supplied actor overrides even after zone transfer or restart. The same
+  seat projector owns a scoped hot body/view, zone-render record, and input
+  capability, so headless and graphical controllers observe the ship they can
+  command rather than the primary run ship. Resulting facts
   remain daemon-authored with separate proposer provenance;
 - flush/reopen preserves the Hangar revision, ship deployment state, and
   receipts;

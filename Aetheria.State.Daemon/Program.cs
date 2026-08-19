@@ -151,6 +151,9 @@ using var bodyDemand = new CultMeshBodyDemandTracker(clientSubscriptions);
 using var soaPublisher = new AetheriaRuntimeDaemonSoaFramePublisher(
     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
     bodyDemand);
+using var arenaSeatObservations = new AetheriaArenaSeatObservationPublishers(
+    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+    bodyDemand);
 var stopped = new TaskCompletionSource<object?>();
 var progressionForwardingTasks = new ConcurrentDictionary<string, Task>();
 using var progressionForwardingShutdown = new CancellationTokenSource();
@@ -330,7 +333,11 @@ while (!stopped.Task.IsCompleted)
     TraceStartup("client-bootstrap");
     ThrowIfClientHostFaulted(cultMeshClientHost);
     await PublishHotEntityStateAsync(
-        node, soaPublisher, hotState, latestFrame!, ingressState.Catalog, cultMeshClientHost).ConfigureAwait(false);
+        node, soaPublisher, hotState, latestFrame!, ingressState.Catalog, cultMeshClientHost,
+        AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest).ConfigureAwait(false);
+    await PublishArenaSeatObservationsAsync(
+        node, arenaSeatObservations, latestFrame!, ingressState.ArenaRoster,
+        ingressState.Catalog, cultMeshClientHost).ConfigureAwait(false);
     TraceStartup("hot-entity-state");
     if (publishRestoredFrame)
     {
@@ -377,7 +384,11 @@ while (!stopped.Task.IsCompleted)
         ThrowIfClientHostFaulted(cultMeshClientHost);
         latestFrame = tick.Frame;
         await PublishHotEntityStateAsync(
-            node, soaPublisher, hotState, tick.Frame, ingressState.Catalog, cultMeshClientHost).ConfigureAwait(false);
+            node, soaPublisher, hotState, tick.Frame, ingressState.Catalog, cultMeshClientHost,
+            AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest).ConfigureAwait(false);
+        await PublishArenaSeatObservationsAsync(
+            node, arenaSeatObservations, tick.Frame, ingressState.ArenaRoster,
+            ingressState.Catalog, cultMeshClientHost).ConfigureAwait(false);
         nextTickUtc += options.TickInterval;
         if (nextTickUtc < DateTimeOffset.UtcNow - options.TickInterval)
             nextTickUtc = DateTimeOffset.UtcNow;
@@ -2258,7 +2269,8 @@ static async Task PublishHotEntityStateAsync(
     AetheriaHotEntityPublicationState state,
     AetheriaRuntimeDaemonFrameDocument frame,
     AetheriaRuntimeCatalogSnapshot? catalog,
-    AetheriaClientCultMeshHost clientHost)
+    AetheriaClientCultMeshHost clientHost,
+    CultRecordKey viewRecordKey)
 {
     var hasRealtimeConsumers = clientHost.Realtime.ConnectionCount > 0;
     using var hotFrame = publisher.BuildCurrentZoneEntities(
@@ -2284,7 +2296,7 @@ static async Task PublishHotEntityStateAsync(
                     CultMeshBodyPublicationDocument.CreateLatestRecordKey(publication.Body.BodyId))
                 .ReplaceAsync(publication.Body)
                 .ConfigureAwait(false);
-            await node.MutableDocument<EveEntitySoaViewDocument>(AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest)
+            await node.MutableDocument<EveEntitySoaViewDocument>(viewRecordKey)
                 .ReplaceAsync(publication.View)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -2296,12 +2308,53 @@ static async Task PublishHotEntityStateAsync(
         {
             ChannelId = "aetheria.entities",
             SchemaId = AetheriaRuntimeDaemonSoaFramePublisher.BodySchemaId,
-            BodyId = AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
+            BodyId = publisher.PublishedBodyId,
             ProducerEpoch = publication.Body.ProducerEpoch,
             Sequence = publication.Body.Sequence,
             Delivery = CultMeshRealtimeDelivery.LatestOnly,
             Payload = publication.RealtimePayload
         }).ConfigureAwait(false);
+    }
+}
+
+static async Task PublishArenaSeatObservationsAsync(
+    AetheriaStateNode node,
+    AetheriaArenaSeatObservationPublishers publishers,
+    AetheriaRuntimeDaemonFrameDocument frame,
+    AetheriaRuntimeArenaRosterDocument? roster,
+    AetheriaRuntimeCatalogSnapshot? catalog,
+    AetheriaClientCultMeshHost clientHost)
+{
+    var active = (roster?.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
+        .Where(seat => seat != null &&
+            string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
+            !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId))
+        .GroupBy(seat => seat.ControllerRuntimeId, StringComparer.Ordinal)
+        .Where(group => group.Count() == 1)
+        .Select(group => group.Single())
+        .ToArray();
+    publishers.Retain(active.Select(seat => seat.ControllerRuntimeId));
+    foreach (var seat in active)
+    {
+        AetheriaRuntimeDaemonFrameDocument projected;
+        try
+        {
+            projected = AetheriaRuntimeArenaSeatViewProjector.ResolveFrame(frame, seat);
+        }
+        catch (InvalidOperationException)
+        {
+            continue;
+        }
+        var observation = publishers.For(seat.ControllerRuntimeId);
+        await PublishHotEntityStateAsync(
+            node,
+            observation.Publisher,
+            observation.State,
+            projected,
+            catalog,
+            clientHost,
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotEntitySoaView(seat.ControllerRuntimeId))
+            .ConfigureAwait(false);
     }
 }
 
@@ -2411,30 +2464,40 @@ static async Task PublishClientGameplayDocumentsAsync(
         await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.DaemonGameSurface)
             .ReplaceAsync(portableGameSurface)
             .ConfigureAwait(false);
-        if (arenaRoster != null)
+        await PublishDaemonSectorMapSurfaceAsync(node, result.Frame, inputCatalog).ConfigureAwait(false);
+    }
+    if (arenaRoster != null)
+    {
+        foreach (var seat in (arenaRoster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>()).Where(seat =>
+                     seat != null &&
+                     string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
+                     !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId)))
         {
-            foreach (var seat in (arenaRoster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>()).Where(seat =>
-                         seat != null &&
-                         string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
-                         !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId)))
+            AetheriaRuntimeArenaSeatViewProjection view;
+            try
             {
-                if (!result.Frame.Run.TryResolveEntityId(seat.ControlledEntityId, out var controlledEntityKey))
-                    continue;
-                var seatSurfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId);
-                var seatSurface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
+                view = AetheriaRuntimeArenaSeatViewProjector.Project(
                     result.Frame,
+                    seat,
                     result.Health ?? new AetheriaRuntimeDaemonHealthDocument(),
                     result.CommandBoundary ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId),
-                    activeMainMenuSurfaceId,
                     inputCatalog,
-                    controlledEntityKey,
-                    seatSurfaceId);
-                await node.MutableDocument<EveSurfaceDocument>(
-                        AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId))
-                    .ReplaceAsync(seatSurface).ConfigureAwait(false);
+                    activeMainMenuSurfaceId);
             }
+            catch (InvalidOperationException)
+            {
+                continue;
+            }
+            await node.MutableDocument<AetheriaRuntimeZoneRenderDocument>(
+                    AetheriaRuntimeVerseRecordKeys.ArenaPilotZoneRender(seat.ControllerRuntimeId))
+                .ReplaceAsync(view.ZoneRender).ConfigureAwait(false);
+            await node.MutableDocument<EveInputCapabilityDocument>(
+                    AetheriaRuntimeVerseRecordKeys.ArenaPilotInputCapability(seat.ControllerRuntimeId))
+                .ReplaceAsync(view.InputCapability).ConfigureAwait(false);
+            await node.MutableDocument<EveSurfaceDocument>(
+                    AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId))
+                .ReplaceAsync(view.Surface).ConfigureAwait(false);
         }
-        await PublishDaemonSectorMapSurfaceAsync(node, result.Frame, inputCatalog).ConfigureAwait(false);
     }
     TraceClientDocumentPhase("game-topology");
 }
@@ -3685,18 +3748,22 @@ static async Task<string> PublishArenaSeatSurfaceAsync(
     var boundary = await node.MutableDocument<AetheriaRuntimeDaemonCommandBoundaryDocument>(AetheriaRuntimeVerseRecordKeys.DaemonCommandBoundary)
         .ReadAsync().ConfigureAwait(false) ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId);
     var surfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId);
-    if (!frame.Run.TryResolveEntityId(seat.ControlledEntityId, out var controlledEntityKey))
-        throw new InvalidOperationException("Arena seat projection cannot resolve its stable controlled entity.");
-    var surface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
+    var catalog = node.RuntimeCatalog().Latest();
+    var view = AetheriaRuntimeArenaSeatViewProjector.Project(
         frame,
+        seat,
         health,
         boundary,
-        "",
-        node.RuntimeCatalog().Latest(),
-        controlledEntityKey,
-        surfaceId);
+        catalog);
+    await node.MutableDocument<AetheriaRuntimeZoneRenderDocument>(
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotZoneRender(seat.ControllerRuntimeId))
+        .ReplaceAsync(view.ZoneRender).ConfigureAwait(false);
+    await node.MutableDocument<EveInputCapabilityDocument>(
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotInputCapability(seat.ControllerRuntimeId))
+        .ReplaceAsync(view.InputCapability)
+        .ConfigureAwait(false);
     await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId))
-        .ReplaceAsync(surface).ConfigureAwait(false);
+        .ReplaceAsync(view.Surface).ConfigureAwait(false);
     var roster = await node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
             new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(session.SessionId)))
         .ReadAsync().ConfigureAwait(false)
@@ -5202,7 +5269,9 @@ internal sealed class AetheriaPlayableWorldDemandState
              string.Equals(key, AetheriaRuntimeVerseRecordKeys.DaemonGameReactiveSurface.ToString(), StringComparison.Ordinal) ||
              string.Equals(key, AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(), StringComparison.Ordinal)) ||
          demand.SchemaIds.Contains(AetheriaRuntimeDaemonSchemas.Frame, StringComparer.Ordinal) ||
-         demand.BodyIds.Contains(AetheriaRuntimeDaemonSoaFramePublisher.BodyId, StringComparer.Ordinal));
+         demand.BodyIds.Any(bodyId =>
+             string.Equals(bodyId, AetheriaRuntimeDaemonSoaFramePublisher.BodyId, StringComparison.Ordinal) ||
+             bodyId.StartsWith("eve:entity-soa:aetheria.daemon.arena.", StringComparison.Ordinal)));
 }
 
 internal sealed class AetheriaManagedViewportDemandState
@@ -5325,6 +5394,66 @@ internal sealed class AetheriaHotEntityPublicationState
         }
         return true;
     }
+}
+
+internal sealed class AetheriaArenaSeatObservationPublishers : IDisposable
+{
+    private readonly long _producerEpoch;
+    private readonly CultMeshBodyDemandTracker _demand;
+    private readonly Dictionary<string, AetheriaArenaSeatObservationPublisher> _publishers =
+        new(StringComparer.Ordinal);
+
+    public AetheriaArenaSeatObservationPublishers(long producerEpoch, CultMeshBodyDemandTracker demand)
+    {
+        _producerEpoch = producerEpoch;
+        _demand = demand ?? throw new ArgumentNullException(nameof(demand));
+    }
+
+    public AetheriaArenaSeatObservationPublisher For(string controllerRuntimeId)
+    {
+        if (_publishers.TryGetValue(controllerRuntimeId, out var existing))
+            return existing;
+        var created = new AetheriaArenaSeatObservationPublisher(
+            new AetheriaRuntimeDaemonSoaFramePublisher(
+                _producerEpoch,
+                _demand,
+                AetheriaRuntimeVerseRecordKeys.ArenaPilotBodyId(controllerRuntimeId)),
+            new AetheriaHotEntityPublicationState());
+        _publishers.Add(controllerRuntimeId, created);
+        return created;
+    }
+
+    public void Retain(IEnumerable<string> controllerRuntimeIds)
+    {
+        var retained = (controllerRuntimeIds ?? Array.Empty<string>()).ToHashSet(StringComparer.Ordinal);
+        foreach (var stale in _publishers.Keys.Where(key => !retained.Contains(key)).ToArray())
+        {
+            _publishers[stale].Dispose();
+            _publishers.Remove(stale);
+        }
+    }
+
+    public void Dispose()
+    {
+        foreach (var publisher in _publishers.Values)
+            publisher.Dispose();
+        _publishers.Clear();
+    }
+}
+
+internal sealed class AetheriaArenaSeatObservationPublisher : IDisposable
+{
+    public AetheriaArenaSeatObservationPublisher(
+        AetheriaRuntimeDaemonSoaFramePublisher publisher,
+        AetheriaHotEntityPublicationState state)
+    {
+        Publisher = publisher;
+        State = state;
+    }
+
+    public AetheriaRuntimeDaemonSoaFramePublisher Publisher { get; }
+    public AetheriaHotEntityPublicationState State { get; }
+    public void Dispose() => Publisher.Dispose();
 }
 
 internal sealed class AetheriaDaemonIngressState

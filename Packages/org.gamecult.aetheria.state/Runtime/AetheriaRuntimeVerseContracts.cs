@@ -38,6 +38,14 @@ namespace GameCult.Aetheria.State.Verse
             $"aetheria.arena.pilot.{StableToken(controllerRuntimeId)}";
         public static CultRecordKey ArenaPilotSurface(string controllerRuntimeId) =>
             new($"eve:surface:{ArenaPilotSurfaceId(controllerRuntimeId)}");
+        public static string ArenaPilotBodyId(string controllerRuntimeId) =>
+            $"eve:entity-soa:aetheria.daemon.arena.{StableToken(controllerRuntimeId)}";
+        public static CultRecordKey ArenaPilotEntitySoaView(string controllerRuntimeId) =>
+            new($"eve:entity-view:aetheria.daemon.arena.{StableToken(controllerRuntimeId)}");
+        public static CultRecordKey ArenaPilotZoneRender(string controllerRuntimeId) =>
+            new($"daemon:aetheria.zone_render.arena.{StableToken(controllerRuntimeId)}.v1");
+        public static CultRecordKey ArenaPilotInputCapability(string controllerRuntimeId) =>
+            new($"eve:input:aetheria.arena.{StableToken(controllerRuntimeId)}");
         public static CultRecordKey DaemonGameReactiveSurface { get; } = new("eve:surface:aetheria.daemon.game.reactive");
         public static CultRecordKey StarbridgeCommanderSurface { get; } = new("eve:surface:aetheria.starbridge.commander");
         public static CultRecordKey PilotInputCapability { get; } = new("eve:input:aetheria.pilot");
@@ -87,6 +95,38 @@ namespace GameCult.Aetheria.State.Verse
                 token = token.Replace("--", "-", StringComparison.Ordinal);
             return string.IsNullOrWhiteSpace(token) ? "empty" : token;
         }
+    }
+
+    public sealed class AetheriaRuntimePilotObservationRefs
+    {
+        public AetheriaRuntimePilotObservationRefs(
+            string entityViewPointerId,
+            string entityBodyId,
+            string zoneRenderPointerId,
+            string inputCapabilityId)
+        {
+            EntityViewPointerId = entityViewPointerId ?? "";
+            EntityBodyId = entityBodyId ?? "";
+            ZoneRenderPointerId = zoneRenderPointerId ?? "";
+            InputCapabilityId = inputCapabilityId ?? "";
+        }
+
+        public string EntityViewPointerId { get; }
+        public string EntityBodyId { get; }
+        public string ZoneRenderPointerId { get; }
+        public string InputCapabilityId { get; }
+
+        public static AetheriaRuntimePilotObservationRefs Primary { get; } = new(
+            AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString(),
+            AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
+            AetheriaRuntimeVerseRecordKeys.ZoneRenderLatest.ToString(),
+            AetheriaRuntimeVerseRecordKeys.PilotInputCapability.ToString());
+
+        public static AetheriaRuntimePilotObservationRefs Arena(string controllerRuntimeId) => new(
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotEntitySoaView(controllerRuntimeId).ToString(),
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotBodyId(controllerRuntimeId),
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotZoneRender(controllerRuntimeId).ToString(),
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotInputCapability(controllerRuntimeId).ToString());
     }
 
     public static class AetheriaRuntimeVerseContractRegistry

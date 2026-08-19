@@ -575,6 +575,18 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 primaryEntity.EntityId = primaryArenaSeat.ControlledEntityId;
                 var joinedEntity = Entity(1, 20, "arena-b");
                 joinedEntity.EntityId = joinedSeat.ControlledEntityId;
+                joinedEntity.Contacts =
+                [
+                    new AetheriaRuntimeEntityContactCommit
+                    {
+                        TargetEntityIndex = 2,
+                        InfoGathered = 1,
+                        Hostile = true,
+                        Visible = true
+                    }
+                ];
+                var joinedContact = Entity(2, 40, "arena-b-contact");
+                joinedContact.EntityId = "arena-b-contact-stable";
                 var seatRun = new AetheriaRuntimeRunCheckpointCommit
                 {
                     RunId = "arena-seat-smoke",
@@ -586,7 +598,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         new AetheriaRuntimeZoneSnapshotCommit
                         {
                             ZoneIndex = 0,
-                            Entities = [primaryEntity, joinedEntity]
+                            Entities = [primaryEntity, joinedEntity, joinedContact]
                         }
                     ]
                 };
@@ -595,13 +607,13 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 var seatFrame = AetheriaRuntimeDaemonFrameDocument.Create(
                     seatRun, "daemon-smoke", arenaSession.SessionId, 1, 0, 0.02);
                 var seatSurfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId("ai-build-b");
-                var seatSurface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
+                var seatView = AetheriaRuntimeArenaSeatViewProjector.Project(
                     seatFrame,
+                    joinedSeat,
                     new AetheriaRuntimeDaemonHealthDocument(),
                     AetheriaRuntimeDaemonCommandBoundaryDocument.Create("daemon-smoke"),
-                    catalog: runtimeCatalog,
-                    controlledEntityKey: initialJoinedEntityKey,
-                    surfaceId: seatSurfaceId);
+                    runtimeCatalog);
+                var seatSurface = seatView.Surface;
                 var seatWorld = Flatten(seatSurface.Surface.Root).Single(component => component.Kind == "world.scene3d");
                 var controllableEntities = Flatten(seatSurface.Surface.Root)
                     .Where(component => component.Kind == "entity.presentation" &&
@@ -733,19 +745,58 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             "daemon-smoke").Authorized &&
                         movedJoinedCommand.ActorEntityKey == reindexedJoinedEntityKey,
                     "Arena admission must resolve stable seat identities after movement instead of granting A control of B's reindexed key");
-                var movedJoinedSurface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
-                    AetheriaRuntimeDaemonFrameDocument.Create(
-                        seatRun, "daemon-smoke", arenaSession.SessionId, 2, 0.02, 0.02),
+                var movedFrame = AetheriaRuntimeDaemonFrameDocument.Create(
+                    seatRun, "daemon-smoke", arenaSession.SessionId, 2, 0.02, 0.02);
+                var movedJoinedView = AetheriaRuntimeArenaSeatViewProjector.Project(
+                    movedFrame,
+                    joinedSeat,
                     new AetheriaRuntimeDaemonHealthDocument(),
                     AetheriaRuntimeDaemonCommandBoundaryDocument.Create("daemon-smoke"),
-                    catalog: runtimeCatalog,
-                    controlledEntityKey: reindexedJoinedEntityKey,
-                    surfaceId: seatSurfaceId);
-                var movedWorld = Flatten(movedJoinedSurface.Surface.Root)
+                    runtimeCatalog);
+                var movedWorld = Flatten(movedJoinedView.Surface.Surface.Root)
                     .Single(component => component.Kind == "world.scene3d");
                 Require(movedWorld.Props["playerEntityId"] == reindexedJoinedEntityKey &&
-                        movedWorld.Props["cameraTargetEntityId"] == reindexedJoinedEntityKey,
-                    "Arena seat projection must use the same stable-identity resolution as command ingress after reindex");
+                        movedWorld.Props["cameraTargetEntityId"] == reindexedJoinedEntityKey &&
+                        movedWorld.Props["zoneIndex"] == "0" &&
+                        movedWorld.Props["entityViewPointerId"] == movedJoinedView.ObservationRefs.EntityViewPointerId &&
+                        movedWorld.Props["entityBodyId"] == movedJoinedView.ObservationRefs.EntityBodyId &&
+                        movedWorld.Props["zoneRenderPointerId"] == movedJoinedView.ObservationRefs.ZoneRenderPointerId &&
+                        movedWorld.Props["inputCapability"] == movedJoinedView.ObservationRefs.InputCapabilityId &&
+                        movedJoinedView.ZoneRender.ZoneIndex == 0 &&
+                        movedJoinedView.ZoneRender.CurrentEntityKey == reindexedJoinedEntityKey &&
+                        movedJoinedView.InputCapability.Actions.Single(action =>
+                            action.ActionId == "pilot.target-nearest").Availability == "available",
+                    "Arena seat projection must own the same ship, zone, contacts, and scoped observation records after reindex");
+                using (var seatPublisher = new AetheriaRuntimeDaemonSoaFramePublisher(
+                           1,
+                           bodyId: movedJoinedView.ObservationRefs.EntityBodyId))
+                using (var seatHotFrame = seatPublisher.BuildCurrentZoneEntities(
+                           movedJoinedView.Frame,
+                           runtimeCatalog,
+                           realtimeDemand: true))
+                {
+                    var seatPublication = seatPublisher.PublishAsync(seatHotFrame!, includeRealtimePayload: false)
+                        .GetAwaiter().GetResult();
+                    Require(seatPublication.Body.BodyId == movedJoinedView.ObservationRefs.EntityBodyId &&
+                            seatPublication.View.Identities.Any(identity => identity.EntityId == joinedSeat.ControlledEntityId) &&
+                            seatPublication.View.Identities.Any(identity => identity.EntityId == joinedContact.EntityId) &&
+                            seatPublication.View.Identities.All(identity => identity.EntityId != primaryArenaSeat.ControlledEntityId),
+                        "Arena seat hot body must contain its own visible world and exclude the other seat's zone");
+                }
+                var movedPrimaryView = AetheriaRuntimeArenaSeatViewProjector.Project(
+                    movedFrame,
+                    primaryArenaSeat,
+                    new AetheriaRuntimeDaemonHealthDocument(),
+                    AetheriaRuntimeDaemonCommandBoundaryDocument.Create("daemon-smoke"),
+                    runtimeCatalog);
+                var movedPrimaryWorld = Flatten(movedPrimaryView.Surface.Surface.Root)
+                    .Single(component => component.Kind == "world.scene3d");
+                Require(movedPrimaryWorld.Props["zoneIndex"] == "1" &&
+                        movedPrimaryView.ZoneRender.ZoneIndex == 1 &&
+                        movedPrimaryView.ZoneRender.CurrentEntityKey == movedPrimaryEntityKey &&
+                        movedPrimaryView.InputCapability.Actions.Single(action =>
+                            action.ActionId == "pilot.target-nearest").Availability == "unavailable",
+                    "the moved Arena seat must derive its own zone and input state instead of reading the same-index entity in the primary zone");
                 var restartedSeatRun = MessagePack.MessagePackSerializer.Deserialize<AetheriaRuntimeRunCheckpointCommit>(
                     MessagePack.MessagePackSerializer.Serialize(seatRun));
                 var restartedArenaRoster = MessagePack.MessagePackSerializer.Deserialize<AetheriaRuntimeArenaRosterDocument>(

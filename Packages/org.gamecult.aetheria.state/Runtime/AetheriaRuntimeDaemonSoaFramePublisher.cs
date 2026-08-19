@@ -79,22 +79,30 @@ namespace GameCult.Aetheria.State.Verse
 
         private readonly CultMeshFrameBodyPublisher _localPublisher;
         private readonly CultMeshBodyDemandTracker? _demand;
+        private readonly string _bodyId;
+        private readonly string _producerId;
         private readonly Dictionary<string, int> _syntheticEntityIndices =
             new Dictionary<string, int>(StringComparer.Ordinal);
         private int _nextSyntheticEntityIndex = -2;
 
         public AetheriaRuntimeDaemonSoaFramePublisher(
             long producerEpoch,
-            CultMeshBodyDemandTracker? demand = null)
+            CultMeshBodyDemandTracker? demand = null,
+            string bodyId = BodyId,
+            string producerId = ProducerId)
         {
+            _bodyId = string.IsNullOrWhiteSpace(bodyId) ? throw new ArgumentException("Body id must be non-empty.", nameof(bodyId)) : bodyId;
+            _producerId = string.IsNullOrWhiteSpace(producerId) ? throw new ArgumentException("Producer id must be non-empty.", nameof(producerId)) : producerId;
             _localPublisher = new CultMeshFrameBodyPublisher(
-                BodyId, BodySchemaId, LayoutVersion, Capacity, producerEpoch,
+                _bodyId, BodySchemaId, LayoutVersion, Capacity, producerEpoch,
                 checked((int)EntityHotSlabLayout.Create(Capacity).TotalByteLength),
                 TimeSpan.FromSeconds(30));
             _demand = demand;
         }
 
-        public CultMeshBodyDemandPlan? CurrentDemandPlan() => _demand?.Plan(BodyId);
+        public string PublishedBodyId => _bodyId;
+
+        public CultMeshBodyDemandPlan? CurrentDemandPlan() => _demand?.Plan(_bodyId);
 
         public AetheriaRuntimeDaemonSoaFrame? BuildCurrentZoneEntities(
             AetheriaRuntimeDaemonFrameDocument frame,
@@ -103,7 +111,7 @@ namespace GameCult.Aetheria.State.Verse
         {
             if (frame == null)
                 throw new ArgumentNullException(nameof(frame));
-            var demand = _demand?.Plan(BodyId);
+            var demand = _demand?.Plan(_bodyId);
             if (demand != null &&
                 (!demand.HasConsumers ||
                  (!demand.RequiresSharedMemory && !demand.RequiresSharedFileMapping && !realtimeDemand)))
@@ -213,7 +221,7 @@ namespace GameCult.Aetheria.State.Verse
                 {
                     new AetheriaRuntimeDaemonSoaBufferDocument
                     {
-                        BufferId = BodyId,
+                        BufferId = _bodyId,
                         DisplayName = "Current zone daemon entity hot slab",
                         ByteOffset = 0,
                         ByteLength = layout.TotalByteLength,
@@ -222,8 +230,8 @@ namespace GameCult.Aetheria.State.Verse
                         ObserverWritable = false
                     }
                 },
-                layout.CreateColumns(count),
-                layout.CreateDirtyRanges(count, generation),
+                layout.CreateColumns(_bodyId, count),
+                layout.CreateDirtyRanges(_bodyId, count, generation),
                 backend: AetheriaRuntimeDaemonSoaBackends.CultMesh,
                 synchronizationMode: AetheriaRuntimeDaemonSoaSynchronizationModes.ImmutableFrame,
                 renderGroups: CreateRenderGroups(entities, pickups, payloads, celestialBodies, asteroidInstances),
@@ -307,8 +315,8 @@ namespace GameCult.Aetheria.State.Verse
             var local = frame.Commit(now);
             var generation = new CultMeshBodyGeneration
             {
-                BodyId = BodyId,
-                ProducerId = ProducerId,
+                BodyId = _bodyId,
+                ProducerId = _producerId,
                 SchemaId = BodySchemaId,
                 LayoutVersion = LayoutVersion,
                 Capacity = Capacity,
@@ -319,8 +327,8 @@ namespace GameCult.Aetheria.State.Verse
             };
             var publication = new CultMeshBodyPublicationDocument
             {
-                BodyId = BodyId,
-                ProducerId = ProducerId,
+                BodyId = _bodyId,
+                ProducerId = _producerId,
                 SchemaId = BodySchemaId,
                 LayoutVersion = LayoutVersion,
                 ByteSize = local.ByteSize,
@@ -331,7 +339,7 @@ namespace GameCult.Aetheria.State.Verse
                 LivenessExpiresAtUnixMs = local.LeaseExpiresAtUnixMs,
                 Representations = new[] { local }
             };
-            new CultMeshBodyPublicationHandle(BodyId, publication.ProducerEpoch, publication.Sequence)
+            new CultMeshBodyPublicationHandle(_bodyId, publication.ProducerEpoch, publication.Sequence)
                 .Validate(publication);
             var view = AetheriaRuntimeEveEntitySoaProjection.Project(frame.View, generation);
             if (view.Buffers.Length != 1 || !string.Equals(view.Buffers[0].BufferId, publication.BodyId, StringComparison.Ordinal) ||
@@ -879,29 +887,29 @@ namespace GameCult.Aetheria.State.Verse
                     Math.Max(1, offset));
             }
 
-            public AetheriaRuntimeDaemonSoaColumnDocument[] CreateColumns(int count)
+            public AetheriaRuntimeDaemonSoaColumnDocument[] CreateColumns(string bodyId, int count)
             {
                 return new[]
                 {
-                    Column("entity-index", AetheriaRuntimeDaemonSoaColumnKinds.EntityIndex, "int32", EntityIndex, IntStride, count, "index", "world"),
-                    Column("cargo-quantity", AetheriaRuntimeDaemonSoaColumnKinds.CargoQuantity, "int32", CargoQuantity, IntStride, count, "items", "entity"),
-                    Column("beam-power", AetheriaRuntimeDaemonSoaColumnKinds.BeamPower, "float32", BeamPower, FloatStride, count, "normalized", "entity"),
-                    Column("position", AetheriaRuntimeDaemonSoaColumnKinds.Position, "float3", Position, Float3Stride, count, "world_units", "world"),
-                    Column("rotation-radians", AetheriaRuntimeDaemonSoaColumnKinds.RotationRadians, "float32", RotationRadians, FloatStride, count, "radians", "world"),
-                    Column("velocity", AetheriaRuntimeDaemonSoaColumnKinds.Velocity, "float3", Velocity, Float3Stride, count, "world_units_per_second", "world"),
-                    Column("physics-body-radius", AetheriaRuntimeDaemonSoaColumnKinds.PhysicsBodyRadius, "float32", PhysicsBodyRadius, FloatStride, count, "world_units", "world"),
-                    Column("physics-body-mass", AetheriaRuntimeDaemonSoaColumnKinds.PhysicsBodyMass, "float32", PhysicsBodyMass, FloatStride, count, "mass_units", "world"),
-                    Column("physics-body-inverse-mass", AetheriaRuntimeDaemonSoaColumnKinds.PhysicsBodyInverseMass, "float32", PhysicsBodyInverseMass, FloatStride, count, "inverse_mass_units", "world"),
-                    Column("render-scale", AetheriaRuntimeDaemonSoaColumnKinds.RenderScale, "float32", RenderScale, FloatStride, count, "scale", "world"),
-                    Column("render-visibility", AetheriaRuntimeDaemonSoaColumnKinds.RenderVisibility, "uint8", RenderVisibility, ByteStride, count, "bool", "world"),
-                    Column("render-lod", AetheriaRuntimeDaemonSoaColumnKinds.RenderLod, "int32", RenderLod, IntStride, count, "lod", "world"),
-                    Column("render-group-id", AetheriaRuntimeDaemonSoaColumnKinds.RenderGroupId, "uint32", RenderGroupId, IntStride, count, "id", "world")
+                    Column(bodyId, "entity-index", AetheriaRuntimeDaemonSoaColumnKinds.EntityIndex, "int32", EntityIndex, IntStride, count, "index", "world"),
+                    Column(bodyId, "cargo-quantity", AetheriaRuntimeDaemonSoaColumnKinds.CargoQuantity, "int32", CargoQuantity, IntStride, count, "items", "entity"),
+                    Column(bodyId, "beam-power", AetheriaRuntimeDaemonSoaColumnKinds.BeamPower, "float32", BeamPower, FloatStride, count, "normalized", "entity"),
+                    Column(bodyId, "position", AetheriaRuntimeDaemonSoaColumnKinds.Position, "float3", Position, Float3Stride, count, "world_units", "world"),
+                    Column(bodyId, "rotation-radians", AetheriaRuntimeDaemonSoaColumnKinds.RotationRadians, "float32", RotationRadians, FloatStride, count, "radians", "world"),
+                    Column(bodyId, "velocity", AetheriaRuntimeDaemonSoaColumnKinds.Velocity, "float3", Velocity, Float3Stride, count, "world_units_per_second", "world"),
+                    Column(bodyId, "physics-body-radius", AetheriaRuntimeDaemonSoaColumnKinds.PhysicsBodyRadius, "float32", PhysicsBodyRadius, FloatStride, count, "world_units", "world"),
+                    Column(bodyId, "physics-body-mass", AetheriaRuntimeDaemonSoaColumnKinds.PhysicsBodyMass, "float32", PhysicsBodyMass, FloatStride, count, "mass_units", "world"),
+                    Column(bodyId, "physics-body-inverse-mass", AetheriaRuntimeDaemonSoaColumnKinds.PhysicsBodyInverseMass, "float32", PhysicsBodyInverseMass, FloatStride, count, "inverse_mass_units", "world"),
+                    Column(bodyId, "render-scale", AetheriaRuntimeDaemonSoaColumnKinds.RenderScale, "float32", RenderScale, FloatStride, count, "scale", "world"),
+                    Column(bodyId, "render-visibility", AetheriaRuntimeDaemonSoaColumnKinds.RenderVisibility, "uint8", RenderVisibility, ByteStride, count, "bool", "world"),
+                    Column(bodyId, "render-lod", AetheriaRuntimeDaemonSoaColumnKinds.RenderLod, "int32", RenderLod, IntStride, count, "lod", "world"),
+                    Column(bodyId, "render-group-id", AetheriaRuntimeDaemonSoaColumnKinds.RenderGroupId, "uint32", RenderGroupId, IntStride, count, "id", "world")
                 };
             }
 
-            public AetheriaRuntimeDaemonSoaDirtyRangeDocument[] CreateDirtyRanges(int count, long generation)
+            public AetheriaRuntimeDaemonSoaDirtyRangeDocument[] CreateDirtyRanges(string bodyId, int count, long generation)
             {
-                return CreateColumns(count)
+                return CreateColumns(bodyId, count)
                     .Select(column => new AetheriaRuntimeDaemonSoaDirtyRangeDocument
                     {
                         ColumnId = column.ColumnId,
@@ -913,6 +921,7 @@ namespace GameCult.Aetheria.State.Verse
             }
 
             private static AetheriaRuntimeDaemonSoaColumnDocument Column(
+                string bodyId,
                 string columnId,
                 string kind,
                 string scalarType,
@@ -926,7 +935,7 @@ namespace GameCult.Aetheria.State.Verse
                 {
                     ColumnId = columnId,
                     Kind = kind,
-                    BufferId = BodyId,
+                    BufferId = bodyId,
                     ScalarType = scalarType,
                     ByteOffset = byteOffset,
                     ElementStride = stride,

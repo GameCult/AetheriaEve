@@ -115,7 +115,10 @@ The authority policy differs without changing the document model:
   rewrite it. Additional humans and headless AIs request the next open seat
   through the same Hangar Eve command, without choosing their own actor. Each
   active seat receives a daemon-authored Eve pilot surface whose player,
-  camera, and controllable entity are derived from that roster assignment.
+  camera, controllable entity, hot entity body, visible contacts, zone-render
+  document, and input capability are derived from that roster assignment. Each
+  seat has its own observation record namespace; the primary ship's global
+  pilot records cannot supply another controller's world or equipment actions.
   At projection and ingress the daemon resolves that stable identity against
   the canonical run to obtain the entity's current zone/index key. Movement,
   zone transfer, compaction, and restart therefore cannot transfer a seat when
@@ -365,7 +368,7 @@ Terminus proof profiles remain verification-only inputs.
 Arena still lacks its complete match/score document family and public
 observation/operation replay witness. Its minimal daemon session now preserves
   multiple controller seats, stable entity identity across positional reindex,
-  per-seat Eve pilot projections, roster-derived command actors, and the
+  per-seat Eve pilot surfaces and observation bodies, roster-derived command actors, and the
   operation/fact split in managed verification, but does
   not yet prove a complete PvP or balance run through a real transport. Starbridge's
 minimal session bootstrap likewise does not by itself prove pilot-veto

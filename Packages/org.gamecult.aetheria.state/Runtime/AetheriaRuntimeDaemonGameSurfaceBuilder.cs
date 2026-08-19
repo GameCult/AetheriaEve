@@ -22,7 +22,8 @@ namespace GameCult.Aetheria.State.Verse
             string activeMainMenuSurfaceId = "",
             AetheriaRuntimeCatalogSnapshot? catalog = null,
             string controlledEntityKey = "",
-            string surfaceId = "")
+            string surfaceId = "",
+            AetheriaRuntimePilotObservationRefs? observationRefs = null)
         {
             frame ??= new AetheriaRuntimeDaemonFrameDocument();
             health ??= new AetheriaRuntimeDaemonHealthDocument();
@@ -32,8 +33,10 @@ namespace GameCult.Aetheria.State.Verse
                 ? run.CurrentEntityKey
                 : controlledEntityKey;
             surfaceId = string.IsNullOrWhiteSpace(surfaceId) ? SurfaceId : surfaceId;
-            var bindsPrimaryEntity = string.Equals(controlledEntityKey, run.CurrentEntityKey, StringComparison.Ordinal);
-            var zone = FindCurrentZone(run);
+            observationRefs ??= AetheriaRuntimePilotObservationRefs.Primary;
+            var bindsPrimaryEntity = ReferenceEquals(observationRefs, AetheriaRuntimePilotObservationRefs.Primary) &&
+                string.Equals(controlledEntityKey, run.CurrentEntityKey, StringComparison.Ordinal);
+            var zone = FindControlledZone(run, controlledEntityKey);
             var entity = FindCurrentEntity(run, zone, controlledEntityKey);
             var target = FindTargetEntity(zone, entity);
             var entityName = string.IsNullOrWhiteSpace(entity?.Name) ? "(no current entity)" : entity!.Name;
@@ -48,7 +51,8 @@ namespace GameCult.Aetheria.State.Verse
                     controlledEntityKey,
                     frame,
                     frame.SimulationSettings,
-                    catalog),
+                    catalog,
+                    observationRefs),
                 CockpitOverlay(entity, target, frame.SimulationSettings),
                 GravityFieldSurface("aetheria.daemon.game.field"),
                 MainMenuOverlay("aetheria.daemon.game.main_menu", activeMainMenuSurfaceId),
@@ -802,6 +806,22 @@ namespace GameCult.Aetheria.State.Verse
                 ?? new AetheriaRuntimeZoneSnapshotCommit();
         }
 
+        private static AetheriaRuntimeZoneSnapshotCommit FindControlledZone(
+            AetheriaRuntimeRunCheckpointCommit run,
+            string controlledEntityKey)
+        {
+            if (AetheriaRuntimeRunCheckpointCommit.TryParseEntityKey(
+                    controlledEntityKey, out var zoneIndex, out _))
+            {
+                var controlledZone = (run.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
+                    .FirstOrDefault(zone => zone != null && zone.ZoneIndex == zoneIndex);
+                if (controlledZone != null)
+                    return controlledZone;
+            }
+
+            return FindCurrentZone(run);
+        }
+
         private static AetheriaRuntimeEntitySnapshotCommit? FindCurrentEntity(
             AetheriaRuntimeRunCheckpointCommit run,
             AetheriaRuntimeZoneSnapshotCommit zone,
@@ -897,7 +917,8 @@ namespace GameCult.Aetheria.State.Verse
             string currentEntityKey,
             AetheriaRuntimeDaemonFrameDocument frame,
             AetheriaRuntimeDaemonSimulationSettings simulationSettings,
-            AetheriaRuntimeCatalogSnapshot? catalog)
+            AetheriaRuntimeCatalogSnapshot? catalog,
+            AetheriaRuntimePilotObservationRefs observationRefs)
         {
             run ??= new AetheriaRuntimeRunCheckpointCommit();
             zone ??= new AetheriaRuntimeZoneSnapshotCommit();
@@ -913,13 +934,13 @@ namespace GameCult.Aetheria.State.Verse
             {
                 ["label"] = string.IsNullOrWhiteSpace(zone.Name) ? "Aetheria World" : zone.Name,
                 ["statePointerId"] = AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
-                ["entityViewPointerId"] = AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString(),
+                ["entityViewPointerId"] = observationRefs.EntityViewPointerId,
                 ["entityViewSchema"] = EveEntitySoaViewDocument.SchemaId,
-                ["entityBodyId"] = AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
-                ["zoneRenderPointerId"] = AetheriaRuntimeVerseRecordKeys.ZoneRenderLatest.ToString(),
+                ["entityBodyId"] = observationRefs.EntityBodyId,
+                ["zoneRenderPointerId"] = observationRefs.ZoneRenderPointerId,
                 ["zoneRenderSchema"] = AetheriaRuntimeDaemonSchemas.ZoneRender,
                 ["assetManifest"] = AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
-                ["inputCapability"] = AetheriaRuntimeVerseRecordKeys.PilotInputCapability.ToString(),
+                ["inputCapability"] = observationRefs.InputCapabilityId,
                 ["inputProfile"] = "arpg.pointer-keyboard.v1",
                 ["cameraRig"] = isDocked
                     ? "planar.top-down-follow.v1"

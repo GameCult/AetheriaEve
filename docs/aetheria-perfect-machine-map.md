@@ -98,7 +98,10 @@ Date: 2026-06-13
 > authenticated runtime plus roster instead of trusting the global current ship
 > or payload. The roster owns stable entity identity; the current zone/index key
 > is derived from canonical run state for both projection and admission, so
-> movement and restart cannot transfer authority through positional reuse. The
+> movement and restart cannot transfer authority through positional reuse. Each
+> seat projection owns its Eve surface, hot entity body/view, zone-render
+> record, and input capability; global primary-pilot observations cannot feed a
+> different seat. The
 > daemon remains the sole committed-fact author. Starbridge's
 > mode-policy identity remains empty until Pilot correction is installed and
 > proven; mode labels alone are not authority evidence.

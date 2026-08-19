@@ -588,6 +588,78 @@ namespace GameCult.Aetheria.State.Verse
         }
     }
 
+    public static class AetheriaRuntimeDaemonFrameProjection
+    {
+        public static AetheriaRuntimeDaemonFrameDocument ForControlledEntity(
+            AetheriaRuntimeDaemonFrameDocument frame,
+            string controlledEntityKey)
+        {
+            if (frame == null) throw new ArgumentNullException(nameof(frame));
+            var source = frame.Run ?? throw new InvalidOperationException("A controlled frame projection requires a run.");
+            if (!AetheriaRuntimeRunCheckpointCommit.TryParseEntityKey(
+                    controlledEntityKey, out var zoneIndex, out var entityIndex) ||
+                !(source.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
+                    .Any(zone => zone != null && zone.ZoneIndex == zoneIndex &&
+                        (zone.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
+                            .Any(entity => entity != null && entity.IsActive && entity.EntityIndex == entityIndex)))
+                throw new InvalidOperationException("A controlled frame projection requires one active canonical entity.");
+
+            var run = new AetheriaRuntimeRunCheckpointCommit
+            {
+                RunId = source.RunId,
+                IsTutorial = source.IsTutorial,
+                EntranceZoneIndex = source.EntranceZoneIndex,
+                ExitZoneIndex = source.ExitZoneIndex,
+                CurrentZoneIndex = zoneIndex,
+                DiscoveredZoneIndices = source.DiscoveredZoneIndices,
+                Zones = source.Zones,
+                FactionRelationships = source.FactionRelationships,
+                GenerationSeed = source.GenerationSeed,
+                CurrentEntityKey = controlledEntityKey,
+                Credits = source.Credits,
+                AgentTasks = source.AgentTasks,
+                CorporationSurveys = source.CorporationSurveys,
+                GameEvents = source.GameEvents,
+                ShotReceipts = source.ShotReceipts,
+                PickupContactReceipts = source.PickupContactReceipts,
+                LifecyclePhase = source.LifecyclePhase,
+                TerminalReason = source.TerminalReason,
+                TerminalFrameId = source.TerminalFrameId,
+                GameMode = source.GameMode,
+                HomeZones = source.HomeZones,
+                BossZones = source.BossZones
+            };
+            return new AetheriaRuntimeDaemonFrameDocument
+            {
+                Schema = frame.Schema,
+                DaemonId = frame.DaemonId,
+                SessionId = frame.SessionId,
+                FrameId = frame.FrameId,
+                PublishedAtUtc = frame.PublishedAtUtc,
+                SimulationTimeSeconds = frame.SimulationTimeSeconds,
+                FixedDeltaSeconds = frame.FixedDeltaSeconds,
+                IsAuthoritative = frame.IsAuthoritative,
+                StateSource = frame.StateSource,
+                Run = run,
+                Capabilities = frame.Capabilities,
+                AppliedCommandIds = frame.AppliedCommandIds,
+                RejectedCommandIds = frame.RejectedCommandIds,
+                AccountedCommandIds = frame.AccountedCommandIds,
+                CumulativeAppliedCommandIds = frame.CumulativeAppliedCommandIds,
+                CumulativeRejectedCommandIds = frame.CumulativeRejectedCommandIds,
+                RenderSettings = frame.RenderSettings,
+                SimulationSettings = frame.SimulationSettings,
+                RejectedCommandReasons = frame.RejectedCommandReasons,
+                GameMode = frame.GameMode,
+                RequestedSimulationRate = frame.RequestedSimulationRate,
+                EffectiveSimulationRate = frame.EffectiveSimulationRate,
+                SimulationStepsExecuted = frame.SimulationStepsExecuted,
+                AttentionCauseKind = frame.AttentionCauseKind,
+                RunRecordKey = frame.RunRecordKey
+            };
+        }
+    }
+
     [CultDocument("gamecult.aetheria.daemon_command", "gamecult.aetheria.daemon_command.v1")]
     [MessagePackObject]
     public sealed class AetheriaRuntimeDaemonCommandDocument

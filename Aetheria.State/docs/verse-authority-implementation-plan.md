@@ -325,8 +325,9 @@ Supported now:
 - one Arena session roster for runtime/actor/exact-operation admission under a
   separate `host-authoritative` fact policy; roster-specific Eve pilot surfaces
   project each controller's actor, the roster retains stable entity identity,
-  and projection/ingress resolve its current positional key from canonical run
-  state rather than trusting renderer payload
+  projection/ingress resolve its current positional key from canonical run
+  state rather than trusting renderer payload, and each seat owns scoped entity
+  body/view, zone-render, and input-capability records
 
 Represented but fail closed:
 

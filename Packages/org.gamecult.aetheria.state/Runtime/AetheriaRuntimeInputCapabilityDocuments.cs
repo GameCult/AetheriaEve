@@ -79,8 +79,11 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeCatalogSnapshot? catalog = null)
         {
             var run = frame?.Run ?? new AetheriaRuntimeRunCheckpointCommit();
-            var entity = run.Zones.SelectMany(zone => zone.Entities).FirstOrDefault(candidate =>
-                string.Equals(run.EntityRecordKey(run.CurrentZoneIndex, candidate.EntityIndex), run.CurrentEntityKey, StringComparison.Ordinal));
+            AetheriaRuntimeRunCheckpointCommit.TryParseEntityKey(
+                run.CurrentEntityKey, out var currentZoneIndex, out var currentEntityIndex);
+            var entity = (run.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
+                .FirstOrDefault(zone => zone != null && zone.ZoneIndex == currentZoneIndex)?
+                .Entities?.FirstOrDefault(candidate => candidate != null && candidate.EntityIndex == currentEntityIndex);
             var actions = CoreActions(entity).ToList();
             if (includeSimulationClock)
             {
