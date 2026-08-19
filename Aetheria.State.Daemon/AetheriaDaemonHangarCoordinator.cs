@@ -170,6 +170,8 @@ public static class AetheriaDaemonHangarCoordinator
         AetheriaRuntimeCatalogSnapshot catalog,
         string requestId,
         string sessionId,
+        string verseId,
+        string hostRuntimeId,
         long expectedRevision,
         string now)
     {
@@ -212,20 +214,15 @@ public static class AetheriaDaemonHangarCoordinator
             var run = await node.MutableDocument<AetheriaRunState>(new CultRecordKey(receipt.RunRecordKey))
                 .ReadAsync().ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Generated deployment run is missing before atomic activation.");
-            await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
-                .ReplaceAsync(new AetheriaGameSessionState
-                {
-                    Mode = receipt.Mode,
-                    SessionId = sessionId,
-                    RunId = receipt.RunId,
-                    RunRecordKey = receipt.RunRecordKey,
-                    ControlledEntityKey = run.CurrentEntityKey,
-                    EntrySurfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
-                    SimulationRate = 1,
-                    EffectiveSimulationRate = 1,
-                    LastStartCommandId = requestId,
-                    UpdatedAtUtc = now
-                }).ConfigureAwait(false);
+            await ActivateDeploymentAsync(
+                node,
+                receipt,
+                run,
+                sessionId,
+                requestId,
+                verseId,
+                hostRuntimeId,
+                now).ConfigureAwait(false);
             return receipt;
         }).ConfigureAwait(false);
     }
@@ -237,19 +234,88 @@ public static class AetheriaDaemonHangarCoordinator
 
     public static async Task<AetheriaDeploymentReceipt?> ContinueAsync(
         AetheriaStateNode node,
-        string deploymentId)
+        string deploymentId,
+        string sessionId,
+        string commandId,
+        string verseId,
+        string hostRuntimeId,
+        string now)
     {
         return await node.CommitAsync(async () =>
         {
             var deployment = await FindContinuationAsync(node, deploymentId).ConfigureAwait(false);
             if (deployment == null) return null;
-            var settingsPointer = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey);
-            var settings = await settingsPointer.ReadAsync().ConfigureAwait(false) ?? new AetheriaPlayerSettings();
-            settings.ActiveRunKey = deployment.RunRecordKey;
-            settings.LastUpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O");
-            await settingsPointer.ReplaceAsync(settings).ConfigureAwait(false);
+            var run = await node.MutableDocument<AetheriaRunState>(new CultRecordKey(deployment.RunRecordKey))
+                .ReadAsync().ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Continued deployment has no canonical run checkpoint.");
+            await ActivateDeploymentAsync(
+                node,
+                deployment,
+                run,
+                sessionId,
+                commandId,
+                verseId,
+                hostRuntimeId,
+                now).ConfigureAwait(false);
             return deployment;
         }).ConfigureAwait(false);
+    }
+
+    private static async Task ActivateDeploymentAsync(
+        AetheriaStateNode node,
+        AetheriaDeploymentReceipt deployment,
+        AetheriaRunState run,
+        string sessionId,
+        string commandId,
+        string verseId,
+        string hostRuntimeId,
+        string now)
+    {
+        var policy = string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
+            ? AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(verseId, hostRuntimeId)
+            : AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(verseId, hostRuntimeId);
+        if (string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) &&
+            !string.Equals(deployment.ModePolicyId, policy.PolicyId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Arena deployment does not own the installed server-authority policy.");
+        }
+
+        var settingsPointer = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey);
+        var settings = await settingsPointer.ReadAsync().ConfigureAwait(false) ?? new AetheriaPlayerSettings();
+        settings.ActiveRunKey = deployment.RunRecordKey;
+        settings.LastUpdatedAtUtc = now;
+        await settingsPointer.ReplaceAsync(settings).ConfigureAwait(false);
+        await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
+            .ReplaceAsync(policy).ConfigureAwait(false);
+        await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+            .ReplaceAsync(new AetheriaGameSessionState
+            {
+                Mode = deployment.Mode,
+                SessionId = sessionId,
+                RunId = deployment.RunId,
+                RunRecordKey = deployment.RunRecordKey,
+                ControlledEntityKey = run.CurrentEntityKey,
+                EntrySurfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
+                SimulationRate = 1,
+                EffectiveSimulationRate = 1,
+                LastStartCommandId = commandId,
+                UpdatedAtUtc = now,
+                ModePolicyId = policy.PolicyId
+            }).ConfigureAwait(false);
+
+        if (string.Equals(deployment.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
+        {
+            await node.MutableDocument<AetheriaRuntimeStarbridgeSessionDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeSessionLatest)
+                .ReplaceAsync(new AetheriaRuntimeStarbridgeSessionDocument
+                {
+                    SessionId = sessionId,
+                    ScenarioId = "hangar-deployment",
+                    RunId = run.RunId,
+                    BaseEntityKey = run.CurrentEntityKey,
+                    StationEntityKey = run.CurrentEntityKey,
+                    Phase = "active"
+                }).ConfigureAwait(false);
+        }
     }
 
     private static async Task<AetheriaDeploymentReceipt?> FindContinuationAsync(

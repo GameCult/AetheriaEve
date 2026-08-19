@@ -108,6 +108,44 @@ namespace GameCult.Aetheria.State.Verse
                 }
             };
         }
+
+        public static AetheriaRuntimeVerseAuthorityPolicyDocument ArenaServerAuthoritative(
+            string verseId,
+            string hostRuntimeId)
+        {
+            var host = string.IsNullOrWhiteSpace(hostRuntimeId) ? "aetheria-daemon" : hostRuntimeId;
+            return new AetheriaRuntimeVerseAuthorityPolicyDocument
+            {
+                VerseId = string.IsNullOrWhiteSpace(verseId) ? "aetheria.local" : verseId,
+                PolicyId = AetheriaModePolicies.ArenaServerAuthoritative,
+                HostRuntimeId = host,
+                DefaultMode = AetheriaRuntimeAuthorityModes.HostAuthoritative,
+                DeploymentMode = AetheriaRuntimeVerseDeploymentModes.DedicatedDaemon,
+                UpdatedAtUtc = DateTime.UtcNow.ToString("O"),
+                RuntimeRoles = new[]
+                {
+                    new AetheriaRuntimeAuthorityRuntimeRole
+                    {
+                        RuntimeId = host,
+                        Roles = new[]
+                        {
+                            AetheriaRuntimeVerseRuntimeRoles.DedicatedDaemon,
+                            AetheriaRuntimeVerseRuntimeRoles.SimulationHost
+                        }
+                    }
+                },
+                Rules = new[]
+                {
+                    new AetheriaRuntimeAuthorityRule
+                    {
+                        RuleId = "arena.server.default",
+                        SubjectPrefix = "*",
+                        ClaimKinds = new[] { AetheriaRuntimeClaimKinds.Any },
+                        Mode = AetheriaRuntimeAuthorityModes.HostAuthoritative
+                    }
+                }
+            };
+        }
     }
 
     [MessagePackObject]

@@ -74,7 +74,9 @@ Date: 2026-06-13
 > projection of the selected ship and loadout. Gameplay frame, SoA, and zone
 > pointers cannot supply Hangar preview truth.
 > The daemon publishes the shared asset manifest/catalog during cold client
-> presentation boot; gameplay activation only reuses that owner.
+> presentation boot; gameplay activation only reuses that owner. Hangar
+> surfaces name immutable generation-qualified catalog records. The stable
+> latest-catalog key is discovery-only and cannot own pinned presentation.
 > Route resolution verifies that authority and adds the Odin route without
 > consulting mutable dropdown state or substituting another authority that
 > advertises the same Verse; a target

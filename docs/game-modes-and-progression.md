@@ -108,7 +108,10 @@ The authority policy differs without changing the document model:
   inside typed jurisdictions; the Commander daemon reconciles to a validated
   differing pilot result rather than correcting the pilot to its own result.
 - **Arena:** the authoritative server decides all gameplay state; humans and
-  AIs submit operations and consume observations.
+  AIs submit operations and consume observations. The current minimal Arena
+  bootstrap installs `aetheria.mode.arena.server.v1` atomically with deployment
+  activation; its authority router uses `host-authoritative`, so otherwise
+  trusted client runtimes cannot author simulation commands.
 
 Each mode is also a concrete CultMesh authority proof:
 

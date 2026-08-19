@@ -1,8 +1,9 @@
 # Hangar Launcher
 
 Status: the shared Hangar, deployment admission, portable Hangar surface, and
-Terminus launch/continue path exist. Starbridge and Arena session admission are
-the remaining mode bootstrap cuts.
+minimal Terminus, Starbridge, and Arena launch/continue paths exist. Arena
+installs its host-authoritative policy with session activation; Starbridge's
+pilot-veto policy remains the major mode-authority cut.
 The state assembly and viewport queries compile against CultMath `0.1.2`, whose
 canonical `rect` stores normalized `min`/`max` bounds.
 
@@ -132,9 +133,11 @@ orchestration all submit the same deployment request and consume the same
 receipt. Terminus, Starbridge, and Arena differ by policy and session owner, not
 by Hangar schema.
 
-Cut line: Starbridge and Arena must follow the established
-`Hangar launch operation -> deployment admission -> mode session bootstrap`
-path. Generic New Game must not return as a gameplay-state writer.
+Cut line: every mode follows the established `Hangar launch operation ->
+deployment admission -> mode session bootstrap` path. Arena launch and continue
+atomically select `aetheria.mode.arena.server.v1`; startup derives the same
+policy from an active Arena session. Generic New Game must not return as a
+gameplay-state writer.
 
 ## Verification
 
@@ -144,6 +147,9 @@ path. Generic New Game must not return as a gameplay-state writer.
 - accepted receipt contains a loadout snapshot, not a mutable reference to the
   saved template;
 - all three modes pass through the same admission primitive;
+- Arena deployment, active session, and authority policy carry the same
+  nonempty policy id; host commands pass and non-host commands fail before and
+  after durable reopen;
 - flush/reopen preserves the Hangar revision, ship deployment state, and
   receipts;
 - a published Eve drag can remove an installed item, restore it at explicit

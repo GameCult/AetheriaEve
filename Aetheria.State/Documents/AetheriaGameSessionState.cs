@@ -24,4 +24,5 @@ public sealed class AetheriaGameSessionState
     [Key(7)] public double SimulationRate { get; set; } = 1;
     [Key(8)] public double? EffectiveSimulationRate { get; set; } = 1;
     [Key(9)] public string RunRecordKey { get; set; } = "";
+    [Key(10)] public string ModePolicyId { get; set; } = "";
 }

@@ -236,8 +236,9 @@ and its public root to consumers.
   committed Eve surfaces and publish a fresh hot SoA body before frame N+1 is
   simulated. New stores and explicit `--once` runs retain the initialization
   tick path.
-- **Derived state:** provider advertisement and asset catalog are stable
-  bootstrap projections. Input and Eve surfaces qualify for the fast path only
+- **Derived state:** provider advertisement and the latest asset-catalog pointer
+  are stable bootstrap projections. Hangar presentation instead names an
+  immutable generation-qualified catalog record. Input and Eve surfaces qualify for the fast path only
   when every record version exactly equals the durable frame id; missing or
   stale records force a normal rebuild.
 - **Forbidden writers:** startup must not advance simulation merely to make an

@@ -21,8 +21,14 @@ namespace GameCult.Aetheria.State.Verse
 
     public static class AetheriaModePolicies
     {
-        // Authority policy ids remain empty until mode activation installs and proves the policy.
-        public static string ForMode(string? mode) => "";
+        public const string ArenaServerAuthoritative = "aetheria.mode.arena.server.v1";
+
+        // A blank id means that mode's distinct CultMesh authority policy has not
+        // yet earned a product contract. Arena is the first installed mode policy.
+        public static string ForMode(string? mode) =>
+            string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
+                ? ArenaServerAuthoritative
+                : "";
     }
 
     public static class AetheriaHangarShipStatuses

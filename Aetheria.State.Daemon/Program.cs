@@ -3399,6 +3399,8 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                     await node.RuntimeCatalogForGenerationAsync().ConfigureAwait(false),
                     request.CommandId,
                     options.SessionId,
+                    options.VerseId,
+                    options.DaemonId,
                     expectedRevision,
                     now).ConfigureAwait(false);
                 accepted = receipt.Accepted;
@@ -3419,12 +3421,16 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
             {
                 var deployment = await AetheriaDaemonHangarCoordinator.ContinueAsync(
                     node,
-                    Payload(request, "deploymentId")).ConfigureAwait(false);
+                    Payload(request, "deploymentId"),
+                    options.SessionId,
+                    request.CommandId,
+                    options.VerseId,
+                    options.DaemonId,
+                    now).ConfigureAwait(false);
                 accepted = deployment != null;
                 diagnostic = accepted ? "" : "No resumable deployment exists for the selected ship and mode.";
                 if (deployment != null)
                 {
-                    await ActivateSessionAsync(node, options, deployment.Mode, deployment.RunRecordKey, request.CommandId, now).ConfigureAwait(false);
                     activatesSession = true;
                     navigation = new EveSurfaceNavigationTarget(
                         options.VerseId,
@@ -3490,46 +3496,6 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
     await node.Database.PutAsync(AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId), receiptDocument)
         .ConfigureAwait(false);
     return activatesSession;
-}
-
-static async Task ActivateSessionAsync(
-    AetheriaStateNode node,
-    AetheriaDaemonHostOptions options,
-    string mode,
-    string runRecordKey,
-    string commandId,
-    string now)
-{
-    var run = await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, runRecordKey).ConfigureAwait(false)
-        ?? throw new InvalidOperationException("Mode activation requires a canonical run checkpoint.");
-    await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
-        .ReplaceAsync(new AetheriaGameSessionState
-        {
-            Mode = mode,
-            SessionId = options.SessionId,
-            RunId = run.RunId,
-            RunRecordKey = runRecordKey,
-            ControlledEntityKey = run.CurrentEntityKey,
-            EntrySurfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
-            SimulationRate = 1,
-            EffectiveSimulationRate = 1,
-            LastStartCommandId = commandId,
-            UpdatedAtUtc = now
-        }).ConfigureAwait(false);
-
-    if (string.Equals(mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
-    {
-        await node.MutableDocument<AetheriaRuntimeStarbridgeSessionDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeSessionLatest)
-            .ReplaceAsync(new AetheriaRuntimeStarbridgeSessionDocument
-            {
-                SessionId = options.SessionId,
-                ScenarioId = "hangar-deployment",
-                RunId = run.RunId,
-                BaseEntityKey = run.CurrentEntityKey,
-                StationEntityKey = run.CurrentEntityKey,
-                Phase = "active"
-            }).ConfigureAwait(false);
-    }
 }
 
 static string SurfaceForMode(string mode) =>
@@ -4310,12 +4276,16 @@ static async Task EnsureGameSessionCoreAsync(
     var expectedMode = string.IsNullOrWhiteSpace(run.GameMode)
         ? run.IsTutorial ? AetheriaGameSessionState.AetheriaMode : AetheriaGameSessionState.TerminusMode
         : run.GameMode;
+    var expectedModePolicyId = string.Equals(expectedMode, AetheriaGameModes.Arena, StringComparison.Ordinal)
+        ? AetheriaModePolicies.ArenaServerAuthoritative
+        : existing?.ModePolicyId ?? "";
     var initialSimulationRate = options.UseTerminusFixture ? 0 : 1;
     if (existing != null &&
         string.Equals(existing.Mode, expectedMode, StringComparison.Ordinal) &&
         string.Equals(existing.RunId, run.RunId, StringComparison.Ordinal) &&
         string.Equals(existing.RunRecordKey, runRecordKey, StringComparison.Ordinal) &&
         string.Equals(existing.ControlledEntityKey, run.CurrentEntityKey, StringComparison.Ordinal) &&
+        string.Equals(existing.ModePolicyId, expectedModePolicyId, StringComparison.Ordinal) &&
         Math.Abs(existing.SimulationRate - initialSimulationRate) < 0.000001 &&
         Math.Abs((existing.EffectiveSimulationRate ?? existing.SimulationRate) - initialSimulationRate) < 0.000001)
         return;
@@ -4328,10 +4298,12 @@ static async Task EnsureGameSessionCoreAsync(
             RunId = run.RunId,
             RunRecordKey = runRecordKey,
             ControlledEntityKey = run.CurrentEntityKey,
-            EntrySurfaceId = AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+            EntrySurfaceId = existing?.EntrySurfaceId ?? AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+            LastStartCommandId = existing?.LastStartCommandId ?? "",
             SimulationRate = initialSimulationRate,
             EffectiveSimulationRate = initialSimulationRate,
-            UpdatedAtUtc = now
+            UpdatedAtUtc = now,
+            ModePolicyId = expectedModePolicyId
         }).ConfigureAwait(false);
 }
 
@@ -4351,6 +4323,34 @@ static async Task EnsureVerseAuthorityPolicyAsync(
     AetheriaDaemonHostOptions options)
 {
     var existing = await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy).ReadAsync().ConfigureAwait(false);
+    var session = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+        .ReadAsync().ConfigureAwait(false);
+    if (string.Equals(session?.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+    {
+        var arena = AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(
+            options.VerseId,
+            options.DaemonId);
+        if (existing != null &&
+            string.Equals(existing.Schema, AetheriaRuntimeVerseAuthoritySchemas.Policy, StringComparison.Ordinal) &&
+            string.Equals(existing.PolicyId, arena.PolicyId, StringComparison.Ordinal) &&
+            string.Equals(existing.HostRuntimeId, arena.HostRuntimeId, StringComparison.Ordinal) &&
+            string.Equals(existing.DefaultMode, AetheriaRuntimeAuthorityModes.HostAuthoritative, StringComparison.Ordinal) &&
+            string.Equals(session.ModePolicyId, arena.PolicyId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await node.CommitAsync(async () =>
+        {
+            session!.ModePolicyId = arena.PolicyId;
+            session.UpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O");
+            await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
+                .ReplaceAsync(arena).ConfigureAwait(false);
+            await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                .ReplaceAsync(session).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+        return;
+    }
     if (existing != null && string.Equals(existing.Schema, AetheriaRuntimeVerseAuthoritySchemas.Policy, StringComparison.Ordinal))
         return;
 

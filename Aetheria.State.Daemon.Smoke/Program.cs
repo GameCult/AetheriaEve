@@ -370,7 +370,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     "Edit Loadout must publish a distinct configuration view with a typed route back to the Hangar overview");
 
                 var receipt = AetheriaDaemonHangarCoordinator.LaunchAsync(
-                        node, runtimeCatalog, "launch-configured", "smoke-session", hangar.Revision, "2026-08-08T00:00:02Z")
+                        node, runtimeCatalog, "launch-configured", "smoke-session", "aetheria.local", "daemon-smoke",
+                        hangar.Revision, "2026-08-08T00:00:02Z")
                     .GetAwaiter().GetResult();
                 Require(receipt.Accepted && receipt.ShipId == selectedShipId && receipt.Mode == AetheriaGameModes.Terminus,
                     "a valid configured Hangar deployment must consume the selected ship and mode");
@@ -430,17 +431,61 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     .GetAwaiter().GetResult();
                 deployedHangar = node.MutableDocument<AetheriaHangarState>(AetheriaStateNode.HangarKey)
                     .ReadAsync().GetAwaiter().GetResult()!;
+                var missingArenaPolicy = AetheriaHangar.Admit(
+                    deployedHangar,
+                    new AetheriaDeploymentRequest
+                    {
+                        RequestId = "arena-missing-policy",
+                        PlayerKey = deployedHangar.PlayerKey,
+                        Mode = AetheriaGameModes.Arena,
+                        ShipId = ship.ShipId,
+                        LoadoutTemplateKey = ship.LoadoutTemplateKey,
+                        ExpectedHangarRevision = deployedHangar.Revision,
+                        ModePolicyId = ""
+                    },
+                    template,
+                    "2026-08-08T00:00:04Z");
+                Require(!missingArenaPolicy.Accepted &&
+                        missingArenaPolicy.Diagnostic.Contains("mode policy", StringComparison.Ordinal),
+                    "Arena admission must fail closed when its server-authority policy id is absent");
                 var secondReceipt = AetheriaDaemonHangarCoordinator.LaunchAsync(
-                        node, runtimeCatalog, "launch-second", "smoke-session", deployedHangar.Revision, "2026-08-08T00:00:05Z")
+                        node, runtimeCatalog, "launch-second", "smoke-session", "aetheria.local", "daemon-smoke",
+                        deployedHangar.Revision, "2026-08-08T00:00:05Z")
                     .GetAwaiter().GetResult();
-                Require(secondReceipt.Accepted && secondReceipt.RunRecordKey != receipt.RunRecordKey,
+                var arenaPolicy = node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(
+                        AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                var arenaSession = node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                    .ReadAsync().GetAwaiter().GetResult()!;
+                Require(secondReceipt.Accepted && secondReceipt.RunRecordKey != receipt.RunRecordKey &&
+                        secondReceipt.ModePolicyId == AetheriaModePolicies.ArenaServerAuthoritative &&
+                        arenaSession.ModePolicyId == secondReceipt.ModePolicyId &&
+                        arenaPolicy.PolicyId == secondReceipt.ModePolicyId &&
+                        arenaPolicy.DefaultMode == AetheriaRuntimeAuthorityModes.HostAuthoritative,
                     "each accepted deployment must own a distinct resumable run record");
+                var hostCommand = new AetheriaRuntimeDaemonCommandDocument
+                {
+                    CommandId = "arena-host",
+                    Kind = AetheriaRuntimeDaemonCommandKinds.SetMoveVector,
+                    AuthorRuntimeId = "daemon-smoke"
+                };
+                var remoteCommand = new AetheriaRuntimeDaemonCommandDocument
+                {
+                    CommandId = "arena-remote",
+                    Kind = AetheriaRuntimeDaemonCommandKinds.SetMoveVector,
+                    AuthorRuntimeId = "pilot-runtime"
+                };
+                Require(AetheriaRuntimeAuthorityRouter.Authorize(hostCommand, arenaPolicy, [], "daemon-smoke").Authorized &&
+                        AetheriaRuntimeAuthorityRouter.Authorize(remoteCommand, arenaPolicy, [], "daemon-smoke").Reason == "host-authority-required",
+                    "Arena must accept host simulation commands and reject otherwise trusted client authority");
 
                 AetheriaDaemonHangarCoordinator.SelectShipAsync(node, selectedShipId, "2026-08-08T00:00:06Z")
                     .GetAwaiter().GetResult();
                 AetheriaDaemonHangarCoordinator.SelectModeAsync(node, AetheriaGameModes.Terminus, "2026-08-08T00:00:06Z")
                     .GetAwaiter().GetResult();
-                var resumed = AetheriaDaemonHangarCoordinator.ContinueAsync(node, deploymentId)
+                var resumed = AetheriaDaemonHangarCoordinator.ContinueAsync(
+                        node, deploymentId, "smoke-session", "continue-configured", "aetheria.local", "daemon-smoke",
+                        "2026-08-08T00:00:06Z")
                     .GetAwaiter().GetResult();
                 settings = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
                     .ReadAsync().GetAwaiter().GetResult()!;
@@ -839,6 +884,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             runtimeCatalog,
                             commandId,
                             "rollback-session",
+                            "aetheria.local",
+                            "daemon-smoke",
                             originalRevision,
                             "2026-08-19T00:00:02Z").ConfigureAwait(false);
                         Require(receipt.Accepted, "rollback probe requires an otherwise valid deployment");
@@ -888,10 +935,12 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         foreach (var mode in new[] { AetheriaGameModes.Starbridge, AetheriaGameModes.Arena })
         {
             var root = Path.Combine(Path.GetTempPath(), $"aetheria-hangar-{mode}-{Guid.NewGuid():N}");
+            var statePath = Path.Combine(root, "aetheria.cc");
             Directory.CreateDirectory(root);
             try
             {
-                using var node = AetheriaStateNode.OpenAsync(Path.Combine(root, "aetheria.cc")).GetAwaiter().GetResult();
+                using (var node = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult())
+                {
                 AetheriaDaemonHangarCoordinator.EnsureAsync(node, runtimeCatalog, "2026-08-18T00:00:00Z")
                     .GetAwaiter().GetResult();
                 var draft = AetheriaDaemonHangarCoordinator.SelectModeAsync(node, mode, "2026-08-18T00:00:01Z")
@@ -903,6 +952,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         runtimeCatalog,
                         $"launch-{mode}",
                         $"smoke-session-{mode}",
+                        "aetheria.local",
+                        "daemon-smoke",
                         hangar.Revision,
                         "2026-08-18T00:00:02Z")
                     .GetAwaiter().GetResult();
@@ -912,6 +963,39 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     .ReadAsync().GetAwaiter().GetResult()!;
                 Require(draft.SelectedMode == mode && receipt.Accepted && receipt.Mode == mode && run.GameMode == mode,
                     $"{mode} must launch headlessly through the same Hangar deployment and loadout boundary");
+                }
+
+                using (var reopened = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult())
+                {
+                    var policy = reopened.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(
+                            AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
+                        .ReadAsync().GetAwaiter().GetResult()!;
+                    var session = reopened.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                        .ReadAsync().GetAwaiter().GetResult()!;
+                    if (string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+                    {
+                        Require(session.ModePolicyId == AetheriaModePolicies.ArenaServerAuthoritative &&
+                                policy.PolicyId == session.ModePolicyId &&
+                                policy.DefaultMode == AetheriaRuntimeAuthorityModes.HostAuthoritative &&
+                                policy.HostRuntimeId == "daemon-smoke",
+                            "Arena server authority must survive durable reopen with the active session as its owner");
+                        var host = new AetheriaRuntimeDaemonCommandDocument
+                        {
+                            CommandId = "arena-reopen-host",
+                            Kind = AetheriaRuntimeDaemonCommandKinds.SetMoveVector,
+                            AuthorRuntimeId = "daemon-smoke"
+                        };
+                        var remote = new AetheriaRuntimeDaemonCommandDocument
+                        {
+                            CommandId = "arena-reopen-remote",
+                            Kind = AetheriaRuntimeDaemonCommandKinds.SetMoveVector,
+                            AuthorRuntimeId = "pilot-runtime"
+                        };
+                        Require(AetheriaRuntimeAuthorityRouter.Authorize(host, policy, [], "daemon-smoke").Authorized &&
+                                AetheriaRuntimeAuthorityRouter.Authorize(remote, policy, [], "daemon-smoke").Reason == "host-authority-required",
+                            "reopened Arena authority must reject a non-host runtime before simulation admission");
+                    }
+                }
             }
             finally
             {
