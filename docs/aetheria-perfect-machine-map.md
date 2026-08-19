@@ -43,11 +43,16 @@ Date: 2026-06-13
 > the local inbox can be deleted. Navigation carries that pinned authority
 > runtime through Eve; lowerers rediscover and verify that exact authority and
 > cannot substitute another daemon advertising the same surface in the Verse.
-> One daemon-owned, coalescing Hangar projection
-> worker prepares slow local or remote reads, discards any candidate overtaken
-> by a newer Hangar mutation, and alone commits the derived Eve surface. Command
-> handlers only mark that projection dirty; they do not publish competing
-> surfaces. Odin discovery owns the available-Verse observation only. It merges
+> One daemon-owned Hangar projection boundary publishes a strictly monotone Eve
+> surface stream. A command finality transaction commits its causal successor
+> surface and a client-facing receipt naming that exact surface version; the
+> coalescing background worker only repairs discovery or unrelated source
+> changes and cannot revise canonical command truth. The progression
+> authority's projection generation remains the causal remote-state proof and
+> is carried separately on the surface. EveUnity retains terminal receipts and
+> freezes the obsolete surface until the named surface plus its qualified asset
+> generation are mounted; receipt arrival is not presentation finality.
+> Odin discovery owns the available-Verse observation only. It merges
 > that observation into the latest progression-source revision and cannot write
 > or roll back the player's `SelectedVerseId`.
 > CultCache v4 writes content-addressed record pages,

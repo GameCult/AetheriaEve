@@ -289,6 +289,11 @@ or denies the mutation.
 An Eve `pending` receipt is an observation, not finality. The client retains
 the immutable command, retries, and exact receipt lease until the provider
 publishes a matching terminal `accepted`, `denied`, or `reconciled` receipt.
+When a client-facing terminal receipt names a surface generation newer than the
+mounted Eve surface, the lowerer retains the command and receipt lease, freezes
+the obsolete controls, and exposes terminal finality only after that surface
+and its qualified asset generation commit together. Receipt arrival does not
+own presentation finality.
 For a remote progression Verse, the local router first verifies that terminal
 receipt against the pinned remote authority, then publishes a client-facing
 receipt under its own local authority. The navigation target retains the remote

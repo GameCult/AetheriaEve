@@ -241,7 +241,8 @@ try
                 selectedRemoteSource.Status == AetheriaProgressionSourceStatuses.Ready &&
                 selectedRemoteSurface.Surface.Root.Props["progressionVerseId"] == remoteVerse &&
                 selectedRemoteSurface.Surface.Root.Props["progressionAuthorityRuntimeId"] == remoteTarget.AuthorityRuntimeId &&
-                long.Parse(selectedRemoteSurface.Surface.Root.Props["progressionProjectionGeneration"]) >= selectRemoteReceipt.SourceVersion,
+                selectedRemoteSurface.Version == selectRemoteReceipt.SourceVersion &&
+                selectedRemoteSurface.Version > selectorSurface.Version,
             "An accepted Verse selector receipt must not precede its selected source and successor Hangar surface.");
 
         var remoteHangar = await remoteClient.ReadAsync<AetheriaHangarState>(
@@ -385,7 +386,8 @@ try
             localTarget,
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
         Require(localSurfaceAfterReceipt.Surface.Root.Props["progressionVerseId"] == AetheriaProgressionSources.Local &&
-                long.Parse(localSurfaceAfterReceipt.Surface.Root.Props["progressionProjectionGeneration"]) >= selectLocalReceipt.SourceVersion,
+                localSurfaceAfterReceipt.Version == selectLocalReceipt.SourceVersion &&
+                localSurfaceAfterReceipt.Version > remoteSurface.Version,
             "An accepted Local Verse selector receipt must include the successor Local Hangar surface.");
         if (!Stop(remote, lifecyclePipeName: remoteLifecyclePipe))
             throw new InvalidOperationException("The selected remote authority could not be stopped for the exact-authority witness.");
@@ -456,9 +458,9 @@ try
         var removeProjection = await recoveredRemoteClient.ReadAsync<AetheriaHangarProjectionDocument>(
             remoteTarget,
             AetheriaRuntimeVerseRecordKeys.HangarProjection.ToString());
-        Require(removeProjection.Generation >= removeReceipt.SourceVersion &&
+        Require(removeProjection.Generation > 0 &&
                 removeProjection.Hangar.Revision > remoteRevision,
-            "An accepted remote refit receipt must be published with the Hangar projection generation that contains it.");
+            "An accepted remote refit receipt must be backed by a newer Hangar projection.");
         var updatedRemoteHangar = removeProjection.Hangar;
         var localHangarAfterRemote = await client.ReadAsync<AetheriaHangarState>(
             localTarget,
@@ -472,7 +474,8 @@ try
         Require(Find(refitSurface.Surface.Root, "aetheria.hangar.inventory.grid").Children
                     .Any(item => item.Props["itemKey"] == removedItemKey) &&
                 Find(refitSurface.Surface.Root, "aetheria.hangar.loadout.grid").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString() &&
-                long.Parse(refitSurface.Surface.Root.Props["progressionProjectionGeneration"]) >= removeReceipt.SourceVersion,
+                refitSurface.Version == removeReceipt.SourceVersion &&
+                long.Parse(refitSurface.Surface.Root.Props["progressionProjectionGeneration"]) == removeProjection.Generation,
             "The routing daemon must commit the matching remote projection before exposing its accepted receipt.");
         var refitInventory = Find(refitSurface.Surface.Root, "aetheria.hangar.inventory.grid");
         var refitLoadout = Find(refitSurface.Surface.Root, "aetheria.hangar.loadout.grid");
@@ -492,7 +495,7 @@ try
         var equipProjection = await recoveredRemoteClient.ReadAsync<AetheriaHangarProjectionDocument>(
             remoteTarget,
             AetheriaRuntimeVerseRecordKeys.HangarProjection.ToString());
-        Require(equipProjection.Generation >= equipReceipt.SourceVersion &&
+        Require(equipProjection.Generation > removeProjection.Generation &&
                 equipProjection.Hangar.Revision > updatedRemoteHangar.Revision,
             "The accepted equip receipt must name a projection containing the committed refit.");
         updatedRemoteHangar = equipProjection.Hangar;
@@ -500,7 +503,9 @@ try
         var launchSurface = await client.ReadAsync<EveSurfaceDocument>(
             localTarget,
             AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString());
-        Require(Find(launchSurface.Surface.Root, "aetheria.hangar.launch").Props["disabled"] == "false" &&
+        Require(launchSurface.Version == equipReceipt.SourceVersion &&
+                long.Parse(launchSurface.Surface.Root.Props["progressionProjectionGeneration"]) == equipProjection.Generation &&
+                Find(launchSurface.Surface.Root, "aetheria.hangar.launch").Props["disabled"] == "false" &&
                 Find(launchSurface.Surface.Root, "aetheria.hangar.launch").Props["payload.expectedHangarRevision"] == updatedRemoteHangar.Revision.ToString(),
             "The accepted equip receipt must not precede the matching launch-ready routing surface.");
         var launch = Find(launchSurface.Surface.Root, "aetheria.hangar.launch");

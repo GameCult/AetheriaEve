@@ -554,12 +554,15 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         EveSurfaceCommandRequest request,
         EveCommandReceiptDocument remoteReceipt,
         AetheriaProgressionCommandRouteDocument route,
-        string localAuthorityRuntimeId)
+        string localAuthorityRuntimeId,
+        long localSurfaceVersion)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
         if (remoteReceipt == null) throw new ArgumentNullException(nameof(remoteReceipt));
         if (string.IsNullOrWhiteSpace(localAuthorityRuntimeId))
             throw new ArgumentException("The local receipt authority is required.", nameof(localAuthorityRuntimeId));
+        if (localSurfaceVersion <= 0)
+            throw new ArgumentOutOfRangeException(nameof(localSurfaceVersion));
         var localAuthority = localAuthorityRuntimeId.Trim();
         return new EveCommandReceiptDocument(
             $"receipt:{request.CommandId}:{remoteReceipt.State}:via:{localAuthority}",
@@ -572,7 +575,7 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             request.SurfaceId,
             remoteReceipt.Message,
             remoteReceipt.IssuedAtUtc,
-            remoteReceipt.SourceVersion,
+            localSurfaceVersion,
             remoteReceipt.Navigation,
             route.PayloadHash);
     }
