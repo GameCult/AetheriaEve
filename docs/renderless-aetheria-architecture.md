@@ -120,14 +120,22 @@ serializes command ingress and periodic multi-document publication, so neither
 can flush the other's intermediate writes. CultCache publishes immutable
 record pages through one atomic manifest generation swap; readers lease that
 generation through complete page hydration and release it before notifying
-observers. `ActiveRunKey`
+observers. A transaction overlay is visible only to its executing async flow;
+the live cache and all watchers advance after durable finality and after the
+transaction context has closed. Aetheria exposes no mutable cache handle and
+rejects authoritative database writes outside that boundary. Applied/rejected
+command facts, their receipts and inbox deletions commit with the durable frame
+that contains their gameplay effect. Runtime catalog projection compiles the
+typed cache generation/transaction overlay rather than parsing the persistence
+file behind the cache. `ActiveRunKey`
 is derived navigation state. The session owns live run identity; a cached frame
 is input only when its run ID matches. An accepted launch or
 continue receipt carries a renderer-neutral navigation target: stable Verse,
 provider, surface, kind, and discovered rendezvous routes. Eve lowerers prepare
 the target through the complete endpoint list and lower it under an inactive
-root while the previous host remains mounted. Provider and presentation commit
-together only after candidate lowering succeeds; failure discards the candidate
+root. The previous root quiesces under its old Verse route before provider
+commit; the candidate activates only after the route changes. Failure restores
+the provider route before reactivating the previous root and discards the candidate
 without remounting the old surface. Renderer-local preferences, Unity
 sidecars, and hard-coded remote endpoints cannot select progression truth.
 

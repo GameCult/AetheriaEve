@@ -55,6 +55,29 @@ namespace GameCult.Aetheria.State.Verse
                 tradeValueSettings);
         }
 
+        /// <summary>
+        /// Compiles the runtime catalog from canonical typed-document payloads supplied by
+        /// the owning cache generation. This path does not reinterpret a backing-store file.
+        /// </summary>
+        public static AetheriaRuntimeCatalogSnapshot FromDocumentPayloads(
+            IEnumerable<byte[]> itemPayloads,
+            IEnumerable<byte[]> corporationPayloads,
+            IEnumerable<byte[]> nameFilePayloads,
+            byte[]? tradeValuePolicyPayload)
+        {
+            if (itemPayloads == null) throw new ArgumentNullException(nameof(itemPayloads));
+            if (corporationPayloads == null) throw new ArgumentNullException(nameof(corporationPayloads));
+            if (nameFilePayloads == null) throw new ArgumentNullException(nameof(nameFilePayloads));
+
+            return new AetheriaRuntimeCatalogSnapshot(
+                itemPayloads.Select(ReadItem).ToArray(),
+                corporationPayloads.Select(ReadCorporation).ToArray(),
+                nameFilePayloads.Select(ReadNameFile).ToArray(),
+                tradeValuePolicyPayload == null
+                    ? AetheriaRuntimeTradeValueSettings.Default
+                    : ReadTradeValuePolicyPayload(tradeValuePolicyPayload));
+        }
+
         private static AetheriaRuntimeStatRecipe? ReadBehaviorStatRecipe(AetheriaRuntimeBehaviorValue? value)
         {
             if (value?.Children == null || value.Children.Count <= 5)

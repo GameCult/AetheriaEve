@@ -19,7 +19,14 @@ Date: 2026-06-13
 > `GameSession` through the state node's single mutation-and-commit boundary.
 > Hangar actions, command ingress, run generation, and periodic frame/surface
 > publication all join that owner; no opportunistic flush can publish another
-> operation's staged subset. CultCache v4 writes content-addressed record pages,
+> operation's staged subset. The transaction overlay is private to its
+> executing async flow; durable storage commits before the live cache swaps and
+> before observers run. Aetheria exposes a snapshotting cache reader and rejects
+> authoritative database writes outside this boundary. Applied/rejected command
+> facts, receipts, inbox deletion, and the frame containing their effect share
+> one transaction. Runtime catalog compilation reads those typed cache records,
+> including the active transaction overlay; it does not reopen and reinterpret
+> the `.cc` persistence file as an alternate source of truth. CultCache v4 writes content-addressed record pages,
 > exposes the batch through one atomic manifest generation swap, and leases the
 > selected manifest generation until a reader has hydrated every referenced
 > page. Observer callbacks run only after that read lease is released.
@@ -28,9 +35,10 @@ Date: 2026-06-13
 > command envelope and Verse/authority/route target before uncertain timeout;
 > later Verse selection cannot retarget the retry. A remote
 > provider validates its Odin route grant before opening public listeners.
-> EveUnity lowers navigation under a separate inactive root and commits only
-> after generic mounting; failure discards the candidate while the prior host,
-> runtime, root, and surface remain mounted.
+> EveUnity lowers navigation under a separate inactive root. It quiesces the
+> outgoing root while the old Verse route still owns its shutdown callbacks,
+> commits the provider route, then activates the candidate; failure restores the
+> old route before the prior root is reactivated.
 > Provider-route authentication is implemented, but remote player/account
 > authentication and per-principal Hangar/draft keys are not. Local is the only
 > progression path currently proven end to end; the daemon refuses non-loopback

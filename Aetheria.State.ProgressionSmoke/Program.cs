@@ -309,7 +309,8 @@ try
             TimeSpan.FromSeconds(10));
     }
 
-    Stop(local);
+    if (!Stop(local))
+        throw new InvalidOperationException("The local daemon could not be stopped for the restart witness.");
     local = StartDaemon(root, localState, "progression-local", localVerse, localPort,
         "--odin-discovery-endpoint", remoteEndpoint);
     await WaitForEndpointAsync(local, localPort, TimeSpan.FromSeconds(30));
@@ -340,11 +341,16 @@ catch
 }
 finally
 {
-    Stop(local);
-    Stop(remote);
-    if (!string.Equals(Environment.GetEnvironmentVariable("AETHERIA_SMOKE_KEEP_STATE"), "1", StringComparison.Ordinal))
+    var localStopped = Stop(local);
+    var remoteStopped = Stop(remote);
+    if (localStopped && remoteStopped &&
+        !string.Equals(Environment.GetEnvironmentVariable("AETHERIA_SMOKE_KEEP_STATE"), "1", StringComparison.Ordinal))
     {
         try { Directory.Delete(smokeRoot, recursive: true); } catch { }
+    }
+    else if (!localStopped || !remoteStopped)
+    {
+        Console.Error.WriteLine($"Aetheria progression smoke preserved '{smokeRoot}' because child termination was not confirmed.");
     }
 }
 }
@@ -690,47 +696,51 @@ static int FreeTcpPort()
     return port;
 }
 
-static void Stop(Process? process)
+static bool Stop(Process? process, bool forceEscalationForTest = false)
 {
-    if (process == null) return;
-    var exited = false;
+    if (process == null) return true;
     try
     {
-        if (!process.HasExited) process.Kill(entireProcessTree: true);
-        exited = process.WaitForExit(5000);
-        if (exited)
-            process.WaitForExit();
+        if (!process.HasExited)
+            process.Kill(entireProcessTree: true);
+        var exitedAfterFirstWait = !forceEscalationForTest && process.WaitForExit(5000);
+        if (!exitedAfterFirstWait && !process.HasExited)
+        {
+            process.Kill(entireProcessTree: true);
+            if (!process.WaitForExit(10000) && !process.HasExited)
+            {
+                Console.Error.WriteLine(
+                    $"Aetheria progression smoke child {process.Id} survived termination escalation; state is being preserved.");
+                Environment.ExitCode = 1;
+                return false;
+            }
+        }
+
+        process.WaitForExit();
+        AetheriaProgressionSmokeProcessOutput.Detach(process);
+        process.Dispose();
+        return true;
     }
     catch (Exception error)
     {
         Console.Error.WriteLine($"Aetheria progression smoke child shutdown failed cleanly: {error}");
         Environment.ExitCode = 1;
-    }
-    finally
-    {
         try
         {
-            if (!exited && process.HasExited)
+            if (process.HasExited)
             {
                 process.WaitForExit();
-                exited = true;
-            }
-            if (!exited)
-            {
-                Console.Error.WriteLine($"Aetheria progression smoke child {process.Id} did not terminate within five seconds.");
-                Environment.ExitCode = 1;
-            }
-            else
-            {
                 AetheriaProgressionSmokeProcessOutput.Detach(process);
                 process.Dispose();
+                return true;
             }
         }
-        catch (Exception error)
+        catch (Exception cleanupError)
         {
-            Console.Error.WriteLine($"Aetheria progression smoke child cleanup failed cleanly: {error}");
-            Environment.ExitCode = 1;
+            Console.Error.WriteLine($"Aetheria progression smoke child cleanup also failed cleanly: {cleanupError}");
         }
+        try { Console.Error.WriteLine($"Aetheria progression smoke preserved child pid {process.Id} for operator cleanup."); } catch { }
+        return false;
     }
 }
 
@@ -763,8 +773,8 @@ static void RunProcessOutputLifecycleSmoke()
         child.BeginOutputReadLine();
         child.BeginErrorReadLine();
         Thread.Sleep(20);
-        Stop(child);
-        child = null;
+        if (Stop(child, forceEscalationForTest: true))
+            child = null;
         Require(Environment.ExitCode == 1,
             "an unavailable child log must become a controlled smoke failure");
         Require(!unhandled,

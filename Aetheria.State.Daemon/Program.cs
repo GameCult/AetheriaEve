@@ -96,8 +96,7 @@ await PublishStateSurfacesAsync(node, options, startedAtUtc).ConfigureAwait(fals
 TraceStartup("state-surfaces");
 if (traceClientTransport)
 {
-    var hangarSnapshot = node.Database.Documents.CreateRawSnapshotResponse(
-        node.Cache,
+    var hangarSnapshot = node.CreateRawSnapshotResponse(
         "startup-hangar-diagnostic",
         new CultNetSnapshotRequestMessage
         {
@@ -106,7 +105,7 @@ if (traceClientTransport)
             RecordKeys = [AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString()]
         });
     Console.WriteLine(
-        $"CultMesh startup Hangar cache={(node.Cache.Get(AetheriaRuntimeVerseRecordKeys.HangarSurface) == null ? "missing" : "present")} " +
+        $"CultMesh startup Hangar cache={(!node.Cache.Contains(AetheriaRuntimeVerseRecordKeys.HangarSurface) ? "missing" : "present")} " +
         $"snapshotDocuments={hangarSnapshot.Documents.Length}");
 }
 var ingressState = new AetheriaDaemonIngressState();
@@ -224,14 +223,15 @@ while (!stopped.Task.IsCompleted)
     }
     if (!publishRestoredFrame)
     {
-        await PublishClientGameplayDocumentsAsync(
-            node,
-            options,
-            unityBundles,
-            initialPublication!,
-            ingressState.Catalog ?? throw new InvalidOperationException("Aetheria runtime catalog was not initialized."),
-            reactiveSurfaceState,
-            publishTopology: true).ConfigureAwait(false);
+        await node.CommitAsync(() => PublishClientGameplayDocumentsAsync(
+                node,
+                options,
+                unityBundles,
+                initialPublication!,
+                ingressState.Catalog ?? throw new InvalidOperationException("Aetheria runtime catalog was not initialized."),
+                reactiveSurfaceState,
+                publishTopology: true))
+            .ConfigureAwait(false);
     }
     TraceStartup("client-bootstrap");
     ThrowIfClientHostFaulted(cultMeshClientHost);
@@ -508,13 +508,23 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
                 $"velocity={entity.VelocityX},{entity.VelocityY}");
         }
     }
-    await PublishCommittedCommandFactsAsync(
-        node,
-        options,
-        result.Frame,
-        pendingObservedCommands,
-        authorizedCommands,
-        policyRejectedCommandIds).ConfigureAwait(false);
+    var finalizesCommands = (result.Frame.AppliedCommandIds?.Count ?? 0) > 0 ||
+        (result.Frame.RejectedCommandIds?.Count ?? 0) > 0 ||
+        policyRejectedCommandIds.Count > 0;
+    if (finalizesCommands)
+    {
+        await node.CommitAsync(async () =>
+        {
+            await PublishDurableDaemonDocumentsAsync(node, result).ConfigureAwait(false);
+            await PublishCommittedCommandFactsAsync(
+                node,
+                options,
+                result.Frame,
+                pendingObservedCommands,
+                authorizedCommands,
+                policyRejectedCommandIds).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
     TracePhase("command-facts");
 
     return result;
@@ -1002,8 +1012,7 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
     {
         try
         {
-            var response = node.Database.Documents.CreateRawSnapshotResponse(
-                node.Cache,
+            var response = node.CreateRawSnapshotResponse(
                 string.IsNullOrWhiteSpace(request.MessageId) ? Guid.NewGuid().ToString("N") : request.MessageId,
                 request);
             if (TryGetScopedEveSurfaceRequest(request, out var scopedRecordKey, out var scopedSurfaceKind))
@@ -2104,7 +2113,10 @@ static async Task PublishDemandedManagedViewportsAsync(
                 messageOptions);
         }
 
-        await node.Database.ApplyPutAsync(put).ConfigureAwait(false);
+        await node.CommitAsync(async () =>
+        {
+            await node.Database.ApplyPutAsync(put).ConfigureAwait(false);
+        }).ConfigureAwait(false);
     }
 }
 
@@ -2134,16 +2146,16 @@ static async Task PublishHotEntityStateAsync(
             Console.WriteLine(
                 $"CultMesh entity layout changed sequence={publication.View.Sequence} bytes={MessagePackSerializer.Serialize(publication.View).Length} " +
                 $"identities={publication.View.Identities.Length} representations=[{string.Join(",", publication.Body.Representations.Select(value => value.TransportKind))}]");
-        await node.MutableDocument<CultMeshBodyPublicationDocument>(
-                CultMeshBodyPublicationDocument.CreateLatestRecordKey(publication.Body.BodyId))
-            .ReplaceAsync(publication.Body)
-            .ConfigureAwait(false);
-    }
-    if (layoutChanged)
-    {
-        await node.MutableDocument<EveEntitySoaViewDocument>(AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest)
-            .ReplaceAsync(publication.View)
-            .ConfigureAwait(false);
+        await node.CommitAsync(async () =>
+        {
+            await node.MutableDocument<CultMeshBodyPublicationDocument>(
+                    CultMeshBodyPublicationDocument.CreateLatestRecordKey(publication.Body.BodyId))
+                .ReplaceAsync(publication.Body)
+                .ConfigureAwait(false);
+            await node.MutableDocument<EveEntitySoaViewDocument>(AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest)
+                .ReplaceAsync(publication.View)
+                .ConfigureAwait(false);
+        }).ConfigureAwait(false);
         state.Set(publication.View);
     }
     if (!publication.RealtimePayload.IsEmpty)
@@ -3822,7 +3834,7 @@ static async Task<TDocument?> ReadDurableBootstrapDocumentAsync<TDocument>(
 {
     if (node.Cache.Get<TDocument>(key) == null)
     {
-        await node.Cache.PullBackingStoreRecordsAsync(metadata =>
+        await node.HydrateRecordsAsync(metadata =>
             string.Equals(metadata.Key, key.ToString(), StringComparison.Ordinal)).ConfigureAwait(false);
     }
 

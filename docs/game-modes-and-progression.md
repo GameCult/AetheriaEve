@@ -196,8 +196,12 @@ loadout into a newly identified Terminus, Starbridge, or Arena session. The
 accepted Deployment receipt owns that run identity and exact run-record key;
 Hangar mutation, receipt, immutable loadout snapshot, generated run, and active
 `GameSession` enter one staged batch under the state node's single
-mutation-and-commit boundary. Command ingress and periodic multi-document
-publication use that same owner and cannot flush the batch halfway through.
+mutation-and-commit boundary. The executing async flow reads its buffered
+overlay while every other reader and observer remains on the prior committed
+generation. Command ingress and periodic multi-document publication use that
+same owner and cannot flush the batch halfway through. Aetheria exposes only a
+snapshotting read facade for cache inspection, and its database rejects
+authoritative record writes outside the state-node transaction.
 CultCache directory storage writes immutable generation pages and exposes the
 batch with one atomic manifest swap; readers hold the selected generation
 through complete page hydration, then release it before publishing observers.
@@ -215,7 +219,10 @@ rendezvous route, and `aetheria.pilot` as a renderer-neutral navigation target.
 EveUnity prepares the destination beside the mounted Hangar, tries every
 receipt-carried Odin endpoint, and lowers it under a separate inactive scene
 root. The old host, runtime, scene root, and presentation remain mounted until
-the candidate is ready; only then are provider and presentation committed.
+the candidate is ready. Before the provider route changes, the old root is
+quiesced so its shutdown callbacks still address the old Verse. The route then
+commits and the candidate wakes against the new Verse; the old presentation is
+retained only as rollback state until finalization.
 Preparation or mount failure discards the candidate without remounting or
 reconstructing the prior surface. A failed route therefore cannot strand the
 client without a usable Hangar. Aetheria's Unity

@@ -4,7 +4,6 @@ using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Aetheria.State.Documents;
 using GameCult.Aetheria.State.Verse;
@@ -24,6 +23,41 @@ public enum AetheriaStateHydrationProfile
     DaemonBoot
 }
 
+/// <summary>
+/// Read-only, snapshotting view of the Aetheria cache. Mutable cache handles remain private
+/// to the state node so callers cannot bypass its transaction boundary.
+/// </summary>
+public sealed class AetheriaStateReadCache
+{
+    private readonly AetheriaStateNode _owner;
+
+    internal AetheriaStateReadCache(AetheriaStateNode owner) => _owner = owner;
+
+    public T? Get<T>(CultRecordKey key) where T : class =>
+        _owner.CloneDocument(_owner.RawCache.Get<T>(key));
+
+    public IReadOnlyList<T> GetAll<T>() where T : class =>
+        _owner.RawCache.GetAll<T>()
+            .Select(document => _owner.CloneDocument(document)!)
+            .ToArray();
+
+    public IReadOnlyList<object> AllEntries =>
+        _owner.RawCache.AllStoredDocuments
+            .Select(stored => _owner.CloneDocumentUntyped(stored.Document, stored.Descriptor.DocumentType))
+            .ToArray();
+
+    public IReadOnlyList<CultStoredDocument> GetStoredDocuments<T>() where T : class =>
+        _owner.RawCache.GetStoredDocuments<T>()
+            .Select(stored => new CultStoredDocument(
+                stored.Key,
+                stored.StoredAt,
+                stored.Descriptor,
+                _owner.CloneDocument((T)stored.Document)!))
+            .ToArray();
+
+    public bool Contains(CultRecordKey key) => _owner.RawCache.Get(key) != null;
+}
+
 public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
 {
     private static readonly string[] DaemonNativeCatalogBootRecordKeys =
@@ -34,8 +68,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
         AetheriaCatalogKeys.ItemDefinitionFromLegacyId("8ec30f8d-8536-48b4-bd64-65f29f229895").ToString()  // Dockyard berth
     ];
     private readonly CultMeshNode _node;
-    private readonly SemaphoreSlim _commitGate = new(1, 1);
-    private readonly AsyncLocal<int> _commitDepth = new();
+    private readonly AetheriaStateReadCache _readCache;
     private CultMeshDocumentHandle<AetheriaRuntimeCatalogSnapshot>? _runtimeCatalog;
     private CultMeshDocumentHandle<AetheriaRuntimeNameCorpusSnapshot>? _runtimeNameCorpus;
     private CultMeshDocumentHandle<EveSurfaceDocument>? _catalogSurface;
@@ -47,6 +80,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
             ? "aetheria-local"
             : runtimeId;
         _node = node;
+        _readCache = new AetheriaStateReadCache(this);
     }
 
     public string StatePath { get; }
@@ -55,9 +89,19 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
 
     public CultMeshNode MeshNode => _node;
 
-    public CultCache Cache => _node.Cache;
+    public AetheriaStateReadCache Cache => _readCache;
+
+    internal CultCache RawCache => _node.Cache;
 
     public CultNetDatabase Database => _node.Database;
+
+    public CultNetSnapshotResponseRawMessage CreateRawSnapshotResponse(
+        string messageId,
+        CultNetSnapshotRequestMessage request) =>
+        Database.Documents.CreateRawSnapshotResponse(RawCache, messageId, request);
+
+    public Task HydrateRecordsAsync(Func<CultPersistedRecordMetadata, bool> selector) =>
+        RawCache.PullBackingStoreRecordsAsync(selector);
 
     public static async Task<AetheriaStateNode> OpenAsync(
         string statePath,
@@ -109,7 +153,8 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
                 DatabaseOptions = new CultNetDatabaseOptions
                 {
                     RuntimeId = runtimeId,
-                    DocumentRegistry = databaseRegistry
+                    DocumentRegistry = databaseRegistry,
+                    RequireTransactionsForAuthoritativeWrites = true
                 }
             }).ConfigureAwait(false);
         Trace("cultmesh-node");
@@ -128,6 +173,9 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
 
         var schemaTypes = new[]
         {
+            typeof(AetheriaItemDefinition),
+            typeof(AetheriaCorporation),
+            typeof(AetheriaNameFile),
             typeof(AetheriaLoadoutTemplate),
             typeof(AetheriaRuntimeAuthorityLeaseDocument),
             typeof(AetheriaRuntimeDaemonCommandDocument),
@@ -251,7 +299,7 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
             ?? throw new InvalidDataException("The compiled Aetheria runtime catalog is missing.");
         if (Cache.Get<AetheriaRuntimeNameCorpusSnapshot>(RuntimeNameCorpusKey) == null)
         {
-            await Cache.PullBackingStoreRecordsAsync(metadata =>
+            await RawCache.PullBackingStoreRecordsAsync(metadata =>
                 string.Equals(metadata.Key, RuntimeNameCorpusKey.ToString(), StringComparison.Ordinal)).ConfigureAwait(false);
         }
         var corpus = await RuntimeNameCorpus().LatestAsync().ConfigureAwait(false);
@@ -295,7 +343,17 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
 
     public async Task<AetheriaRuntimeCatalogSnapshot> RefreshRuntimeCatalogAsync()
     {
-        var snapshot = AetheriaRuntimeCatalogStore.OpenReadOnly(StatePath);
+        byte[] Encode<T>(T document) where T : class =>
+            CultDocumentMessagePackSerialization.SerializeUntyped(
+                document,
+                typeof(T),
+                RawCache.Registry);
+        var tradePolicy = RawCache.Get<AetheriaTradeValuePolicy>(TradeValuePolicyKey);
+        var snapshot = AetheriaRuntimeCatalogStore.FromDocumentPayloads(
+            RawCache.GetAll<AetheriaItemDefinition>().Select(Encode),
+            RawCache.GetAll<AetheriaCorporation>().Select(Encode),
+            RawCache.GetAll<AetheriaNameFile>().Select(Encode),
+            tradePolicy == null ? null : Encode(tradePolicy));
         return await CommitAsync(async () =>
         {
             await Database.PutAsync(
@@ -395,31 +453,16 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
     }
 
     /// <summary>Runs one value-producing mutation inside the state-node commit boundary.</summary>
-    public async Task<T> CommitAsync<T>(Func<Task<T>> stageAsync, bool soft = false)
+    public Task<T> CommitAsync<T>(Func<Task<T>> stageAsync, bool soft = false)
     {
         if (stageAsync == null) throw new ArgumentNullException(nameof(stageAsync));
-        if (_commitDepth.Value > 0)
-            return await stageAsync().ConfigureAwait(false);
-
-        await _commitGate.WaitAsync().ConfigureAwait(false);
-        _commitDepth.Value++;
-        try
-        {
-            var result = await stageAsync().ConfigureAwait(false);
-            await _node.FlushAsync(soft).ConfigureAwait(false);
-            return result;
-        }
-        finally
-        {
-            _commitDepth.Value--;
-            _commitGate.Release();
-        }
+        return Database.ExecuteTransactionAsync(stageAsync, soft);
     }
 
-    /// <summary>Commits any already-staged legacy mutation through the same state-node owner.</summary>
+    /// <summary>Flushes legacy state staged outside the transaction API.</summary>
     public Task FlushAsync(bool soft = false)
     {
-        return CommitAsync(() => Task.CompletedTask, soft);
+        return _node.FlushAsync(soft);
     }
 
     private static string StableToken(string value)
@@ -499,10 +542,10 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
     {
         return CultMesh.MutableStatePointer(
             key.ToString(),
-            _ => Database.GetAsync<T>(key),
+            async _ => CloneDocument(await Database.GetAsync<T>(key).ConfigureAwait(false)),
             _ => Database.WatchRecord<T>(key)
                 .Where(change => change.Document != null)
-                .Select(change => change.Document!),
+                .Select(change => CloneDocument(change.Document)!),
             async (_, value) =>
             {
                 await CommitAsync(async () =>
@@ -518,8 +561,33 @@ public sealed class AetheriaStateNode : IAsyncDisposable, IDisposable
 
     public void Dispose()
     {
-        _commitGate.Dispose();
         _node.Dispose();
+    }
+
+    internal T? CloneDocument<T>(T? document) where T : class
+    {
+        if (document == null)
+            return null;
+        var payload = CultDocumentMessagePackSerialization.SerializeUntyped(
+            document,
+            typeof(T),
+            RawCache.Registry);
+        return (T)CultDocumentMessagePackSerialization.DeserializeUntyped(
+            typeof(T),
+            payload,
+            RawCache.Registry);
+    }
+
+    internal object CloneDocumentUntyped(object document, Type documentType)
+    {
+        var payload = CultDocumentMessagePackSerialization.SerializeUntyped(
+            document,
+            documentType,
+            RawCache.Registry);
+        return CultDocumentMessagePackSerialization.DeserializeUntyped(
+            documentType,
+            payload,
+            RawCache.Registry);
     }
 
     public async ValueTask DisposeAsync()
