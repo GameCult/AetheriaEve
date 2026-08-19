@@ -86,10 +86,16 @@ var startupAssetManifest = AetheriaRuntimeAssets.ProjectManifest(
     "presentation:" + options.DaemonId,
     "cultmesh://aetheria/assets");
 startupAssetManifest.PublishedAtUtc = startedAtUtc;
-await node.CommitAsync(() => PublishClientAssetTopologyAsync(
-    node,
-    unityBundles,
-    startupAssetManifest)).ConfigureAwait(false);
+await node.CommitAsync(async () =>
+{
+    await PublishClientAssetTopologyAsync(
+        node,
+        unityBundles,
+        startupAssetManifest).ConfigureAwait(false);
+    await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement)
+        .ReplaceAsync(BuildCoreProviderAdvertisement(options, startedAtUtc))
+        .ConfigureAwait(false);
+}).ConfigureAwait(false);
 TraceStartup("client-asset-topology");
 await AetheriaDaemonHangarCoordinator.EnsureAsync(node, node.RuntimeCatalog().Latest(), startedAtUtc).ConfigureAwait(false);
 TraceStartup("hangar");
@@ -3386,7 +3392,12 @@ static async Task PublishStateSurfacesCoreAsync(
                 hangarView.Catalog,
                 hangarView.Source,
                 hangarView.Draft.ActiveView,
-                hangarView.AuthorityRuntimeId))
+                hangarView.AuthorityRuntimeId,
+                hangarView.AssetProviderId,
+                hangarView.AssetVerseId,
+                hangarView.AuthorityRuntimeId,
+                hangarView.AssetManifestRecordRef,
+                hangarView.AssetRendezvousEndpoints))
             .ConfigureAwait(false);
     }
 }

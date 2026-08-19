@@ -238,13 +238,23 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             }
                         ]
                     },
-                    progressionAuthorityRuntimeId: "aetheria-authority");
+                    progressionAuthorityRuntimeId: "aetheria-authority",
+                    assetProviderId: "aetheria.mods",
+                    assetVerseId: "gamecult.aetheria",
+                    assetAuthorityRuntimeId: "aetheria-authority",
+                    assetManifestRecordRef: "eve:assets:gamecult.aetheria",
+                    assetRendezvousEndpoints: new[] { "wss://odin.gamecult.net/cultmesh" });
                 var world = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.world");
                 var previewShip = world.Children.Single(component => component.Kind == "world.entity3d");
                 var launcher = Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.launcher");
                 var verse = launcher.Children.Single(component => component.Id == "aetheria.hangar.verse");
                 var launchControl = launcher.Children.Single(component => component.Id == "aetheria.hangar.launch");
                 Require(surface.Surface.Id == AetheriaRuntimeHangarCommands.SurfaceId &&
+                        world.Props["assetProviderId"] == "aetheria.mods" &&
+                        world.Props["assetVerseId"] == "gamecult.aetheria" &&
+                        world.Props["assetAuthorityRuntimeId"] == "aetheria-authority" &&
+                        world.Props["assetManifest"] == "eve:assets:gamecult.aetheria" &&
+                        world.Props["assetRendezvousEndpoints"] == "wss://odin.gamecult.net/cultmesh" &&
                         surface.Surface.Root.Props["selectedMode"] == AetheriaGameModes.Terminus &&
                         Flatten(surface.Surface.Root).Single(component => component.Id == "aetheria.hangar.ship.id").Props["value"] == selectedShipId &&
                         !world.Props.ContainsKey("statePointerId") &&

@@ -261,6 +261,32 @@ try
             TimeSpan.FromSeconds(10));
         Require(remoteSurface.Surface.Root.Props["progressionAuthorityRuntimeId"] == remoteTarget.AuthorityRuntimeId,
             "The Hangar projection must identify the exact authority runtime that supplied the selected Verse view.");
+        var remoteWorld = Find(remoteSurface.Surface.Root, "aetheria.hangar.world");
+        var remotePreview = remoteWorld.Children.Single(component => component.Kind == "world.entity3d");
+        Require(remoteWorld.Props["assetVerseId"] == remoteTarget.VerseId &&
+                remoteWorld.Props["assetAuthorityRuntimeId"] == remoteTarget.AuthorityRuntimeId &&
+                remoteWorld.Props["assetProviderId"] == AetheriaRuntimeProviderIdentity.ProviderId &&
+                remoteWorld.Props["assetRendezvousEndpoints"].Split(';').Contains(remoteEndpoint, StringComparer.Ordinal),
+            "The selected progression authority must also own the Hangar preview asset session and its Odin route. " +
+            $"Observed Verse='{remoteWorld.Props["assetVerseId"]}', authority='{remoteWorld.Props["assetAuthorityRuntimeId"]}', " +
+            $"provider='{remoteWorld.Props["assetProviderId"]}', Odin='{remoteWorld.Props["assetRendezvousEndpoints"]}'.");
+        var remoteAssetCatalog = await remoteClient.ReadAsync<EveAssetCatalogDocument>(
+            remoteTarget,
+            remoteWorld.Props["assetManifest"]);
+        var remotePreviewAsset = remoteAssetCatalog.Assets.Single(asset =>
+            asset.AssetRef == remotePreview.Props["assetRef"]);
+        var remotePreviewVariant = remotePreviewAsset.Variants.Single(variant =>
+            variant.RuntimeId == "unity-scene" && variant.Platform == "StandaloneWindows64");
+        var remotePreviewManifest = await remoteClient.ReadAsync<CultMeshCdnArtifactManifest>(
+            remoteTarget,
+            remotePreviewVariant.Uri);
+        using (var remotePreviewChunk = new MemoryStream())
+        {
+            await remoteClient.ContentProvider("progression-smoke-remote-assets", remoteTarget)
+                .CopyChunkToAsync(remotePreviewManifest.Chunks[0], remotePreviewChunk);
+            Require(remotePreviewChunk.Length > 0,
+                "A remote Verse Hangar preview must resolve its bundle through that authority's content route.");
+        }
         var remoteBDraftBeforeForgery = await remoteBClient.ReadAsync<AetheriaHangarDraftState>(
             remoteBTarget,
             AetheriaStateNode.HangarDraftKey.ToString());
@@ -989,7 +1015,10 @@ static Process StartDaemon(
     int port,
     params string[] extra)
 {
-    var daemon = Path.Combine(root, "Aetheria.State.Daemon", "bin", "Debug", "net10.0", "Aetheria.State.Daemon.dll");
+    var daemon = Environment.GetEnvironmentVariable("AETHERIA_SMOKE_DAEMON_DLL");
+    if (string.IsNullOrWhiteSpace(daemon))
+        daemon = Path.Combine(root, "Aetheria.State.Daemon", "bin", "Debug", "net10.0", "Aetheria.State.Daemon.dll");
+    daemon = Path.GetFullPath(daemon);
     if (!File.Exists(daemon)) throw new FileNotFoundException("Build the Aetheria daemon before the progression smoke.", daemon);
     var arguments = new List<string>
     {

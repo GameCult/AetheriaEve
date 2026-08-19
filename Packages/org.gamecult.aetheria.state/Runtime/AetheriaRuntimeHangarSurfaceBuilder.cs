@@ -40,7 +40,12 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeCatalogSnapshot? catalog = null,
             AetheriaProgressionSourceDocument? progressionSource = null,
             string activeView = AetheriaHangarViews.Overview,
-            string progressionAuthorityRuntimeId = "")
+            string progressionAuthorityRuntimeId = "",
+            string assetProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
+            string assetVerseId = "",
+            string assetAuthorityRuntimeId = "",
+            string assetManifestRecordRef = "",
+            IReadOnlyList<string>? assetRendezvousEndpoints = null)
         {
             if (hangar == null) throw new ArgumentNullException(nameof(hangar));
             var ships = hangar.Ships ?? Array.Empty<AetheriaHangarShip>();
@@ -140,7 +145,17 @@ namespace GameCult.Aetheria.State.Verse
                             {
                                 Panel("aetheria.hangar.preview", "SHIP PREVIEW", new[]
                                 {
-                                    HangarPreviewWorld(selected, loadout, catalog)
+                                    HangarPreviewWorld(
+                                        selected,
+                                        loadout,
+                                        catalog,
+                                        assetProviderId,
+                                        string.IsNullOrWhiteSpace(assetVerseId) ? progressionSource.SelectedVerseId : assetVerseId,
+                                        string.IsNullOrWhiteSpace(assetAuthorityRuntimeId) ? progressionAuthorityRuntimeId : assetAuthorityRuntimeId,
+                                        string.IsNullOrWhiteSpace(assetManifestRecordRef)
+                                            ? AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString()
+                                            : assetManifestRecordRef,
+                                        assetRendezvousEndpoints ?? Array.Empty<string>())
                                 }),
                                 Panel("aetheria.hangar.loadout", "LOADOUT", new[]
                                 {
@@ -381,7 +396,12 @@ namespace GameCult.Aetheria.State.Verse
         private static EveSurfaceComponent HangarPreviewWorld(
             AetheriaHangarShip? ship,
             AetheriaRuntimeLoadoutTemplateCommit? loadout,
-            AetheriaRuntimeCatalogSnapshot? catalog)
+            AetheriaRuntimeCatalogSnapshot? catalog,
+            string assetProviderId,
+            string assetVerseId,
+            string assetAuthorityRuntimeId,
+            string assetManifestRecordRef,
+            IReadOnlyList<string> assetRendezvousEndpoints)
         {
             var entityId = ship?.ShipId ?? "";
             var hullAssetRef = ship == null
@@ -411,7 +431,11 @@ namespace GameCult.Aetheria.State.Verse
                         ("equipmentItemKeys", equipmentKeys)), Array.Empty<EveSurfaceComponent>())
                 };
             return Component("aetheria.hangar.world", "world.scene3d", Props(
-                    ("assetManifest", AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString()),
+                    ("assetManifest", assetManifestRecordRef),
+                    ("assetProviderId", assetProviderId),
+                    ("assetVerseId", assetVerseId),
+                    ("assetAuthorityRuntimeId", assetAuthorityRuntimeId),
+                    ("assetRendezvousEndpoints", string.Join(";", assetRendezvousEndpoints.Where(value => !string.IsNullOrWhiteSpace(value)))),
                     ("cameraRig", "third-person-orbit"),
                     ("viewId", "aetheria.hangar"),
                     ("playerEntityId", entityId),

@@ -61,12 +61,16 @@ Derived state: selected bay, selected mode, preview, fit metrics, affordability,
 compatibility warnings, and launch readiness are UI projections. The preview
 and metrics never become equipment or deployment owners.
 The preview is a standard Eve `world.scene3d` containing one
-`world.entity3d` for the selected Hangar ship. It resolves the hull through the
-provider asset manifest and carries the selected loadout identity/equipment
-projection. It does not read gameplay frame, entity-view, or zone-render
-pointers and does not create or load a run.
-The daemon publishes that asset manifest and Eve asset catalog during cold
-presentation boot, before serving the Hangar. Gameplay topology reuses the same
+`world.entity3d` for the selected Hangar ship. The world qualifies its asset
+catalog by provider, Verse, authority runtime, record, and Odin rendezvous
+routes. When progression is local, those fields identify the local daemon. When
+another Verse is selected, they identify the progression authority that supplied
+the Hangar and catalog; the routing daemon does not re-author remote assets or
+satisfy remote references from a same-named local catalog. The preview carries
+the selected loadout identity/equipment projection. It does not read gameplay
+frame, entity-view, or zone-render pointers and does not create or load a run.
+Each authority publishes its asset manifest and Eve asset catalog during cold
+presentation boot, before serving its Hangar. Gameplay topology reuses the same
 publication primitive; the first gameplay tick is never a launcher dependency.
 
 Forbidden writers: Unity, Electron, Eve lowerers, mode session checkpoints,

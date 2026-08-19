@@ -16,6 +16,10 @@ internal sealed class AetheriaProgressionVerseView
 {
     public required AetheriaProgressionSourceDocument Source { get; init; }
     public required string AuthorityRuntimeId { get; init; }
+    public required string AssetVerseId { get; init; }
+    public required string AssetProviderId { get; init; }
+    public required string AssetManifestRecordRef { get; init; }
+    public required string[] AssetRendezvousEndpoints { get; init; }
     public required AetheriaHangarState Hangar { get; init; }
     public required AetheriaHangarDraftState Draft { get; init; }
     public AetheriaLoadoutTemplate? Loadout { get; init; }
@@ -226,10 +230,24 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             {
                 // Catalog labels are derived presentation; the Hangar remains usable without them.
             }
+            var provider = await _remote.ReadAsync<EveProviderAdvertisementDocument>(
+                target,
+                AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString(),
+                TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            var assetManifestRecordRef = provider.Surfaces
+                .Select(surface => surface.WorldInteraction?.AssetManifestRecordRef ?? "")
+                .FirstOrDefault(recordRef => !string.IsNullOrWhiteSpace(recordRef)) ?? "";
+            if (string.IsNullOrWhiteSpace(assetManifestRecordRef))
+                throw new InvalidOperationException(
+                    $"Selected Verse provider '{provider.ProviderId}' does not advertise an asset catalog.");
             return new AetheriaProgressionVerseView
             {
                 Source = source,
                 AuthorityRuntimeId = target.AuthorityRuntimeId,
+                AssetVerseId = target.VerseId,
+                AssetProviderId = provider.ProviderId,
+                AssetManifestRecordRef = assetManifestRecordRef,
+                AssetRendezvousEndpoints = source.OdinDiscoveryEndpoints?.ToArray() ?? Array.Empty<string>(),
                 Hangar = hangar,
                 Draft = draft,
                 Loadout = loadout,
@@ -490,6 +508,10 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
         {
             Source = source,
             AuthorityRuntimeId = _runtimeId,
+            AssetVerseId = _localVerseId,
+            AssetProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
+            AssetManifestRecordRef = AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
+            AssetRendezvousEndpoints = Array.Empty<string>(),
             Hangar = hangar,
             Draft = draft,
             Loadout = loadout,
@@ -526,6 +548,10 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
     {
         Source = source,
         AuthorityRuntimeId = "",
+        AssetVerseId = "",
+        AssetProviderId = "",
+        AssetManifestRecordRef = "",
+        AssetRendezvousEndpoints = Array.Empty<string>(),
         Hangar = new AetheriaHangarState
         {
             HangarId = source.SelectedVerseId,
