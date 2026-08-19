@@ -20,8 +20,8 @@ $expected = @{
         "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#f7c79ee784aae57b090b8093967ad2d8f22fc19c",
         "f7c79ee784aae57b090b8093967ad2d8f22fc19c")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#da5bc22e16c1311519e780923f90173d05273d93",
-        "da5bc22e16c1311519e780923f90173d05273d93")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#f3b5076c6d70010940fd5b3edb32628b47f765eb",
+        "f3b5076c6d70010940fd5b3edb32628b47f765eb")
     "org.gamecult.eve.unity-uitoolkit" = @(
         "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#44923edc2275a15e3480d3a407673b8cf8c809d9",
         "44923edc2275a15e3480d3a407673b8cf8c809d9")
@@ -127,6 +127,7 @@ foreach ($requiredNavigation in @(
     "assetCatalogVersion",
     "TryBeginBaseSurfaceCandidate",
     "RetireFailedBaseSurfaceCandidate",
+    "AssetPresentationAttemptLimit",
     "RequiredCatalogVersion")) {
     if ($navigationSource -notmatch [regex]::Escape($requiredNavigation)) {
         throw "Resolved Eve Unity scene package is missing provider-owned navigation '$requiredNavigation'."

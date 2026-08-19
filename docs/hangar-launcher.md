@@ -115,8 +115,11 @@ publication primitive; the first gameplay tick is never a launcher dependency.
 Surface ordering and candidate lifecycle are separate: an older base surface
 cannot supersede the newest observed version, while a failed newest asset
 candidate retires its own attempt so replaying that same canonical surface can
-retry. A failure never forces the provider to mint a fictitious newer surface
-version merely to recover presentation.
+retry. The candidate lifecycle itself performs bounded cancellable retries of
+the exact surface/catalog pair; a newer surface cancels the older retry. Only
+policy exhaustion retires the candidate and reports presentation failure. A
+failure never forces the provider to mint a fictitious newer surface version
+merely to recover presentation.
 
 Forbidden writers: Unity, Electron, Eve lowerers, mode session checkpoints,
 witness seeders, and mode-local inventory stores cannot mutate Hangar assets or
