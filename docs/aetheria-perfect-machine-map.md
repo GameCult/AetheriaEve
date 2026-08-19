@@ -101,6 +101,10 @@ Date: 2026-06-13
 > Hangar disappears from their advertisement and read boundary.
 > Direct snapshots and subscriptions share one authenticated per-peer provider
 > advertisement projection; the stored anonymous advertisement is not client truth.
+> One tri-state Arena exposure context owns provider projection and record/body
+> admission. `Inactive` is ordinary non-Arena play, `ActiveValid` requires an
+> exact session/roster/frame generation, and `ActiveInvalid` exports nothing.
+> Missing Arena truth can never widen authority by masquerading as inactivity.
 > Arena deployment installs
 > `aetheria.mode.arena.server.v1` plus one daemon-owned session roster. Launch
 > assigns a seat once, Continue cannot reassign it, and the Arena lobby command

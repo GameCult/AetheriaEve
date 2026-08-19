@@ -470,6 +470,54 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 var arenaRoster = node.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
                 var primaryArenaSeat = arenaRoster.Seats.Single(seat =>
                     string.Equals(seat.ControllerRuntimeId, "pilot-runtime", StringComparison.Ordinal));
+                var exposureEntity = Entity(0, 0, "arena-exposure");
+                var matchingExposureFrame = new AetheriaRuntimeDaemonFrameDocument
+                {
+                    GameMode = AetheriaGameModes.Arena,
+                    RunRecordKey = arenaSession.RunRecordKey,
+                    Run = new AetheriaRuntimeRunCheckpointCommit
+                    {
+                        RunId = arenaSession.RunId,
+                        GameMode = AetheriaGameModes.Arena,
+                        Zones = [new AetheriaRuntimeZoneSnapshotCommit { ZoneIndex = 0, Entities = [exposureEntity] }]
+                    }
+                };
+                var missingRosterExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, null, matchingExposureFrame);
+                var missingFrameExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, arenaRoster, null);
+                var staleFrameExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession,
+                    arenaRoster,
+                    new AetheriaRuntimeDaemonFrameDocument
+                    {
+                        GameMode = AetheriaGameModes.Arena,
+                        RunRecordKey = "run:stale",
+                        Run = matchingExposureFrame.Run
+                    });
+                var validExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, arenaRoster, matchingExposureFrame);
+                Require(missingRosterExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        missingFrameExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        staleFrameExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        validExposure.Kind == AetheriaArenaExposureKind.ActiveValid &&
+                        !AetheriaArenaExposurePolicy.CanReadRecord(
+                            node,
+                            "pilot-runtime",
+                            AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString(),
+                            missingRosterExposure,
+                            "daemon-smoke") &&
+                        !AetheriaArenaExposurePolicy.CanSubscribe(
+                            node,
+                            "pilot-runtime",
+                            new CultNetDatabaseSubscribeMessage
+                            {
+                                ConsumerRuntimeId = "pilot-runtime",
+                                BodyIds = [AetheriaRuntimeVerseRecordKeys.ArenaPilotBodyId("pilot-runtime")]
+                            },
+                            missingFrameExposure,
+                            "daemon-smoke"),
+                    "an active Arena with missing or stale roster/frame truth must fail closed for records and bodies");
                 var admissionEntity = Entity(0, 0, "arena-a");
                 admissionEntity.EntityId = primaryArenaSeat.ControlledEntityId;
                 var arenaAdmissionRun = new AetheriaRuntimeRunCheckpointCommit

@@ -143,23 +143,22 @@ using var clientSubscriptions = new CultNetDatabaseSubscriptionServer(
     {
         if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
             return false;
-        var frame = latestFrame;
-        var roster = ResolveActiveArenaRoster(node);
-        return CanPeerSubscribeArena(node, runtimeId, request, roster, frame?.Run, options.HangarPrincipalRuntimeId);
+        var context = AetheriaArenaExposurePolicy.Resolve(node, latestFrame);
+        return AetheriaArenaExposurePolicy.CanSubscribe(node, runtimeId, request, context, options.HangarPrincipalRuntimeId);
     },
     authorizeRecord: (_, peer, recordKey, _) =>
     {
         if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
             return false;
-        var frame = latestFrame;
-        var roster = ResolveActiveArenaRoster(node);
-        return CanPeerReadArenaRecord(node, runtimeId, recordKey, roster, frame?.Run, options.HangarPrincipalRuntimeId);
+        var context = AetheriaArenaExposurePolicy.Resolve(node, latestFrame);
+        return AetheriaArenaExposurePolicy.CanReadRecord(node, runtimeId, recordKey, context, options.HangarPrincipalRuntimeId);
     },
     projectRecord: (_, peer, record) =>
     {
         if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
             return null;
-        return ProjectProviderAdvertisementRecord(node, options, latestFrame, runtimeId, record);
+        return ProjectProviderAdvertisementRecord(
+            node, options, AetheriaArenaExposurePolicy.Resolve(node, latestFrame), runtimeId, record);
     });
 var playableWorldDemand = new AetheriaPlayableWorldDemandState();
 clientSubscriptions.DemandChanged += playableWorldDemand.Observe;
@@ -1196,14 +1195,13 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                     await InjectEveSurfaceSnapshotAsync(
                         node, options, request, response, scopedRecordKey, scopedSurfaceKind).ConfigureAwait(false);
                 }
-                var scopedFrame = latestFrame();
-                var scopedRoster = ResolveActiveArenaRoster(node);
+                var scopedContext = AetheriaArenaExposurePolicy.Resolve(node, latestFrame());
                 var scopedRuntimeId = sessionIdentity.TryGetSourceRuntimeId(peer, out var establishedRuntimeId)
                     ? establishedRuntimeId
                     : "";
                 response.Documents = response.Documents
-                    .Where(document => CanPeerReadArenaRecord(
-                        node, scopedRuntimeId, document.RecordKey, scopedRoster, scopedFrame?.Run, options.HangarPrincipalRuntimeId))
+                    .Where(document => AetheriaArenaExposurePolicy.CanReadRecord(
+                        node, scopedRuntimeId, document.RecordKey, scopedContext, options.HangarPrincipalRuntimeId))
                     .ToArray();
                 peer.SendCultNet(response);
                 return;
@@ -1591,19 +1589,19 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                 bundleCdnManifests,
                 request,
                 response);
-            var activeRoster = ResolveActiveArenaRoster(node);
+            var exposureContext = AetheriaArenaExposurePolicy.Resolve(node, frame);
             var sourceRuntimeId = sessionIdentity.TryGetSourceRuntimeId(peer, out var establishedSourceRuntimeId)
                 ? establishedSourceRuntimeId
                 : "";
             response.Documents = response.Documents
                 .Select(document => ProjectProviderAdvertisementRecord(
-                    node, options, frame, sourceRuntimeId, document))
+                    node, options, exposureContext, sourceRuntimeId, document))
                 .Where(document => document != null)
                 .Cast<CultNetRawDocumentRecord>()
                 .ToArray();
             response.Documents = response.Documents
-                .Where(document => CanPeerReadArenaRecord(
-                    node, sourceRuntimeId, document.RecordKey, activeRoster, frame?.Run, options.HangarPrincipalRuntimeId))
+                .Where(document => AetheriaArenaExposurePolicy.CanReadRecord(
+                    node, sourceRuntimeId, document.RecordKey, exposureContext, options.HangarPrincipalRuntimeId))
                 .ToArray();
             peer.SendCultNet(response);
         }
@@ -2737,7 +2735,7 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
 static CultNetRawDocumentRecord? ProjectProviderAdvertisementRecord(
     AetheriaStateNode node,
     AetheriaDaemonHostOptions options,
-    AetheriaRuntimeDaemonFrameDocument? frame,
+    AetheriaArenaExposureContext context,
     string establishedRuntimeId,
     CultNetRawDocumentRecord record)
 {
@@ -2746,76 +2744,24 @@ static CultNetRawDocumentRecord? ProjectProviderAdvertisementRecord(
             AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString(),
             StringComparison.Ordinal))
         return record;
-    var roster = ResolveActiveArenaRoster(node);
-    if (frame == null || roster == null)
+    if (context.Kind == AetheriaArenaExposureKind.ActiveInvalid)
+        return null;
+    if (context.Kind == AetheriaArenaExposureKind.Inactive)
         return record;
     return node.Database.Documents.CreateRawDocumentPutMessage(
         Guid.NewGuid().ToString("N"),
         new CultRecordHandle<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement),
         BuildCoreProviderAdvertisement(
             options,
-            frame.PublishedAtUtc,
-            roster,
-            frame.Run,
+            context.Frame!.PublishedAtUtc,
+            context.Roster,
+            context.Frame.Run,
             establishedRuntimeId),
         new CultNetDocumentMessageOptions
         {
             SourceRuntimeId = options.DaemonId,
             SourceRole = "aetheria-daemon"
         }).Document;
-}
-
-static AetheriaRuntimeArenaRosterDocument? ResolveActiveArenaRoster(AetheriaStateNode node)
-{
-    var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
-    if (session == null || !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
-        return null;
-    var roster = node.Cache.Get<AetheriaRuntimeArenaRosterDocument>(
-        new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(session.SessionId)));
-    return roster?.IsActiveFor(session.SessionId, session.RunId) == true ? roster : null;
-}
-
-static bool CanPeerReadArenaRecord(
-    AetheriaStateNode node,
-    string establishedRuntimeId,
-    string recordKey,
-    AetheriaRuntimeArenaRosterDocument? roster,
-    AetheriaRuntimeRunCheckpointCommit? run,
-    string hangarPrincipalRuntimeId)
-{
-    if (roster == null)
-        return true;
-    if (string.Equals(recordKey, AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(), StringComparison.Ordinal))
-        return string.Equals(establishedRuntimeId, hangarPrincipalRuntimeId, StringComparison.Ordinal);
-    if (recordKey.StartsWith(AetheriaRuntimeVerseRecordKeys.EveReceiptRecordPrefix + ":", StringComparison.Ordinal))
-    {
-        var commandId = recordKey.Substring(AetheriaRuntimeVerseRecordKeys.EveReceiptRecordPrefix.Length + 1);
-        var envelope = node.Cache.Get<AetheriaHangarCommandEnvelopeDocument>(
-            AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(commandId));
-        return envelope != null && string.Equals(
-            envelope.ClientId, establishedRuntimeId, StringComparison.Ordinal);
-    }
-    return AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
-        establishedRuntimeId, recordKey, roster, run);
-}
-
-static bool CanPeerSubscribeArena(
-    AetheriaStateNode node,
-    string establishedRuntimeId,
-    CultNetDatabaseSubscribeMessage request,
-    AetheriaRuntimeArenaRosterDocument? roster,
-    AetheriaRuntimeRunCheckpointCommit? run,
-    string hangarPrincipalRuntimeId)
-{
-    if (string.IsNullOrWhiteSpace(establishedRuntimeId) ||
-        !string.Equals(request.ConsumerRuntimeId, establishedRuntimeId, StringComparison.Ordinal))
-        return false;
-    return (request.RecordKeys ?? Array.Empty<string>())
-            .All(recordKey => CanPeerReadArenaRecord(
-                node, establishedRuntimeId, recordKey, roster, run, hangarPrincipalRuntimeId)) &&
-        (request.BodyIds ?? Array.Empty<string>())
-            .All(bodyId => AetheriaRuntimeArenaObservationAdmission.CanReadBody(
-                establishedRuntimeId, bodyId, roster, run));
 }
 
 static async Task PublishDaemonMenuSurfacesAsync(

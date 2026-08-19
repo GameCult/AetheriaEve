@@ -29,14 +29,12 @@ namespace GameCult.Aetheria.State.Verse
         public static bool CanSubscribe(
             string establishedRuntimeId,
             CultNetDatabaseSubscribeMessage request,
-            AetheriaRuntimeArenaRosterDocument? roster,
-            AetheriaRuntimeRunCheckpointCommit? run)
+            AetheriaRuntimeArenaRosterDocument roster,
+            AetheriaRuntimeRunCheckpointCommit run)
         {
             if (string.IsNullOrWhiteSpace(establishedRuntimeId) ||
                 !string.Equals(request.ConsumerRuntimeId, establishedRuntimeId, StringComparison.Ordinal))
                 return false;
-            if (roster == null)
-                return true;
             return (request.RecordKeys ?? Array.Empty<string>())
                     .All(recordKey => CanReadRecord(establishedRuntimeId, recordKey, roster, run)) &&
                 (request.BodyIds ?? Array.Empty<string>())
@@ -46,14 +44,12 @@ namespace GameCult.Aetheria.State.Verse
         public static bool CanReadRecord(
             string establishedRuntimeId,
             string recordKey,
-            AetheriaRuntimeArenaRosterDocument? roster,
-            AetheriaRuntimeRunCheckpointCommit? run)
+            AetheriaRuntimeArenaRosterDocument roster,
+            AetheriaRuntimeRunCheckpointCommit run)
         {
-            if (roster == null)
-                return true;
             if (IsPublicRecord(recordKey))
                 return true;
-            if (run == null || !string.Equals(roster.RunId, run.RunId, StringComparison.Ordinal))
+            if (!string.Equals(roster.RunId, run.RunId, StringComparison.Ordinal))
                 return false;
             var seat = ResolveSeat(establishedRuntimeId, roster, run);
             return seat != null && SeatRecordKeys(seat.ControllerRuntimeId).Contains(recordKey, StringComparer.Ordinal);
@@ -62,12 +58,10 @@ namespace GameCult.Aetheria.State.Verse
         public static bool CanReadBody(
             string establishedRuntimeId,
             string bodyId,
-            AetheriaRuntimeArenaRosterDocument? roster,
-            AetheriaRuntimeRunCheckpointCommit? run)
+            AetheriaRuntimeArenaRosterDocument roster,
+            AetheriaRuntimeRunCheckpointCommit run)
         {
-            if (roster == null)
-                return true;
-            if (run == null || !string.Equals(roster.RunId, run.RunId, StringComparison.Ordinal))
+            if (!string.Equals(roster.RunId, run.RunId, StringComparison.Ordinal))
                 return false;
             var seat = ResolveSeat(establishedRuntimeId, roster, run);
             return seat != null && string.Equals(

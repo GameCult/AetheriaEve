@@ -180,7 +180,11 @@ gameplay-state writer.
   absent from a privacy list. The
   provider advertises only the requesting controller's seat. Explicit snapshots,
   subscription snapshots, live subscription updates, and reconnect all use the
-  same authenticated per-peer advertisement projector. Arena does not
+  same authenticated per-peer advertisement projector. One tri-state exposure
+  resolver distinguishes non-Arena play, a complete active Arena generation,
+  and an active Arena whose session, roster, or frame disagree. That last state
+  fails closed for records, subscriptions, bodies, and provider projection; it
+  can never inherit the non-Arena export boundary. Arena does not
   use global realtime broadcast until that transport has per-peer identity.
   Headless and graphical controllers therefore observe the same bounded world
   around the ship they can command. Resulting facts
