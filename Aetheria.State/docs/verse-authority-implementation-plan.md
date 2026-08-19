@@ -1991,8 +1991,9 @@ npm run build
 The focused Stage 4/5 verifier passes: live daemons can expose scoped frames
 and committed facts to an external verifier.
 
-The old Stage 6 peer committed-fact lane is deleted. Starbridge now has no live
-Pilot correction path until Pilot candidates enter before Commander finality,
+The old Stage 6 peer committed-fact lane is deleted. Starbridge has a bounded
+seat-backed Pilot movement-operation gate, but no live Pilot correction path
+until independently simulated Pilot candidates enter before Commander finality,
 validated mismatches correct/replay Commander provisional state, and one
 Commander-owned canonical log records the result.
 

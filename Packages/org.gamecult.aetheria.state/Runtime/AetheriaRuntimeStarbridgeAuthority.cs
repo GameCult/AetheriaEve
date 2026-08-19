@@ -6,16 +6,9 @@ using System.Linq;
 
 namespace GameCult.Aetheria.State.Verse
 {
-    public static class AetheriaRuntimeStarbridgeFinalityModes
+    public sealed class AetheriaRuntimeStarbridgeOperationSelection
     {
-        public const string CommanderDefault = "starbridge.commander-default";
-        public const string PilotVeto = "starbridge.pilot-veto";
-        public const string CandidateRejected = "starbridge.candidate-rejected";
-    }
-
-    public sealed class AetheriaRuntimeStarbridgeCandidateSelection
-    {
-        public AetheriaRuntimeStarbridgeCandidateSelection(
+        public AetheriaRuntimeStarbridgeOperationSelection(
             IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> selected,
             IReadOnlyList<string> rejectedCommandIds)
         {
@@ -28,25 +21,25 @@ namespace GameCult.Aetheria.State.Verse
     }
 
     /// <summary>
-    /// Owns the first live Starbridge candidate/finality slice. The Commander daemon remains
-    /// the only fact committer. A bound Pilot may replace the Commander movement candidate for
-    /// its ship and exact observed frame; every other client-authored candidate fails closed.
+    /// Owns bounded Starbridge operation admission. The Commander daemon remains the only
+    /// simulator and fact committer. A bound Pilot may control movement input for its ship and
+    /// exact observed frame; this is not independently simulated candidate fact finality.
     /// </summary>
-    public static class AetheriaRuntimeStarbridgeCandidateFinality
+    public static class AetheriaRuntimeStarbridgeOperationAdmission
     {
-        public static bool IsMixedAuthorityActive(
+        public static bool IsPilotInputActive(
             string gameMode,
             string modePolicyId,
             AetheriaRuntimeVerseAuthorityPolicyDocument? policy,
             string hostRuntimeId) =>
             string.Equals(gameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal) &&
-            string.Equals(modePolicyId, AetheriaModePolicies.StarbridgeCommanderPilotVeto, StringComparison.Ordinal) &&
+            string.Equals(modePolicyId, AetheriaModePolicies.StarbridgeCommanderPilotInput, StringComparison.Ordinal) &&
             policy != null &&
             string.Equals(policy.PolicyId, modePolicyId, StringComparison.Ordinal) &&
             string.Equals(policy.HostRuntimeId, hostRuntimeId ?? "", StringComparison.Ordinal) &&
             string.Equals(policy.DefaultMode, AetheriaRuntimeAuthorityModes.HostAuthoritative, StringComparison.Ordinal);
 
-        public static string CandidateSlotKey(
+        public static string OperationSlotKey(
             string sessionId,
             long frameId,
             string subjectKey,
@@ -54,8 +47,8 @@ namespace GameCult.Aetheria.State.Verse
             string.Join("\u001f", sessionId ?? "", frameId.ToString(
                 System.Globalization.CultureInfo.InvariantCulture), subjectKey ?? "", claimKind ?? "");
 
-        public static AetheriaRuntimeStarbridgeCandidateSelection Select(
-            IEnumerable<AetheriaRuntimeDaemonCommandDocument>? candidates,
+        public static AetheriaRuntimeStarbridgeOperationSelection Admit(
+            IEnumerable<AetheriaRuntimeDaemonCommandDocument>? operations,
             string gameMode,
             string modePolicyId,
             string sessionId,
@@ -65,17 +58,17 @@ namespace GameCult.Aetheria.State.Verse
             IEnumerable<AetheriaRuntimeStarbridgePlayerSeatDocument>? seats,
             string hostRuntimeId)
         {
-            var ordered = (candidates ?? Enumerable.Empty<AetheriaRuntimeDaemonCommandDocument>())
+            var ordered = (operations ?? Enumerable.Empty<AetheriaRuntimeDaemonCommandDocument>())
                 .Where(value => value != null && !string.IsNullOrWhiteSpace(value.CommandId))
                 .OrderBy(value => value.IssuedAtUtc ?? "", StringComparer.Ordinal)
                 .ThenBy(value => value.CommandId, StringComparer.Ordinal)
                 .ToArray();
-            if (!IsMixedAuthorityActive(
+            if (!IsPilotInputActive(
                     gameMode,
                     modePolicyId,
                     policy,
                     hostRuntimeId))
-                return new AetheriaRuntimeStarbridgeCandidateSelection(
+                return new AetheriaRuntimeStarbridgeOperationSelection(
                     Array.Empty<AetheriaRuntimeDaemonCommandDocument>(),
                     ordered.Select(value => value.CommandId).ToArray());
 
@@ -100,7 +93,7 @@ namespace GameCult.Aetheria.State.Verse
                 }
                 var subject = AetheriaRuntimeAuthorityRouter.ResolveSubjectKey(command);
                 var claim = AetheriaRuntimeAuthorityRouter.ResolveClaimKind(command.Kind);
-                var slot = CandidateSlotKey(sessionId, currentFrameId, subject, claim);
+                var slot = OperationSlotKey(sessionId, currentFrameId, subject, claim);
                 if (!string.Equals(command.SessionId, sessionId ?? "", StringComparison.Ordinal) ||
                     command.ObservedFrameId != currentFrameId)
                 {
@@ -143,12 +136,12 @@ namespace GameCult.Aetheria.State.Verse
                 }
                 var winner = pilots.Length == 1 ? pilots[0] : commanders[0];
                 selected.Add(winner.Command);
-                foreach (var candidate in slot)
-                    if (!ReferenceEquals(candidate.Command, winner.Command))
-                        rejected.Add(candidate.Command.CommandId);
+                foreach (var operation in slot)
+                    if (!ReferenceEquals(operation.Command, winner.Command))
+                        rejected.Add(operation.Command.CommandId);
             }
 
-            return new AetheriaRuntimeStarbridgeCandidateSelection(
+            return new AetheriaRuntimeStarbridgeOperationSelection(
                 selected.OrderBy(value => value.IssuedAtUtc ?? "", StringComparer.Ordinal)
                     .ThenBy(value => value.CommandId, StringComparer.Ordinal)
                     .ToArray(),

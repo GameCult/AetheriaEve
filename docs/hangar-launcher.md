@@ -3,9 +3,10 @@
 Status: the shared Hangar, deployment admission, portable Hangar surface, and
 minimal Terminus, Starbridge, and Arena launch/continue paths exist. Arena
 installs its host-authoritative policy with session activation. Starbridge now
-installs `aetheria.mode.starbridge.commander-pilot-veto.v1`, persists one
-Commander seat and an optional bound Pilot seat, and proves the first bounded
-Pilot-correction slice for ship movement.
+installs `aetheria.mode.starbridge.commander-pilot-input.v1`, persists one
+Commander seat and an optional bound Pilot seat, and fails closed around the
+first bounded Pilot movement-input slice. Independent Pilot prediction,
+mismatch correction, and Commander replay remain unimplemented.
 The state assembly and viewport queries compile against CultMath `0.1.2`, whose
 canonical `rect` stores normalized `min`/`max` bounds.
 
@@ -139,7 +140,7 @@ Cut line: every mode follows the established `Hangar launch operation ->
 deployment admission -> mode session bootstrap` path. Arena launch and continue
 atomically select `aetheria.mode.arena.server.v1`; startup derives the same
 policy from an active Arena session. Starbridge launch and continue atomically
-select `aetheria.mode.starbridge.commander-pilot-veto.v1`; startup likewise
+select `aetheria.mode.starbridge.commander-pilot-input.v1`; startup likewise
 normalizes session and policy together. Generic New Game must not return as a
 gameplay-state writer.
 

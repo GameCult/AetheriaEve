@@ -630,7 +630,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
             options.DaemonId,
             policyRejectedCommandIds)
         : string.Equals(ingressState.GameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
-            ? SelectStarbridgeCandidates(
+            ? AdmitStarbridgeOperations(
                 pendingObservedCommands,
                 ingressState,
                 currentFrame?.FrameId ?? -1,
@@ -904,15 +904,15 @@ static async Task RefreshGameSessionInputsAsync(
     ingressState.SimulationRate = gameSession?.EffectiveSimulationRate ?? gameSession?.SimulationRate ?? 0;
 }
 
-static IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> SelectStarbridgeCandidates(
-    IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> candidates,
+static IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> AdmitStarbridgeOperations(
+    IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> operations,
     AetheriaDaemonIngressState ingressState,
     long currentFrameId,
     string hostRuntimeId,
     ICollection<string> rejectedCommandIds)
 {
-    var selection = AetheriaRuntimeStarbridgeCandidateFinality.Select(
-        candidates,
+    var selection = AetheriaRuntimeStarbridgeOperationAdmission.Admit(
+        operations,
         ingressState.GameMode,
         ingressState.ModePolicyId,
         ingressState.SessionId,
@@ -4847,7 +4847,7 @@ static async Task EnsureVerseAuthorityPolicyAsync(
     var policy = string.Equals(session?.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
         ? AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(options.VerseId, options.DaemonId)
         : string.Equals(session?.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
-            ? AetheriaRuntimeVerseAuthorityPolicyDocument.StarbridgeCommanderPilotVeto(options.VerseId, options.DaemonId)
+            ? AetheriaRuntimeVerseAuthorityPolicyDocument.StarbridgeCommanderPilotInput(options.VerseId, options.DaemonId)
             : AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(options.VerseId, options.DaemonId);
     var expectedModePolicyId = AetheriaModePolicies.ForMode(session?.Mode);
     if (existing != null &&

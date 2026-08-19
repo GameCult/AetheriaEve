@@ -401,14 +401,15 @@ until that principal boundary exists. Arena deployments carry
 create one authoritative session roster in the same transaction. The roster,
 not Continue or a client-supplied actor id, owns controller assignment.
 Starbridge deployments now carry
-`aetheria.mode.starbridge.commander-pilot-veto.v1`. Launch installs that policy,
+`aetheria.mode.starbridge.commander-pilot-input.v1`. Launch installs that policy,
 one durable Commander seat, and an optional Pilot seat bound to the deployed
-ship. The first live correction slice is deliberately narrow: for the exact
-current frame, a bound Pilot may submit `SetMoveVector` for that ship; when the
-Commander has a candidate for the same movement slot, the validated Pilot
-candidate replaces it before the daemon applies the operation and authors the
-canonical fact. Unbound, wrong-subject, and late candidates fail closed. The
-fact remains daemon-authored and records the Pilot as proposer.
+ship. The implemented slice is operation admission, not mixed-authority
+correction: for the exact current frame, a bound Pilot may submit
+`SetMoveVector` for that ship. Unbound, wrong-subject, late, and ambiguous
+operations fail closed; if Commander and Pilot operations occupy the same input
+slot, the seat-bound Pilot input is used. The daemon alone applies the operation
+and authors its outcome fact, preserving the Pilot as proposer. No independent
+Commander/Pilot state candidates are compared by this path.
 Settlement, currencies/unlocks, richer fitting
 interaction, complete Starbridge admission, and the Arena scored match harness
 still need to enter
@@ -423,11 +424,12 @@ observation/operation replay witness. Its minimal daemon session now preserves
   snapshot/subscription admission, roster-derived command actors, and the
   operation/fact split in managed verification, but does
   not yet prove a complete PvP or balance run through a real transport.
-Starbridge does not yet independently simulate or transport targeting, combat,
-nearest-environment, or engagement facts, nor prove rollback/replay across a
-networked Pilot daemon. The movement slice proves policy/session durability,
-slot selection, Pilot mismatch priority, daemon-only fact authorship, and late
-candidate rejection; it is not the completed mixed-authority protocol.
+Starbridge does not yet independently simulate or transport movement,
+targeting, combat, nearest-environment, or engagement facts, nor prove
+mismatch correction or rollback/replay across a networked Pilot daemon. The
+movement slice proves policy/session durability, seat-bound operation
+admission, daemon-only fact authorship, and stale/forged input rejection; it is
+not a mixed-authority finality proof.
 
 The next state-architecture cut is exactly-once Settlement plus the remaining
 Starbridge candidate transport/replay domains and the Arena match/score/replay family. Until those cuts land, documentation

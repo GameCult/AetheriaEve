@@ -281,7 +281,7 @@ public static class AetheriaDaemonHangarCoordinator
         var policy = string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
             ? AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(verseId, hostRuntimeId)
             : string.Equals(deployment.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
-                ? AetheriaRuntimeVerseAuthorityPolicyDocument.StarbridgeCommanderPilotVeto(verseId, hostRuntimeId)
+                ? AetheriaRuntimeVerseAuthorityPolicyDocument.StarbridgeCommanderPilotInput(verseId, hostRuntimeId)
                 : AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(verseId, hostRuntimeId);
         if (!string.Equals(deployment.ModePolicyId, AetheriaModePolicies.ForMode(deployment.Mode), StringComparison.Ordinal) ||
             (!string.IsNullOrWhiteSpace(deployment.ModePolicyId) &&

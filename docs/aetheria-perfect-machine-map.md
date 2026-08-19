@@ -140,10 +140,10 @@ Date: 2026-06-13
 > peer-specific snapshot exposes only the caller's seat. Arena realtime
 > broadcast remains disabled until QUIC has per-peer identity and filtering. The
 > daemon remains the sole committed-fact author. Starbridge installs
-> `aetheria.mode.starbridge.commander-pilot-veto.v1`; its first bounded proof
-> lets one durable Pilot seat replace the Commander movement candidate for that
-> ship and exact frame before daemon finality. Mode labels alone are not
-> authority evidence.
+> `aetheria.mode.starbridge.commander-pilot-input.v1`; its first bounded proof
+> admits movement input only from the Pilot seat bound to that ship and exact
+> frame. This is operation admission, not prediction mismatch correction or
+> mixed-authority fact finality. Mode labels alone are not authority evidence.
 
 This is the Proprioception and Imagination pass for turning Aetheria from a
 Unity project with ancestral cache/network/UI machinery into a coherent
@@ -1019,47 +1019,54 @@ finality, replay, and negative authority invariants.
 
 ## Current Authority Map
 
-### CultMesh Session And Starbridge Finality
+### CultMesh Session And Starbridge Authority
 
 - Owner: the Commander daemon owns the Starbridge simulation schedule,
   canonical selection/finality, persistence, and its advertised CultMesh
-  endpoint. `AetheriaRuntimeStarbridgeCandidateFinality` owns the first bounded
-  pre-tick selection slice: one durable Pilot seat may replace the Commander's
-  `SetMoveVector` candidate for its exact ship and observed frame. Pilot daemons
-  never publish already-final gameplay truth.
+  endpoint. `AetheriaRuntimeStarbridgeOperationAdmission` owns the current
+  bounded pre-tick input slice: one durable Pilot seat may supply
+  `SetMoveVector` only for its exact ship and observed frame. It does not compare
+  independently simulated facts. Pilot daemons never publish already-final
+  gameplay truth.
 - Inputs: the active Starbridge session and
-  `aetheria.mode.starbridge.commander-pilot-veto.v1` policy, durable Commander
-  and Pilot seats, the current frame id, and typed movement candidates.
+  `aetheria.mode.starbridge.commander-pilot-input.v1` policy, durable Commander
+  and Pilot seats, the current frame id, and typed movement operations.
   Odin publication remains optional discovery/indexing through
   `--odin-cultmesh-uri`; it does not decide gameplay finality.
 - Outputs: typed state/surface snapshots, operation receipts, provider-owned
-  assets, candidate/selection receipts, and one Commander-finalized fact log.
+  assets, and daemon-authored operation outcome facts. Candidate/selection
+  receipts and one replayable Commander-finalized state-fact log remain target
+  work.
 - Derived state: discovery catalogs, external provider indexes, Pilot caches,
-  candidate evidence, and rendered projections are not canonical gameplay. A
-  selected Pilot operation is still only daemon input; the resulting fact is
-  daemon-authored and preserves proposer/finality provenance.
+  future candidate evidence, and rendered projections are not canonical
+  gameplay. An admitted Pilot operation is only daemon input; the resulting
+  operation fact is daemon-authored and preserves proposer provenance.
 - Forbidden writers: Odin, Eve lowerers, Unity, Pilot peers, imported facts,
   caches, and replicas cannot mutate the Commander log. The retired
   `--peer-cultmesh-endpoint` option is rejected rather than restoring peer fact
   import.
-- Shared paths: rendered input and headless policy input enter the same pending
-  command -> Starbridge slot selection -> tick -> daemon fact path. Replay,
-  reconnect, and future Pilot fact candidates must enter the same pre-finality
-  boundary. Finalized facts
+- Shared paths: rendered input and headless policy input are intended to enter
+  the same pending command -> Starbridge operation admission -> tick -> daemon
+  fact path. The present smoke proves that composition directly, not a public
+  transport chronology. Replay, reconnect, and future Pilot fact candidates
+  must enter a real shared pre-finality boundary. Finalized state facts
   alone may affect gameplay checkpoints, score, Hangar settlement, or external
   effects.
 - Cut line: `AetheriaRuntimeCommittedFactImporter`, its frame counters, direct
   peer routes, and the two-writer convergence smokes are deleted. Generic
-  `TrustedCoop`/`AnyTrustedRuntime` no longer decides Starbridge admission. The
-  next transport cut is independently simulated pre-finality candidate
-  evidence, not another replica writer.
+  `TrustedCoop`/`AnyTrustedRuntime` no longer decides Starbridge operation
+  admission. The operation selector is explicitly not called finality. The next
+  transport cut is independently simulated pre-finality candidate evidence,
+  not another replica writer.
 - Verification layer: the managed Hangar smoke proves Starbridge policy/session
-  durability across reopen, one Commander and one Pilot seat, Pilot-wins
-  movement mismatch, wrong-subject and late-candidate rejection, daemon-authored
-  fact provenance, and execution of only the selected movement. Missing proof:
-  a real Pilot-daemon candidate transport, targeting/combat/environment and
-  engagement jurisdictions, deterministic Commander rollback/replay, and one
-  durable end-to-end canonical log across process restart.
+  durability across reopen, one Commander and one Pilot seat, seat-bound
+  movement-operation arbitration, wrong-subject/stale/ambiguous input rejection,
+  daemon-authored outcome provenance, and execution of only the admitted
+  movement. It calls the admission/tick primitives directly. Missing proof: a
+  public seat-scoped Eve path, real Pilot-daemon state-candidate transport,
+  targeting/combat/environment and engagement jurisdictions, deterministic
+  Commander correction/replay, and one durable end-to-end canonical log across
+  process restart.
 
 ### Daemon Sector-Map Surface
 

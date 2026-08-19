@@ -150,7 +150,7 @@ namespace GameCult.Aetheria.State.Verse
             };
         }
 
-        public static AetheriaRuntimeVerseAuthorityPolicyDocument StarbridgeCommanderPilotVeto(
+        public static AetheriaRuntimeVerseAuthorityPolicyDocument StarbridgeCommanderPilotInput(
             string verseId,
             string hostRuntimeId)
         {
@@ -158,7 +158,7 @@ namespace GameCult.Aetheria.State.Verse
             return new AetheriaRuntimeVerseAuthorityPolicyDocument
             {
                 VerseId = string.IsNullOrWhiteSpace(verseId) ? "aetheria.local" : verseId,
-                PolicyId = AetheriaModePolicies.StarbridgeCommanderPilotVeto,
+                PolicyId = AetheriaModePolicies.StarbridgeCommanderPilotInput,
                 HostRuntimeId = host,
                 DefaultMode = AetheriaRuntimeAuthorityModes.HostAuthoritative,
                 DeploymentMode = AetheriaRuntimeVerseDeploymentModes.DistributedTrusted,
