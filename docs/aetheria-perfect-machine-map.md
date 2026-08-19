@@ -99,6 +99,8 @@ Date: 2026-06-13
 > controllers discover a separate lobby surface whose only operation is Join,
 > bound to the exact Arena session/run at ingress and roster commit, while the
 > Hangar disappears from their advertisement and read boundary.
+> Direct snapshots and subscriptions share one authenticated per-peer provider
+> advertisement projection; the stored anonymous advertisement is not client truth.
 > Arena deployment installs
 > `aetheria.mode.arena.server.v1` plus one daemon-owned session roster. Launch
 > assigns a seat once, Continue cannot reassign it, and the Arena lobby command

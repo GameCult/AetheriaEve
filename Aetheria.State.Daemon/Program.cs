@@ -154,6 +154,12 @@ using var clientSubscriptions = new CultNetDatabaseSubscriptionServer(
         var frame = latestFrame;
         var roster = ResolveActiveArenaRoster(node);
         return CanPeerReadArenaRecord(node, runtimeId, recordKey, roster, frame?.Run, options.HangarPrincipalRuntimeId);
+    },
+    projectRecord: (_, peer, record) =>
+    {
+        if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
+            return null;
+        return ProjectProviderAdvertisementRecord(node, options, latestFrame, runtimeId, record);
     });
 var playableWorldDemand = new AetheriaPlayableWorldDemandState();
 clientSubscriptions.DemandChanged += playableWorldDemand.Observe;
@@ -1589,25 +1595,12 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
             var sourceRuntimeId = sessionIdentity.TryGetSourceRuntimeId(peer, out var establishedSourceRuntimeId)
                 ? establishedSourceRuntimeId
                 : "";
-            if (frame != null && activeRoster != null && SnapshotWants(
-                    request,
-                    EveProviderAdvertisementDocument.SchemaId,
-                    AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString()))
-            {
-                var providerPut = node.Database.Documents.CreateRawDocumentPutMessage(
-                    response.MessageId,
-                    new CultRecordHandle<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement),
-                    BuildCoreProviderAdvertisement(options, frame.PublishedAtUtc, activeRoster, frame.Run, sourceRuntimeId),
-                    new CultNetDocumentMessageOptions
-                    {
-                        SourceRuntimeId = options.DaemonId,
-                        SourceRole = "aetheria-daemon"
-                    });
-                response.Documents = response.Documents
-                    .Where(document => !string.Equals(document.RecordKey, providerPut.Document.RecordKey, StringComparison.Ordinal))
-                    .Concat(new[] { providerPut.Document })
-                    .ToArray();
-            }
+            response.Documents = response.Documents
+                .Select(document => ProjectProviderAdvertisementRecord(
+                    node, options, frame, sourceRuntimeId, document))
+                .Where(document => document != null)
+                .Cast<CultNetRawDocumentRecord>()
+                .ToArray();
             response.Documents = response.Documents
                 .Where(document => CanPeerReadArenaRecord(
                     node, sourceRuntimeId, document.RecordKey, activeRoster, frame?.Run, options.HangarPrincipalRuntimeId))
@@ -2739,6 +2732,37 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
         surfaces.ToArray(),
         Array.Empty<EveAdvertisedCommand>(),
         new[] { AetheriaRuntimeDaemonSoaFramePublisher.ProducerId });
+}
+
+static CultNetRawDocumentRecord? ProjectProviderAdvertisementRecord(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    AetheriaRuntimeDaemonFrameDocument? frame,
+    string establishedRuntimeId,
+    CultNetRawDocumentRecord record)
+{
+    if (!string.Equals(
+            record.RecordKey,
+            AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString(),
+            StringComparison.Ordinal))
+        return record;
+    var roster = ResolveActiveArenaRoster(node);
+    if (frame == null || roster == null)
+        return record;
+    return node.Database.Documents.CreateRawDocumentPutMessage(
+        Guid.NewGuid().ToString("N"),
+        new CultRecordHandle<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement),
+        BuildCoreProviderAdvertisement(
+            options,
+            frame.PublishedAtUtc,
+            roster,
+            frame.Run,
+            establishedRuntimeId),
+        new CultNetDocumentMessageOptions
+        {
+            SourceRuntimeId = options.DaemonId,
+            SourceRole = "aetheria-daemon"
+        }).Document;
 }
 
 static AetheriaRuntimeArenaRosterDocument? ResolveActiveArenaRoster(AetheriaStateNode node)

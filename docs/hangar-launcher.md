@@ -178,7 +178,9 @@ gameplay-state writer.
   Arena export boundary is an allowlist, so a canonical run/zone/entity/session
   record or schema-wide subscription cannot escape merely because its key was
   absent from a privacy list. The
-  provider advertises only the requesting controller's seat, and Arena does not
+  provider advertises only the requesting controller's seat. Explicit snapshots,
+  subscription snapshots, live subscription updates, and reconnect all use the
+  same authenticated per-peer advertisement projector. Arena does not
   use global realtime broadcast until that transport has per-peer identity.
   Headless and graphical controllers therefore observe the same bounded world
   around the ship they can command. Resulting facts

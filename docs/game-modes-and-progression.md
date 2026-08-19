@@ -135,7 +135,9 @@ The authority policy differs without changing the document model:
   cache. Only typed presentation assets, the provider advertisement, Arena
   lobby, and the caller's exact seat/receipt records cross the controller's
   CultMesh boundary. The Hangar surface crosses that boundary only for its
-  configured principal. Arena realtime broadcast is disabled
+  configured principal. One authenticated per-peer projector owns provider
+  advertisements for direct snapshots, subscription snapshots, live updates,
+  and reconnect. Arena realtime broadcast is disabled
   until the QUIC path can identify and filter each receiving controller; local
   headless and rendered clients consume the same authenticated document/body
   boundary meanwhile.
