@@ -52,6 +52,8 @@ Date: 2026-06-13
 > is carried separately on the surface. EveUnity retains terminal receipts and
 > freezes the obsolete surface until the named surface plus its qualified asset
 > generation are mounted; receipt arrival is not presentation finality.
+> Composed and embedded surface versions are rendering-only inputs and cannot
+> satisfy the advertised base surface's receipt barrier.
 > Odin discovery owns the available-Verse observation only. It merges
 > that observation into the latest progression-source revision and cannot write
 > or roll back the player's `SelectedVerseId`.

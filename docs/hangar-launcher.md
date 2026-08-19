@@ -85,7 +85,9 @@ selector receipt therefore binds to the new surface; the previous surface can
 no longer route a post-selection refit or launch. A lowerer exposes that
 terminal receipt only after the named surface and its provider-qualified asset
 generation are mounted; while preparation is pending or failed, the previous
-surface remains visible but read-only.
+surface remains visible but read-only. Embedded-surface updates may recompose
+that visible tree, but their versions cannot satisfy the advertised Hangar
+surface's finality barrier.
 
 Derived state: selected bay, selected mode, preview, fit metrics, affordability,
 compatibility warnings, and launch readiness are UI projections. The preview
