@@ -106,7 +106,9 @@ Date: 2026-06-13
 > exact session/server-authority-policy/roster/frame generation, and
 > `ActiveInvalid` exports nothing. The installed policy must match
 > `aetheria.mode.arena.server.v1`, host-authoritative default, and the daemon
-> host identity used by command admission. Seat publication consumes this same
+> host identity used by command admission. The frame must be authoritative and
+> daemon-sourced, with exact host, session, run-record, run-id, and mode
+> provenance. Seat publication consumes this same
 > resolved context rather than a separately cached roster.
 > Missing Arena truth can never widen authority by masquerading as inactivity.
 > CultMesh keeps a per-subscription delivered-record ledger. An exposure-generation

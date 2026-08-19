@@ -473,6 +473,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 var exposureEntity = Entity(0, 0, "arena-exposure");
                 var matchingExposureFrame = new AetheriaRuntimeDaemonFrameDocument
                 {
+                    DaemonId = "daemon-smoke",
+                    SessionId = arenaSession.SessionId,
+                    IsAuthoritative = true,
+                    StateSource = "daemon",
                     GameMode = AetheriaGameModes.Arena,
                     RunRecordKey = arenaSession.RunRecordKey,
                     Run = new AetheriaRuntimeRunCheckpointCommit
@@ -524,6 +528,26 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     arenaRoster,
                     matchingExposureFrame,
                     "daemon-smoke");
+                var foreignSessionFrame = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonFrameDocument>(
+                    MessagePackSerializer.Serialize(matchingExposureFrame));
+                foreignSessionFrame.SessionId = "foreign-session";
+                var foreignSessionExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, arenaPolicy, arenaRoster, foreignSessionFrame, "daemon-smoke");
+                var foreignDaemonFrame = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonFrameDocument>(
+                    MessagePackSerializer.Serialize(matchingExposureFrame));
+                foreignDaemonFrame.DaemonId = "foreign-daemon";
+                var foreignDaemonExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, arenaPolicy, arenaRoster, foreignDaemonFrame, "daemon-smoke");
+                var nonAuthoritativeFrame = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonFrameDocument>(
+                    MessagePackSerializer.Serialize(matchingExposureFrame));
+                nonAuthoritativeFrame.IsAuthoritative = false;
+                var nonAuthoritativeExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, arenaPolicy, arenaRoster, nonAuthoritativeFrame, "daemon-smoke");
+                var foreignSourceFrame = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonFrameDocument>(
+                    MessagePackSerializer.Serialize(matchingExposureFrame));
+                foreignSourceFrame.StateSource = "peer";
+                var foreignSourceExposure = AetheriaArenaExposurePolicy.Resolve(
+                    arenaSession, arenaPolicy, arenaRoster, foreignSourceFrame, "daemon-smoke");
                 var validExposure = AetheriaArenaExposurePolicy.Resolve(
                     arenaSession, arenaPolicy, arenaRoster, matchingExposureFrame, "daemon-smoke");
                 var revisedRoster = MessagePackSerializer.Deserialize<AetheriaRuntimeArenaRosterDocument>(
@@ -538,6 +562,20 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         wrongHostExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
                         wrongDefaultExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
                         wrongModePolicyExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        foreignSessionExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        foreignDaemonExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        nonAuthoritativeExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        foreignSourceExposure.Kind == AetheriaArenaExposureKind.ActiveInvalid &&
+                        !AetheriaDaemonFrameProvenance.BelongsToSession(
+                            foreignSessionFrame, arenaSession, "daemon-smoke") &&
+                        !AetheriaDaemonFrameProvenance.BelongsToSession(
+                            foreignDaemonFrame, arenaSession, "daemon-smoke") &&
+                        !AetheriaDaemonFrameProvenance.BelongsToSession(
+                            nonAuthoritativeFrame, arenaSession, "daemon-smoke") &&
+                        !AetheriaDaemonFrameProvenance.BelongsToSession(
+                            foreignSourceFrame, arenaSession, "daemon-smoke") &&
+                        AetheriaDaemonFrameProvenance.BelongsToSession(
+                            matchingExposureFrame, arenaSession, "daemon-smoke") &&
                         validExposure.Kind == AetheriaArenaExposureKind.ActiveValid &&
                         AetheriaArenaExposurePolicy.Generation(missingRosterExposure) !=
                             AetheriaArenaExposurePolicy.Generation(validExposure) &&

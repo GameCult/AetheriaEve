@@ -51,6 +51,28 @@ internal sealed class AetheriaArenaExposureContext
         new(AetheriaArenaExposureKind.ActiveValid, session, authorityPolicy, roster, frame);
 }
 
+internal static class AetheriaDaemonFrameProvenance
+{
+    public static bool BelongsToSession(
+        AetheriaRuntimeDaemonFrameDocument? frame,
+        AetheriaGameSessionState? session,
+        string hostRuntimeId) =>
+        frame != null &&
+        session != null &&
+        frame.IsAuthoritative &&
+        string.Equals(frame.StateSource, "daemon", StringComparison.Ordinal) &&
+        !string.IsNullOrWhiteSpace(hostRuntimeId) &&
+        string.Equals(frame.DaemonId, hostRuntimeId, StringComparison.Ordinal) &&
+        string.Equals(frame.SessionId, session.SessionId, StringComparison.Ordinal) &&
+        (frame.Run?.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
+            .Any(zone => (zone.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>()).Count > 0) &&
+        !string.IsNullOrWhiteSpace(session.RunId) &&
+        !string.IsNullOrWhiteSpace(session.RunRecordKey) &&
+        string.Equals(frame.RunRecordKey, session.RunRecordKey, StringComparison.Ordinal) &&
+        string.Equals(frame.Run!.RunId, session.RunId, StringComparison.Ordinal) &&
+        string.Equals(frame.GameMode, session.Mode, StringComparison.Ordinal);
+}
+
 /// <summary>
 /// Resolves one Arena exposure generation and owns record/body admission for it.
 /// An active but incomplete generation is never equivalent to non-Arena play.
@@ -114,7 +136,7 @@ internal static class AetheriaArenaExposurePolicy
                 authorityPolicy,
                 hostRuntimeId) &&
             roster?.IsActiveFor(session.SessionId, session.RunId) == true &&
-            FrameBelongsToSession(frame, session)
+            AetheriaDaemonFrameProvenance.BelongsToSession(frame, session, hostRuntimeId)
                 ? AetheriaArenaExposureContext.Active(session, authorityPolicy!, roster, frame!)
                 : AetheriaArenaExposureContext.Invalid(session, authorityPolicy);
     }
@@ -166,14 +188,4 @@ internal static class AetheriaArenaExposurePolicy
                 });
     }
 
-    private static bool FrameBelongsToSession(
-        AetheriaRuntimeDaemonFrameDocument? frame,
-        AetheriaGameSessionState session) =>
-        (frame?.Run?.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
-            .Any(zone => (zone.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>()).Count > 0) &&
-        !string.IsNullOrWhiteSpace(session.RunId) &&
-        !string.IsNullOrWhiteSpace(session.RunRecordKey) &&
-        string.Equals(frame!.RunRecordKey, session.RunRecordKey, StringComparison.Ordinal) &&
-        string.Equals(frame.Run.RunId, session.RunId, StringComparison.Ordinal) &&
-        string.Equals(frame.GameMode, session.Mode, StringComparison.Ordinal);
 }

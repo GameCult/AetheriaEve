@@ -337,7 +337,7 @@ while (!stopped.Task.IsCompleted)
         .ReadAsync().ConfigureAwait(false);
     var activatedGameSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
         .ReadAsync().ConfigureAwait(false);
-    if (!FrameBelongsToSession(latestFrame, activatedGameSession))
+    if (!AetheriaDaemonFrameProvenance.BelongsToSession(latestFrame, activatedGameSession, options.DaemonId))
         latestFrame = null;
     using var worldPhysics = new AetheriaYmirWorldPhysics();
     await EnsureGameSessionAsync(node, options, startedAtUtc, latestFrame).ConfigureAwait(false);
@@ -3539,7 +3539,8 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
                 var roster = await node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
                         new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(activeSession!.SessionId)))
                     .ReadAsync().ConfigureAwait(false);
-                var activeRun = FrameBelongsToSession(currentFrame, activeSession)
+                var activeRun = AetheriaDaemonFrameProvenance.BelongsToSession(
+                        currentFrame, activeSession, options.DaemonId)
                     ? currentFrame!.Run
                     : await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, activeSession.RunRecordKey)
                         .ConfigureAwait(false);
@@ -3927,7 +3928,7 @@ static async Task<string> PublishArenaSeatSurfaceAsync(
     var latestFrame = await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(
             AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
         .ReadAsync().ConfigureAwait(false);
-    var frame = FrameBelongsToSession(latestFrame, session)
+    var frame = AetheriaDaemonFrameProvenance.BelongsToSession(latestFrame, session, options.DaemonId)
         ? latestFrame!
         : AetheriaRuntimeDaemonFrameDocument.Create(
             run,
@@ -4753,7 +4754,8 @@ static async Task EnsureGameSessionCoreAsync(
     var run = !string.IsNullOrWhiteSpace(runRecordKey)
         ? await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, runRecordKey).ConfigureAwait(false)
         : null;
-    if (!HasPlayableRun(run) && FrameBelongsToSession(latestFrame, existing))
+    if (!HasPlayableRun(run) && AetheriaDaemonFrameProvenance.BelongsToSession(
+            latestFrame, existing, options.DaemonId))
         run = latestFrame!.Run;
     if (!HasPlayableRun(run))
     {
@@ -4801,17 +4803,6 @@ static async Task EnsureGameSessionCoreAsync(
             ModePolicyId = expectedModePolicyId
         }).ConfigureAwait(false);
 }
-
-static bool FrameBelongsToSession(
-    AetheriaRuntimeDaemonFrameDocument? frame,
-    AetheriaGameSessionState? session) =>
-    HasPlayableRun(frame?.Run) &&
-    session != null &&
-    !string.IsNullOrWhiteSpace(session.RunId) &&
-    !string.IsNullOrWhiteSpace(session.RunRecordKey) &&
-    string.Equals(frame!.RunRecordKey, session.RunRecordKey, StringComparison.Ordinal) &&
-    string.Equals(frame.Run.RunId, session.RunId, StringComparison.Ordinal) &&
-    string.Equals(frame.GameMode, session.Mode, StringComparison.Ordinal);
 
 static async Task EnsureVerseAuthorityPolicyAsync(
     AetheriaStateNode node,

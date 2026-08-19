@@ -140,7 +140,9 @@ The authority policy differs without changing the document model:
   and reconnect. Those paths consume one resolved exposure context:
   `Inactive`, `ActiveValid`, or `ActiveInvalid`. Missing or stale roster/frame
   state, or a missing/mismatched Arena server-authority policy, is
-  `ActiveInvalid` and exports nothing; it is never
+  `ActiveInvalid` and exports nothing. A valid frame must be authoritative,
+  daemon-sourced, and match the active host, session, run record, run id, and
+  mode; it is never
   treated as ordinary non-Arena play. The daemon reconciles live subscriptions
   when that authority generation changes. CultMesh diffs each peer's delivered
   projection, sends removals for state that is no longer visible, and withdraws

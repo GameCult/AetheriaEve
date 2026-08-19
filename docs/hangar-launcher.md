@@ -184,7 +184,9 @@ gameplay-state writer.
   resolver distinguishes non-Arena play, a complete active Arena generation,
   and an active Arena whose session, installed server-authority policy, roster,
   or frame disagree. The active form requires the same policy id, host identity,
-  and host-authoritative default as command admission. That invalid state
+  and host-authoritative default as command admission. Its frame must also be
+  daemon-authored and authoritative, with the exact active session and host
+  identities as well as the run identity. That invalid state
   fails closed for records, subscriptions, bodies, and provider projection; it
   can never inherit the non-Arena export boundary. The subscription server owns
   a delivered-record ledger for each peer. An Arena exposure-generation change
