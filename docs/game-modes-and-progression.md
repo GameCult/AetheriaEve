@@ -117,8 +117,18 @@ The authority policy differs without changing the document model:
   active seat receives a daemon-authored Eve pilot surface whose player,
   camera, controllable entity, hot entity body, visible contacts, zone-render
   document, and input capability are derived from that roster assignment. Each
-  seat has its own observation record namespace; the primary ship's global
-  pilot records cannot supply another controller's world or equipment actions.
+  seat has its own observation record namespace and visible-world projection.
+  Names are not capabilities: the CultMesh snapshot/subscription/demand gate
+  binds every private record and body request to the transport-established
+  controller runtime and current roster. Global advertisements omit all Arena
+  seats and the global pilot surface; an authenticated provider snapshot adds
+  only the caller's seat. The full daemon frame, primary-pilot records, command
+  journal, and global fact stream are not Arena controller observations; a
+  controller can read only receipts whose immutable command envelope names
+  that controller. Arena realtime broadcast is disabled
+  until the QUIC path can identify and filter each receiving controller; local
+  headless and rendered clients consume the same authenticated document/body
+  boundary meanwhile.
   At projection and ingress the daemon resolves that stable identity against
   the canonical run to obtain the entity's current zone/index key. Movement,
   zone transfer, compaction, and restart therefore cannot transfer a seat when
@@ -368,7 +378,8 @@ Terminus proof profiles remain verification-only inputs.
 Arena still lacks its complete match/score document family and public
 observation/operation replay witness. Its minimal daemon session now preserves
   multiple controller seats, stable entity identity across positional reindex,
-  per-seat Eve pilot surfaces and observation bodies, roster-derived command actors, and the
+  per-seat Eve pilot surfaces and visibility-filtered observation bodies, roster-backed
+  snapshot/subscription admission, roster-derived command actors, and the
   operation/fact split in managed verification, but does
   not yet prove a complete PvP or balance run through a real transport. Starbridge's
 minimal session bootstrap likewise does not by itself prove pilot-veto

@@ -136,7 +136,25 @@ if (!string.IsNullOrWhiteSpace(cultMeshClientHost.BrowserEndpoint))
 Console.WriteLine($"Aetheria client CDN endpoint: {cultMeshClientHost.ContentEndpoint}");
 Console.WriteLine($"Aetheria client realtime endpoint: {cultMeshClientHost.RealtimeEndpoint}");
 Console.WriteLine($"Aetheria daemon transport-ready in {startup.Elapsed.TotalMilliseconds:0.###}ms.");
-using var clientSubscriptions = new CultNetDatabaseSubscriptionServer(cultMeshClientHost.Protocol, node.Database);
+using var clientSubscriptions = new CultNetDatabaseSubscriptionServer(
+    cultMeshClientHost.Protocol,
+    node.Database,
+    authorizeRequest: (request, peer) =>
+    {
+        if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
+            return false;
+        var frame = latestFrame;
+        var roster = ResolveActiveArenaRoster(node);
+        return CanPeerSubscribeArena(node, runtimeId, request, roster, frame?.Run);
+    },
+    authorizeRecord: (_, peer, recordKey, _) =>
+    {
+        if (!cultMeshClientHost.TryGetSourceRuntimeId(peer, out var runtimeId))
+            return false;
+        var frame = latestFrame;
+        var roster = ResolveActiveArenaRoster(node);
+        return CanPeerReadArenaRecord(node, runtimeId, recordKey, roster, frame?.Run);
+    });
 var playableWorldDemand = new AetheriaPlayableWorldDemandState();
 clientSubscriptions.DemandChanged += playableWorldDemand.Observe;
 var managedViewportDemand = new AetheriaManagedViewportDemandState();
@@ -334,7 +352,9 @@ while (!stopped.Task.IsCompleted)
     ThrowIfClientHostFaulted(cultMeshClientHost);
     await PublishHotEntityStateAsync(
         node, soaPublisher, hotState, latestFrame!, ingressState.Catalog, cultMeshClientHost,
-        AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest).ConfigureAwait(false);
+        AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest,
+        allowRealtime: !string.Equals(latestFrame!.GameMode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+        .ConfigureAwait(false);
     await PublishArenaSeatObservationsAsync(
         node, arenaSeatObservations, latestFrame!, ingressState.ArenaRoster,
         ingressState.Catalog, cultMeshClientHost).ConfigureAwait(false);
@@ -385,7 +405,9 @@ while (!stopped.Task.IsCompleted)
         latestFrame = tick.Frame;
         await PublishHotEntityStateAsync(
             node, soaPublisher, hotState, tick.Frame, ingressState.Catalog, cultMeshClientHost,
-            AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest).ConfigureAwait(false);
+            AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest,
+            allowRealtime: !string.Equals(tick.Frame.GameMode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+            .ConfigureAwait(false);
         await PublishArenaSeatObservationsAsync(
             node, arenaSeatObservations, tick.Frame, ingressState.ArenaRoster,
             ingressState.Catalog, cultMeshClientHost).ConfigureAwait(false);
@@ -1164,6 +1186,15 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                     await InjectEveSurfaceSnapshotAsync(
                         node, options, request, response, scopedRecordKey, scopedSurfaceKind).ConfigureAwait(false);
                 }
+                var scopedFrame = latestFrame();
+                var scopedRoster = ResolveActiveArenaRoster(node);
+                var scopedRuntimeId = sessionIdentity.TryGetSourceRuntimeId(peer, out var establishedRuntimeId)
+                    ? establishedRuntimeId
+                    : "";
+                response.Documents = response.Documents
+                    .Where(document => CanPeerReadArenaRecord(
+                        node, scopedRuntimeId, document.RecordKey, scopedRoster, scopedFrame?.Run))
+                    .ToArray();
                 peer.SendCultNet(response);
                 return;
             }
@@ -1550,6 +1581,33 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                 bundleCdnManifests,
                 request,
                 response);
+            var activeRoster = ResolveActiveArenaRoster(node);
+            var sourceRuntimeId = sessionIdentity.TryGetSourceRuntimeId(peer, out var establishedSourceRuntimeId)
+                ? establishedSourceRuntimeId
+                : "";
+            if (frame != null && activeRoster != null && SnapshotWants(
+                    request,
+                    EveProviderAdvertisementDocument.SchemaId,
+                    AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement.ToString()))
+            {
+                var providerPut = node.Database.Documents.CreateRawDocumentPutMessage(
+                    response.MessageId,
+                    new CultRecordHandle<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement),
+                    BuildCoreProviderAdvertisement(options, frame.PublishedAtUtc, activeRoster, frame.Run, sourceRuntimeId),
+                    new CultNetDocumentMessageOptions
+                    {
+                        SourceRuntimeId = options.DaemonId,
+                        SourceRole = "aetheria-daemon"
+                    });
+                response.Documents = response.Documents
+                    .Where(document => !string.Equals(document.RecordKey, providerPut.Document.RecordKey, StringComparison.Ordinal))
+                    .Concat(new[] { providerPut.Document })
+                    .ToArray();
+            }
+            response.Documents = response.Documents
+                .Where(document => CanPeerReadArenaRecord(
+                    node, sourceRuntimeId, document.RecordKey, activeRoster, frame?.Run))
+                .ToArray();
             peer.SendCultNet(response);
         }
         catch (Exception ex)
@@ -2270,9 +2328,10 @@ static async Task PublishHotEntityStateAsync(
     AetheriaRuntimeDaemonFrameDocument frame,
     AetheriaRuntimeCatalogSnapshot? catalog,
     AetheriaClientCultMeshHost clientHost,
-    CultRecordKey viewRecordKey)
+    CultRecordKey viewRecordKey,
+    bool allowRealtime = true)
 {
-    var hasRealtimeConsumers = clientHost.Realtime.ConnectionCount > 0;
+    var hasRealtimeConsumers = allowRealtime && clientHost.Realtime.ConnectionCount > 0;
     using var hotFrame = publisher.BuildCurrentZoneEntities(
         frame,
         catalog,
@@ -2353,7 +2412,8 @@ static async Task PublishArenaSeatObservationsAsync(
             projected,
             catalog,
             clientHost,
-            AetheriaRuntimeVerseRecordKeys.ArenaPilotEntitySoaView(seat.ControllerRuntimeId))
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotEntitySoaView(seat.ControllerRuntimeId),
+            allowRealtime: false)
             .ConfigureAwait(false);
     }
 }
@@ -2491,6 +2551,9 @@ static async Task PublishClientGameplayDocumentsAsync(
             await node.MutableDocument<AetheriaRuntimeZoneRenderDocument>(
                     AetheriaRuntimeVerseRecordKeys.ArenaPilotZoneRender(seat.ControllerRuntimeId))
                 .ReplaceAsync(view.ZoneRender).ConfigureAwait(false);
+            await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(
+                    AetheriaRuntimeVerseRecordKeys.ArenaPilotFrame(seat.ControllerRuntimeId))
+                .ReplaceAsync(view.Frame).ConfigureAwait(false);
             await node.MutableDocument<EveInputCapabilityDocument>(
                     AetheriaRuntimeVerseRecordKeys.ArenaPilotInputCapability(seat.ControllerRuntimeId))
                 .ReplaceAsync(view.InputCapability).ConfigureAwait(false);
@@ -2556,7 +2619,8 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
     AetheriaDaemonHostOptions options,
     string updatedAtUtc,
     AetheriaRuntimeArenaRosterDocument? arenaRoster = null,
-    AetheriaRuntimeRunCheckpointCommit? arenaRun = null)
+    AetheriaRuntimeRunCheckpointCommit? arenaRun = null,
+    string controllerRuntimeId = "")
 {
     var interaction = new EveWorldInteractionAdvertisement(
         "provider-authored-world-surface",
@@ -2578,32 +2642,38 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
         AetheriaRuntimeVerseRecordKeys.EveAssetCatalog.ToString(),
         new[] { "unity-scene", "web-reference", "electron-shell" },
         "provider-owns-topology-discovery-landmarks-influence-and-assets");
-    var surfaces = new List<EveAdvertisedSurface>
+    var surfaces = new List<EveAdvertisedSurface>();
+    if (arenaRoster == null)
     {
-        new EveAdvertisedSurface(
-            AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
-            EveSurfaceDocument.SchemaId,
-            AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString(),
-            "cultmesh-record",
-            "active",
-            "interactive-world",
-            interaction),
-        new EveAdvertisedSurface(
-            AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId,
-            EveSurfaceDocument.SchemaId,
-            AetheriaRuntimeVerseRecordKeys.StarbridgeCommanderSurface.ToString(),
-            "cultmesh-record",
-            "active",
-            "interactive-world",
-            interaction),
-        new EveAdvertisedSurface(
-            AetheriaRuntimeSectorMapSurfaceBuilder.SurfaceId,
-            EveSurfaceDocument.SchemaId,
-            AetheriaRuntimeVerseRecordKeys.MapMenuSurface.ToString(),
-            "cultmesh-record",
-            "active",
-            "graph",
-            mapInteraction),
+        surfaces.AddRange(new[]
+        {
+            new EveAdvertisedSurface(
+                AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+                EveSurfaceDocument.SchemaId,
+                AetheriaRuntimeVerseRecordKeys.DaemonGameSurface.ToString(),
+                "cultmesh-record",
+                "active",
+                "interactive-world",
+                interaction),
+            new EveAdvertisedSurface(
+                AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId,
+                EveSurfaceDocument.SchemaId,
+                AetheriaRuntimeVerseRecordKeys.StarbridgeCommanderSurface.ToString(),
+                "cultmesh-record",
+                "active",
+                "interactive-world",
+                interaction),
+            new EveAdvertisedSurface(
+                AetheriaRuntimeSectorMapSurfaceBuilder.SurfaceId,
+                EveSurfaceDocument.SchemaId,
+                AetheriaRuntimeVerseRecordKeys.MapMenuSurface.ToString(),
+                "cultmesh-record",
+                "active",
+                "graph",
+                mapInteraction)
+        });
+    }
+    surfaces.Add(
         new EveAdvertisedSurface(
             AetheriaRuntimeHangarCommands.SurfaceId,
             EveSurfaceDocument.SchemaId,
@@ -2611,12 +2681,11 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
             "cultmesh-record",
             "active",
             "interactive-world",
-            interaction)
-    };
+            interaction));
     surfaces.AddRange((arenaRoster?.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
         .Where(seat => seat != null &&
             string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
-            !string.IsNullOrWhiteSpace(seat.ControllerRuntimeId) &&
+            string.Equals(seat.ControllerRuntimeId, controllerRuntimeId, StringComparison.Ordinal) &&
             arenaRun?.TryResolveEntityId(seat.ControlledEntityId, out _) == true)
         .Select(seat => new EveAdvertisedSurface(
             AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId),
@@ -2646,6 +2715,54 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
         surfaces.ToArray(),
         Array.Empty<EveAdvertisedCommand>(),
         new[] { AetheriaRuntimeDaemonSoaFramePublisher.ProducerId });
+}
+
+static AetheriaRuntimeArenaRosterDocument? ResolveActiveArenaRoster(AetheriaStateNode node)
+{
+    var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
+    if (session == null || !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+        return null;
+    var roster = node.Cache.Get<AetheriaRuntimeArenaRosterDocument>(
+        new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(session.SessionId)));
+    return roster?.IsActiveFor(session.SessionId, session.RunId) == true ? roster : null;
+}
+
+static bool CanPeerReadArenaRecord(
+    AetheriaStateNode node,
+    string establishedRuntimeId,
+    string recordKey,
+    AetheriaRuntimeArenaRosterDocument? roster,
+    AetheriaRuntimeRunCheckpointCommit? run)
+{
+    if (roster == null)
+        return true;
+    if (recordKey.StartsWith(AetheriaRuntimeVerseRecordKeys.EveReceiptRecordPrefix + ":", StringComparison.Ordinal))
+    {
+        var commandId = recordKey.Substring(AetheriaRuntimeVerseRecordKeys.EveReceiptRecordPrefix.Length + 1);
+        var envelope = node.Cache.Get<AetheriaHangarCommandEnvelopeDocument>(
+            AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(commandId));
+        return envelope != null && string.Equals(
+            envelope.ClientId, establishedRuntimeId, StringComparison.Ordinal);
+    }
+    return AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+        establishedRuntimeId, recordKey, roster, run);
+}
+
+static bool CanPeerSubscribeArena(
+    AetheriaStateNode node,
+    string establishedRuntimeId,
+    CultNetDatabaseSubscribeMessage request,
+    AetheriaRuntimeArenaRosterDocument? roster,
+    AetheriaRuntimeRunCheckpointCommit? run)
+{
+    if (string.IsNullOrWhiteSpace(establishedRuntimeId) ||
+        !string.Equals(request.ConsumerRuntimeId, establishedRuntimeId, StringComparison.Ordinal))
+        return false;
+    return (request.RecordKeys ?? Array.Empty<string>())
+            .All(recordKey => CanPeerReadArenaRecord(node, establishedRuntimeId, recordKey, roster, run)) &&
+        (request.BodyIds ?? Array.Empty<string>())
+            .All(bodyId => AetheriaRuntimeArenaObservationAdmission.CanReadBody(
+                establishedRuntimeId, bodyId, roster, run));
 }
 
 static async Task PublishDaemonMenuSurfacesAsync(
@@ -3758,6 +3875,9 @@ static async Task<string> PublishArenaSeatSurfaceAsync(
     await node.MutableDocument<AetheriaRuntimeZoneRenderDocument>(
             AetheriaRuntimeVerseRecordKeys.ArenaPilotZoneRender(seat.ControllerRuntimeId))
         .ReplaceAsync(view.ZoneRender).ConfigureAwait(false);
+    await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(
+            AetheriaRuntimeVerseRecordKeys.ArenaPilotFrame(seat.ControllerRuntimeId))
+        .ReplaceAsync(view.Frame).ConfigureAwait(false);
     await node.MutableDocument<EveInputCapabilityDocument>(
             AetheriaRuntimeVerseRecordKeys.ArenaPilotInputCapability(seat.ControllerRuntimeId))
         .ReplaceAsync(view.InputCapability)
@@ -5582,6 +5702,9 @@ internal sealed class AetheriaClientCultMeshHost : IAsyncDisposable
     public string RealtimeEndpoint { get; }
 
     public int ControlPeerCount => Control.PeerCount + (Browser?.PeerCount ?? 0);
+
+    public bool TryGetSourceRuntimeId(ICultNetSchemaServerPeer peer, out string runtimeId) =>
+        SessionIdentity.TryGetSourceRuntimeId(peer, out runtimeId);
 
     public async ValueTask DisposeAsync()
     {

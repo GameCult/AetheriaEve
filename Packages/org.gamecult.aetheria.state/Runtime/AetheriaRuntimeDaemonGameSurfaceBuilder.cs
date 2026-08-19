@@ -933,7 +933,7 @@ namespace GameCult.Aetheria.State.Verse
             var props = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["label"] = string.IsNullOrWhiteSpace(zone.Name) ? "Aetheria World" : zone.Name,
-                ["statePointerId"] = AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
+                ["statePointerId"] = observationRefs.StatePointerId,
                 ["entityViewPointerId"] = observationRefs.EntityViewPointerId,
                 ["entityViewSchema"] = EveEntitySoaViewDocument.SchemaId,
                 ["entityBodyId"] = observationRefs.EntityBodyId,

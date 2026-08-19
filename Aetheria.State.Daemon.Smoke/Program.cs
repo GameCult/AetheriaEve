@@ -607,6 +607,9 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 var seatFrame = AetheriaRuntimeDaemonFrameDocument.Create(
                     seatRun, "daemon-smoke", arenaSession.SessionId, 1, 0, 0.02);
                 var seatSurfaceId = AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId("ai-build-b");
+                Require(AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId("ai/build") !=
+                        AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId("ai-build"),
+                    "Arena controller routing identities must not collide after readable token normalization");
                 var seatView = AetheriaRuntimeArenaSeatViewProjector.Project(
                     seatFrame,
                     joinedSeat,
@@ -619,12 +622,42 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     .Where(component => component.Kind == "entity.presentation" &&
                         component.Props.TryGetValue("controllable", out var value) && value == "true")
                     .ToArray();
+                var presentedEntityIds = Flatten(seatSurface.Surface.Root)
+                    .Where(component => component.Kind == "entity.presentation")
+                    .Select(component => component.Props.TryGetValue("entityId", out var value) ? value : "")
+                    .ToArray();
                 Require(seatSurface.Surface.Id == seatSurfaceId &&
                         seatWorld.Props["playerEntityId"] == initialJoinedEntityKey &&
                         seatWorld.Props["cameraTargetEntityId"] == initialJoinedEntityKey &&
+                        seatWorld.Props["statePointerId"] == seatView.ObservationRefs.StatePointerId &&
                         controllableEntities.Length == 1 &&
-                        controllableEntities[0].Props["entityId"] == initialJoinedEntityKey,
-                    "each Arena seat surface must project its roster actor as the only pilot/camera/controllable entity");
+                        controllableEntities[0].Props["entityId"] == initialJoinedEntityKey &&
+                        presentedEntityIds.Contains(initialJoinedEntityKey, StringComparer.Ordinal) &&
+                        presentedEntityIds.Contains(seatRun.EntityRecordKey(0, 2), StringComparer.Ordinal) &&
+                        !presentedEntityIds.Contains(initialPrimaryEntityKey, StringComparer.Ordinal) &&
+                        seatView.Frame.Run.Zones.Count == 1 &&
+                        seatView.Frame.Run.Zones[0].Entities.All(entity => entity.EntityIndex != 0),
+                    "each Arena seat surface/frame must expose only its roster actor and visible observation");
+
+                var observationRoster = MessagePack.MessagePackSerializer.Deserialize<AetheriaRuntimeArenaRosterDocument>(
+                    MessagePack.MessagePackSerializer.Serialize(arenaRoster));
+                observationRoster.RunId = seatRun.RunId;
+                var joinedFrameKey = AetheriaRuntimeVerseRecordKeys.ArenaPilotFrame("ai-build-b").ToString();
+                var primaryFrameKey = AetheriaRuntimeVerseRecordKeys.ArenaPilotFrame("pilot-runtime").ToString();
+                var joinedBodyId = AetheriaRuntimeVerseRecordKeys.ArenaPilotBodyId("ai-build-b");
+                Require(AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", joinedFrameKey, observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "pilot-runtime", joinedFrameKey, observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", primaryFrameKey, observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
+                            "ai-build-b", AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(), observationRoster, seatRun) &&
+                        AetheriaRuntimeArenaObservationAdmission.CanReadBody(
+                            "ai-build-b", joinedBodyId, observationRoster, seatRun) &&
+                        !AetheriaRuntimeArenaObservationAdmission.CanReadBody(
+                            "pilot-runtime", joinedBodyId, observationRoster, seatRun),
+                    "Arena observation admission must bind exact seat records and bodies to established runtime identity");
 
                 var ordinarySeatRequest = new EveSurfaceCommandRequest(
                     AetheriaRuntimeProviderIdentity.ProviderId,

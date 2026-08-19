@@ -158,9 +158,14 @@ gameplay-state writer.
   failing closed on zero or multiple matches. The daemon therefore derives the
   actor from authenticated runtime plus roster at command ingress, ignoring
   caller-supplied actor overrides even after zone transfer or restart. The same
-  seat projector owns a scoped hot body/view, zone-render record, and input
-  capability, so headless and graphical controllers observe the ship they can
-  command rather than the primary run ship. Resulting facts
+  seat projector owns a visibility-filtered frame, scoped hot body/view,
+  zone-render record, and input capability. The CultMesh read gate resolves the
+  authenticated peer against the roster for snapshot, subscription, and body
+  demand; exact keys for another seat and the global frame fail closed. The
+  provider advertises only the requesting controller's seat, and Arena does not
+  use global realtime broadcast until that transport has per-peer identity.
+  Headless and graphical controllers therefore observe the same bounded world
+  around the ship they can command. Resulting facts
   remain daemon-authored with separate proposer provenance;
 - flush/reopen preserves the Hangar revision, ship deployment state, and
   receipts;

@@ -99,9 +99,13 @@ Date: 2026-06-13
 > or payload. The roster owns stable entity identity; the current zone/index key
 > is derived from canonical run state for both projection and admission, so
 > movement and restart cannot transfer authority through positional reuse. Each
-> seat projection owns its Eve surface, hot entity body/view, zone-render
-> record, and input capability; global primary-pilot observations cannot feed a
-> different seat. The
+> seat projection owns its visibility-filtered frame, Eve surface, hot entity
+> body/view, zone-render record, and input capability. CultMesh snapshot,
+> subscription, and body-demand admission resolves the established peer runtime
+> through the current roster; another seat's known key and the full global frame
+> fail closed. Global advertisements omit Arena seat enumeration and a
+> peer-specific snapshot exposes only the caller's seat. Arena realtime
+> broadcast remains disabled until QUIC has per-peer identity and filtering. The
 > daemon remains the sole committed-fact author. Starbridge's
 > mode-policy identity remains empty until Pilot correction is installed and
 > proven; mode labels alone are not authority evidence.
