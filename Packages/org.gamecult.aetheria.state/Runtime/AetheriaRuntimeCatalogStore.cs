@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using GameCult.Caching.MessagePack;
 using MessagePack;
 
 #nullable enable
@@ -27,13 +28,14 @@ namespace GameCult.Aetheria.State.Verse
             if (string.IsNullOrWhiteSpace(stateFilePath))
                 throw new ArgumentException("State file path must be non-empty.", nameof(stateFilePath));
 
-            var catalog = ReadSchemaCatalog(stateFilePath);
+            var generation = ReadGeneration(stateFilePath);
+            var catalog = generation.SchemaCatalog;
             var items = new List<AetheriaRuntimeCatalogItem>();
             var corporations = new List<AetheriaRuntimeCorporation>();
             var nameFiles = new List<AetheriaRuntimeNameFile>();
             var tradeValueSettings = AetheriaRuntimeTradeValueSettings.Default;
 
-            foreach (var record in ReadRecords(stateFilePath))
+            foreach (var record in generation.Records)
             {
                 if (!catalog.TryGetValue(record.SchemaId, out var schemaName))
                     continue;
@@ -146,9 +148,10 @@ namespace GameCult.Aetheria.State.Verse
             if (string.IsNullOrWhiteSpace(stateFilePath))
                 throw new ArgumentException("State file path must be non-empty.", nameof(stateFilePath));
 
-            var catalog = ReadSchemaCatalog(stateFilePath);
+            var generation = ReadGeneration(stateFilePath);
+            var catalog = generation.SchemaCatalog;
             AetheriaRuntimePlayerSettingsSnapshot? settings = null;
-            foreach (var record in ReadRecords(stateFilePath))
+            foreach (var record in generation.Records)
             {
                 if (record.Key != PlayerSettingsKey ||
                     !catalog.TryGetValue(record.SchemaId, out var schemaName) ||
@@ -166,9 +169,10 @@ namespace GameCult.Aetheria.State.Verse
             if (string.IsNullOrWhiteSpace(stateFilePath))
                 throw new ArgumentException("State file path must be non-empty.", nameof(stateFilePath));
 
-            var catalog = ReadSchemaCatalog(stateFilePath);
+            var generation = ReadGeneration(stateFilePath);
+            var catalog = generation.SchemaCatalog;
             var settings = AetheriaRuntimeTradeValueSettings.Default;
-            foreach (var record in ReadRecords(stateFilePath))
+            foreach (var record in generation.Records)
             {
                 if (record.Key != TradeValuePolicyKey ||
                     !catalog.TryGetValue(record.SchemaId, out var schemaName) ||
@@ -186,9 +190,10 @@ namespace GameCult.Aetheria.State.Verse
             if (string.IsNullOrWhiteSpace(stateFilePath))
                 throw new ArgumentException("State file path must be non-empty.", nameof(stateFilePath));
 
-            var catalog = ReadSchemaCatalog(stateFilePath);
+            var generation = ReadGeneration(stateFilePath);
+            var catalog = generation.SchemaCatalog;
             AetheriaRuntimeVerseHostSettingsSnapshot? settings = null;
-            foreach (var record in ReadRecords(stateFilePath))
+            foreach (var record in generation.Records)
             {
                 if (record.Key != VerseHostSettingsKey ||
                     !catalog.TryGetValue(record.SchemaId, out var schemaName) ||
@@ -206,9 +211,10 @@ namespace GameCult.Aetheria.State.Verse
             if (string.IsNullOrWhiteSpace(stateFilePath))
                 throw new ArgumentException("State file path must be non-empty.", nameof(stateFilePath));
 
-            var catalog = ReadSchemaCatalog(stateFilePath);
+            var generation = ReadGeneration(stateFilePath);
+            var catalog = generation.SchemaCatalog;
             var loadouts = new List<AetheriaRuntimeLoadoutTemplateSnapshot>();
-            foreach (var record in ReadRecords(stateFilePath))
+            foreach (var record in generation.Records)
             {
                 if (!catalog.TryGetValue(record.SchemaId, out var schemaName) ||
                     schemaName != LoadoutTemplateSchema)
@@ -222,64 +228,20 @@ namespace GameCult.Aetheria.State.Verse
                 .ToArray();
         }
 
-        private static Dictionary<string, string> ReadSchemaCatalog(string stateFilePath)
+        private static PersistedGeneration ReadGeneration(string stateFilePath)
         {
             if (!File.Exists(stateFilePath))
                 throw new FileNotFoundException("Aetheria typed state file was not found.", stateFilePath);
 
-            var reader = new MessagePackReader(File.ReadAllBytes(stateFilePath));
-            var snapshotFields = reader.ReadArrayHeader();
-            if (snapshotFields < 2)
-                throw new InvalidDataException("CultCache snapshot is missing its embedded schema catalog.");
-
-            reader.Skip();
-            var schemaCount = reader.ReadArrayHeader();
-            var catalog = new Dictionary<string, string>(StringComparer.Ordinal);
-            for (var index = 0; index < schemaCount; index++)
-            {
-                var fieldCount = reader.ReadArrayHeader();
-                var schemaId = fieldCount > 0 ? ReadString(ref reader) : "";
-                var schemaName = fieldCount > 1 ? ReadString(ref reader) : "";
-                for (var field = 2; field < fieldCount; field++)
-                    reader.Skip();
-
-                if (!string.IsNullOrWhiteSpace(schemaId) && !string.IsNullOrWhiteSpace(schemaName))
-                    catalog[schemaId] = schemaName;
-            }
-
-            return catalog;
-        }
-
-        private static IReadOnlyList<PersistedRecord> ReadRecords(string stateFilePath)
-        {
-            var records = new List<PersistedRecord>();
-            var reader = new MessagePackReader(File.ReadAllBytes(stateFilePath));
-            var snapshotFields = reader.ReadArrayHeader();
-            var formatVersion = snapshotFields > 0 ? ReadString(ref reader) : "";
-            if (snapshotFields > 1) reader.Skip();
-            if (snapshotFields > 2)
-            {
-                var recordCount = reader.ReadArrayHeader();
-                for (var index = 0; index < recordCount; index++)
-                {
-                    if (string.Equals(formatVersion, "cultcache.store.v2.directory-indexed", StringComparison.Ordinal))
-                        reader.Skip();
-                    else
-                        records.Add(ReadPersistedRecord(ref reader));
-                }
-            }
-
-            var recordDirectory = stateFilePath + ".records";
-            if (!Directory.Exists(recordDirectory))
-                return records;
-
-            foreach (var recordFile in Directory.EnumerateFiles(recordDirectory, "*.msgpack").OrderBy(path => path, StringComparer.Ordinal))
-            {
-                var recordReader = new MessagePackReader(File.ReadAllBytes(recordFile));
-                records.Add(ReadPersistedRecord(ref recordReader));
-            }
-
-            return records;
+            var snapshot = new DirectoryMessagePackBackingStore(stateFilePath).ReadPersistedGeneration();
+            var catalog = snapshot.SchemaCatalog
+                .Where(entry => !string.IsNullOrWhiteSpace(entry.SchemaId) && !string.IsNullOrWhiteSpace(entry.SchemaName))
+                .GroupBy(entry => entry.SchemaId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last().SchemaName, StringComparer.Ordinal);
+            var records = snapshot.Records
+                .Select(record => new PersistedRecord(record.Key, record.SchemaId, record.Payload))
+                .ToArray();
+            return new PersistedGeneration(catalog, records);
         }
 
         private static PersistedRecord ReadPersistedRecord(ref MessagePackReader reader)
@@ -2028,6 +1990,21 @@ namespace GameCult.Aetheria.State.Verse
             public string SchemaId { get; }
 
             public byte[] Payload { get; }
+        }
+
+        private readonly struct PersistedGeneration
+        {
+            public PersistedGeneration(
+                Dictionary<string, string> schemaCatalog,
+                IReadOnlyList<PersistedRecord> records)
+            {
+                SchemaCatalog = schemaCatalog;
+                Records = records;
+            }
+
+            public Dictionary<string, string> SchemaCatalog { get; }
+
+            public IReadOnlyList<PersistedRecord> Records { get; }
         }
 
         private readonly struct PlayerGameplaySettings

@@ -6346,6 +6346,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             Require(bay != null && bay.Category == AetheriaRuntimeItemCategories.DockingBay &&
                     bay.HardpointType == "DockingBay" && bay.DockingMaxSizeX == 12 && bay.DockingMaxSizeY == 12,
                 "dockyard berths must remain typed docking-bay equipment with the source bay's ship-size contract");
+            var persistedCatalog = AetheriaRuntimeCatalogStore.OpenReadOnly(statePath);
+            Require(persistedCatalog.FindItem(AetheriaDaemonNativeCatalog.DockyardHullItemKey) != null &&
+                    persistedCatalog.FindItem(AetheriaDaemonNativeCatalog.DockyardBayItemKey) != null,
+                "compatibility catalog reads must resolve the selected CultCache v4 generation rather than scanning record pages");
 
             var dockyardEntity = Entity(0, 0, "neutral");
             dockyardEntity.Kind = "station";

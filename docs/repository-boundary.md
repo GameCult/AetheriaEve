@@ -13,7 +13,9 @@ dependency of AetheriaEve.
 ## Inputs
 
 - legacy MessagePack catalog files retained under `GameData` as explicit import
-  inputs;
+  inputs. Compatibility readers consume one manifest-selected CultCache
+  generation through the canonical backing-store reader; they never enumerate
+  record pages as an alternate catalog authority;
 - typed CultCache state and configured Verse identity;
 - provider presentation assets authored in `Aetheria.Assets.Unity`;
 - sibling development checkouts of CultLib, Eve, EveUnity, EvePlugins,

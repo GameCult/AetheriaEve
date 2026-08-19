@@ -122,7 +122,9 @@ record pages through one atomic manifest generation swap; readers lease that
 generation through complete page hydration and release it before notifying
 observers. A transaction overlay is visible only to its executing async flow;
 the live cache and all watchers advance after durable finality and after the
-transaction context has closed. Aetheria exposes no mutable cache handle and
+transaction context has closed. The overlay seals before commit, so escaped
+child work carrying an old async context fails instead of staging into a dead
+transaction. Aetheria exposes no mutable cache handle and
 rejects authoritative database writes outside that boundary. Applied/rejected
 command facts, their receipts and inbox deletions commit with the durable frame
 that contains their gameplay effect. Runtime catalog projection compiles the
