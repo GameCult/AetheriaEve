@@ -11,6 +11,7 @@ using GameCult.Networking.WebSockets;
 using MessagePack;
 using System.Globalization;
 using System.Diagnostics;
+using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
 using System.Collections.Concurrent;
@@ -137,6 +138,12 @@ using var soaPublisher = new AetheriaRuntimeDaemonSoaFramePublisher(
 var stopped = new TaskCompletionSource<object?>();
 var progressionForwardingTasks = new ConcurrentDictionary<string, Task>();
 using var progressionForwardingShutdown = new CancellationTokenSource();
+Action requestShutdown = () =>
+{
+    if (!progressionForwardingShutdown.IsCancellationRequested)
+        progressionForwardingShutdown.Cancel();
+    stopped.TrySetResult(null);
+};
 await using var hangarProjection = new AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection>(
     async cancellationToken =>
     {
@@ -158,8 +165,7 @@ var hangarActivationRequested = false;
 Console.CancelKeyPress += (_, eventArgs) =>
 {
     eventArgs.Cancel = true;
-    progressionForwardingShutdown.Cancel();
-    stopped.TrySetResult(null);
+    requestShutdown();
 };
 _ = Task.Run(async () =>
 {
@@ -170,8 +176,7 @@ _ = Task.Run(async () =>
             var line = await Console.In.ReadLineAsync().ConfigureAwait(false);
             if (line == null) return;
             if (!string.Equals(line.Trim(), "shutdown", StringComparison.OrdinalIgnoreCase)) continue;
-            progressionForwardingShutdown.Cancel();
-            stopped.TrySetResult(null);
+            requestShutdown();
             return;
         }
     }
@@ -180,6 +185,33 @@ _ = Task.Run(async () =>
         Console.Error.WriteLine($"Aetheria daemon shutdown input failed: {error.Message}");
     }
 });
+if (!string.IsNullOrWhiteSpace(options.LifecyclePipeName))
+{
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await using var pipe = new NamedPipeServerStream(
+                options.LifecyclePipeName,
+                PipeDirection.In,
+                1,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            await pipe.WaitForConnectionAsync(progressionForwardingShutdown.Token).ConfigureAwait(false);
+            using var reader = new StreamReader(pipe);
+            var line = await reader.ReadLineAsync(progressionForwardingShutdown.Token).ConfigureAwait(false);
+            if (!string.Equals(line?.Trim(), "shutdown", StringComparison.OrdinalIgnoreCase)) return;
+            requestShutdown();
+        }
+        catch (OperationCanceledException) when (progressionForwardingShutdown.IsCancellationRequested)
+        {
+        }
+        catch (Exception error) when (!stopped.Task.IsCompleted)
+        {
+            Console.Error.WriteLine($"Aetheria daemon lifecycle pipe failed: {error.Message}");
+        }
+    });
+}
 
 while (!stopped.Task.IsCompleted)
 {
@@ -4831,6 +4863,7 @@ internal sealed class AetheriaDaemonHostOptions
     public const string OdinDiscoveryEndpointsEnvironmentVariable = "AETHERIA_ODIN_DISCOVERY_ENDPOINTS";
     public string StatePath { get; init; } = "";
     public string DaemonId { get; init; } = "aetheria-daemon";
+    public string LifecyclePipeName { get; init; } = "";
     public string SessionId { get; init; } = "local";
     public string VerseId { get; init; } = "aetheria.local";
     public string CultMeshAddress { get; init; } = "cultmesh://aetheria.local/eve/providers/aetheria.daemon";
@@ -4874,6 +4907,9 @@ internal sealed class AetheriaDaemonHostOptions
         var intervalMs = ReadPositiveInt(args, "--tick-interval-ms") ?? 20;
         var fixedDeltaMs = ReadPositiveInt(args, "--fixed-delta-ms") ?? 20;
         var daemonId = ReadOption(args, "--daemon-id");
+        var lifecyclePipeName = ReadOption(args, "--lifecycle-pipe").Trim();
+        if (lifecyclePipeName.IndexOfAny(new[] { '\\', '/' }) >= 0)
+            throw new InvalidOperationException("--lifecycle-pipe must be a local pipe name, not a path.");
         var verseId = ReadOption(args, "--verse-id");
         var cultMeshAddress = ReadOption(args, "--cultmesh-address");
         var clientCultMeshHost = ReadOption(args, "--client-cultmesh-host");
@@ -4940,6 +4976,7 @@ internal sealed class AetheriaDaemonHostOptions
         {
             StatePath = resolvedStatePath,
             DaemonId = string.IsNullOrWhiteSpace(daemonId) ? "aetheria-daemon" : daemonId,
+            LifecyclePipeName = lifecyclePipeName,
             SessionId = string.IsNullOrWhiteSpace(sessionId) ? "local" : sessionId,
             VerseId = string.IsNullOrWhiteSpace(verseId) ? "aetheria.local" : verseId,
             CultMeshAddress = string.IsNullOrWhiteSpace(cultMeshAddress)

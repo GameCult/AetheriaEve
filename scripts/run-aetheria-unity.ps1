@@ -60,7 +60,45 @@ if (-not $SkipBuild) {
 }
 
 if (-not (Test-Path $clientExe)) { throw "Client executable not found. Run without -SkipBuild first." }
+
+function Stop-AetheriaDaemon([System.Diagnostics.Process] $Daemon, [string] $PipeName) {
+  if ($null -eq $Daemon -or $Daemon.HasExited) { return }
+
+  $pipe = $null
+  $writer = $null
+  $requested = $false
+  try {
+    $pipe = [System.IO.Pipes.NamedPipeClientStream]::new(".", $PipeName, [System.IO.Pipes.PipeDirection]::Out)
+    $pipe.Connect(2000)
+    $writer = [System.IO.StreamWriter]::new($pipe)
+    $writer.AutoFlush = $true
+    $writer.WriteLine("shutdown")
+    $requested = $true
+  }
+  catch {
+    Write-Warning "Could not request graceful Aetheria daemon shutdown: $($_.Exception.Message)"
+  }
+  finally {
+    if ($null -ne $writer) { $writer.Dispose() }
+    elseif ($null -ne $pipe) { $pipe.Dispose() }
+  }
+
+  $waitMs = if ($requested) { 5000 } else { 250 }
+  if ($Daemon.WaitForExit($waitMs)) {
+    $Daemon.WaitForExit()
+    return
+  }
+
+  Write-Warning "Aetheria daemon did not checkpoint and exit within $waitMs ms; escalating termination."
+  Stop-Process -Id $Daemon.Id -Force
+  if (-not $Daemon.WaitForExit(5000)) {
+    throw "Aetheria daemon PID $($Daemon.Id) survived graceful shutdown and forced termination."
+  }
+  $Daemon.WaitForExit()
+}
+
 $daemonLog = Join-Path $artifacts "daemon.log"
+$lifecyclePipe = "aetheria-unity-daemon-$([guid]::NewGuid().ToString('N'))"
 $daemonArguments = @(
   "run", "--project", $daemonProject, "--",
   "--root", $root,
@@ -68,6 +106,7 @@ $daemonArguments = @(
   "--client-cultmesh-host", "127.0.0.1",
   "--client-cultmesh-advertise-host", "127.0.0.1",
   "--client-cultmesh-port", $Port,
+  "--lifecycle-pipe", $lifecyclePipe,
   "--asset-bundle-root", $assetBundleRoot,
   "--tick-interval-ms", 20,
   "--fixed-delta-ms", 20,
@@ -108,5 +147,5 @@ try {
   $client.WaitForExit()
 }
 finally {
-  if (-not $daemon.HasExited) { Stop-Process $daemon.Id -Force }
+  Stop-AetheriaDaemon $daemon $lifecyclePipe
 }

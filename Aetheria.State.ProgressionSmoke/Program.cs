@@ -6,6 +6,7 @@ using GameCult.Mesh;
 using GameCult.Networking;
 using System.Diagnostics;
 using System.Collections.Concurrent;
+using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
 
@@ -40,11 +41,13 @@ var localPort = FreeTcpPort();
 var remotePort = FreeTcpPort();
 var localEndpoint = $"cultnet+tcp://127.0.0.1:{localPort}";
 var remoteEndpoint = $"cultnet+tcp://127.0.0.1:{remotePort}";
+var remoteLifecyclePipe = "aetheria-progression-smoke-" + Guid.NewGuid().ToString("N");
 Process? local = null;
 Process? remote = null;
 try
 {
     remote = StartDaemon(root, remoteState, "progression-remote", remoteVerse, remotePort,
+        "--lifecycle-pipe", remoteLifecyclePipe,
         "--api-publication-interval-ms", "100000");
     await WaitForEndpointAsync(remote, remotePort, TimeSpan.FromSeconds(30));
     await WaitForVerseAdvertisementAsync(
@@ -476,13 +479,19 @@ try
             remoteTarget,
             AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString())).FrameId;
         await Task.Delay(500);
-        if (!Stop(remote))
+        if (!Stop(remote, lifecyclePipeName: remoteLifecyclePipe))
             throw new InvalidOperationException("The remote daemon could not complete the graceful checkpoint witness.");
         remote = null;
     }
     remote = StartDaemon(root, remoteState, "progression-remote", remoteVerse, remotePort,
+        "--lifecycle-pipe", remoteLifecyclePipe,
         "--api-publication-interval-ms", "100000");
     await WaitForEndpointAsync(remote, remotePort, TimeSpan.FromSeconds(30));
+    await WaitForVerseAdvertisementAsync(
+        remoteEndpoint,
+        remoteVerse,
+        "progression-remote",
+        TimeSpan.FromSeconds(45));
     using (var checkpointClient = Client(remoteEndpoint))
     {
         var restoredFrame = await checkpointClient.ReadAsync<AetheriaRuntimeDaemonFrameDocument>(
@@ -502,7 +511,7 @@ catch
 finally
 {
     var localStopped = Stop(local);
-    var remoteStopped = Stop(remote);
+    var remoteStopped = Stop(remote, lifecyclePipeName: remoteLifecyclePipe);
     if (localStopped && remoteStopped &&
         !string.Equals(Environment.GetEnvironmentVariable("AETHERIA_SMOKE_KEEP_STATE"), "1", StringComparison.Ordinal))
     {
@@ -857,12 +866,19 @@ static int FreeTcpPort()
     return port;
 }
 
-static bool Stop(Process? process, bool forceEscalationForTest = false)
+static bool Stop(Process? process, bool forceEscalationForTest = false, string lifecyclePipeName = "")
 {
     if (process == null) return true;
     try
     {
-        if (!process.HasExited && !forceEscalationForTest && process.StartInfo.RedirectStandardInput)
+        if (!process.HasExited && !forceEscalationForTest && !string.IsNullOrWhiteSpace(lifecyclePipeName))
+        {
+            using var pipe = new NamedPipeClientStream(".", lifecyclePipeName, PipeDirection.Out);
+            pipe.Connect(2000);
+            using var writer = new StreamWriter(pipe) { AutoFlush = true };
+            writer.WriteLine("shutdown");
+        }
+        else if (!process.HasExited && !forceEscalationForTest && process.StartInfo.RedirectStandardInput)
         {
             process.StandardInput.WriteLine("shutdown");
             process.StandardInput.Flush();

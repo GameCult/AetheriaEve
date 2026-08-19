@@ -197,5 +197,16 @@ if ($launcherSource -notmatch 'EVEUNITY_SURFACE_ID\s*=\s*"aetheria\.hangar"') {
 if ($launcherSource -match '--terminus-scenario') {
     throw "Released launcher must not create product state through a Terminus proof-scenario flag."
 }
+foreach ($lifecycleBoundary in @('--lifecycle-pipe', 'NamedPipeClientStream', 'WriteLine("shutdown")', 'WaitForExit($waitMs)')) {
+    if ($launcherSource -notmatch [regex]::Escape($lifecycleBoundary)) {
+        throw "Released launcher is missing daemon lifecycle boundary '$lifecycleBoundary'."
+    }
+}
+$editorDaemonSource = Get-Content (Join-Path $ProjectPath "Assets/Editor/AetheriaDaemonDevelopmentWindow.cs") -Raw
+foreach ($lifecycleBoundary in @('--lifecycle-pipe', 'NamedPipeClientStream', 'RequestDaemonShutdown', 'LifecyclePipeSessionKey', 'WriteAllLines')) {
+    if ($editorDaemonSource -notmatch [regex]::Escape($lifecycleBoundary)) {
+        throw "Unity editor daemon owner is missing reattach-safe lifecycle boundary '$lifecycleBoundary'."
+    }
+}
 
 Write-Host "Aetheria Unity client dependency and bootstrap verification passed."
