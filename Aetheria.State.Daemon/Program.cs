@@ -81,6 +81,16 @@ await node.CommitAsync(async () =>
 }).ConfigureAwait(false);
 TraceStartup("initial-flush");
 TraceStartup("runtime-catalog");
+var startupAssetManifest = AetheriaRuntimeAssets.ProjectManifest(
+    node.RuntimeCatalog().Latest(),
+    "presentation:" + options.DaemonId,
+    "cultmesh://aetheria/assets");
+startupAssetManifest.PublishedAtUtc = startedAtUtc;
+await node.CommitAsync(() => PublishClientAssetTopologyAsync(
+    node,
+    unityBundles,
+    startupAssetManifest)).ConfigureAwait(false);
+TraceStartup("client-asset-topology");
 await AetheriaDaemonHangarCoordinator.EnsureAsync(node, node.RuntimeCatalog().Latest(), startedAtUtc).ConfigureAwait(false);
 TraceStartup("hangar");
 using (var progressionVerses = CreateProgressionVerseCoordinator(node, options))
@@ -2333,14 +2343,7 @@ static async Task PublishClientGameplayDocumentsAsync(
             .ConfigureAwait(false);
     TraceClientDocumentPhase("provider-advertisements");
     if (publishTopology && result.AssetManifest != null)
-    {
-        await node.MutableDocument<AetheriaRuntimeAssetManifestDocument>(AetheriaRuntimeVerseRecordKeys.DaemonAssetManifest)
-            .ReplaceAsync(result.AssetManifest)
-            .ConfigureAwait(false);
-        await node.MutableDocument<EveAssetCatalogDocument>(AetheriaRuntimeVerseRecordKeys.EveAssetCatalog)
-            .ReplaceAsync(BuildCoreAssetCatalog(unityBundles, result.AssetManifest))
-            .ConfigureAwait(false);
-    }
+        await PublishClientAssetTopologyAsync(node, unityBundles, result.AssetManifest).ConfigureAwait(false);
     TraceClientDocumentPhase("asset-catalog");
     var gameSession = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
         .ReadAsync().ConfigureAwait(false);
@@ -3532,6 +3535,20 @@ static EveAssetCatalogDocument BuildCoreAssetCatalog(
         AssetCatalogVersion(source.PublishedAtUtc),
         source.PublishedAtUtc,
         assets);
+}
+
+static async Task PublishClientAssetTopologyAsync(
+    AetheriaStateNode node,
+    AetheriaUnityBundleArtifactSet unityBundles,
+    AetheriaRuntimeAssetManifestDocument source)
+{
+    if (source == null) throw new ArgumentNullException(nameof(source));
+    await node.MutableDocument<AetheriaRuntimeAssetManifestDocument>(AetheriaRuntimeVerseRecordKeys.DaemonAssetManifest)
+        .ReplaceAsync(source)
+        .ConfigureAwait(false);
+    await node.MutableDocument<EveAssetCatalogDocument>(AetheriaRuntimeVerseRecordKeys.EveAssetCatalog)
+        .ReplaceAsync(BuildCoreAssetCatalog(unityBundles, source))
+        .ConfigureAwait(false);
 }
 
 static long AssetCatalogVersion(string publishedAtUtc)

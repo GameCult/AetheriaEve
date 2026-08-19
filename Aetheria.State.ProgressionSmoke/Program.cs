@@ -112,6 +112,29 @@ try
                 Find(surface.Surface.Root, "aetheria.hangar.verse").Children
                     .Any(option => option.Props["value"] == remoteVerse),
             TimeSpan.FromSeconds(10));
+        var coldWorld = Find(initialSurface.Surface.Root, "aetheria.hangar.world");
+        var coldPreview = coldWorld.Children.Single(component => component.Kind == "world.entity3d");
+        var coldAssetCatalog = await client.ReadAsync<EveAssetCatalogDocument>(
+            localTarget,
+            coldWorld.Props["assetManifest"]);
+        var coldPreviewAsset = coldAssetCatalog.Assets.Single(asset =>
+            asset.AssetRef == coldPreview.Props["assetRef"]);
+        var coldPreviewVariant = coldPreviewAsset.Variants.Single(variant =>
+            variant.RuntimeId == "unity-scene" &&
+            variant.Platform == "StandaloneWindows64");
+        var coldPreviewManifest = await client.ReadAsync<CultMeshCdnArtifactManifest>(
+            localTarget,
+            coldPreviewVariant.Uri);
+        Require(coldPreviewManifest.ContentHash == coldPreviewVariant.ContentHash.Replace("sha256:", "", StringComparison.OrdinalIgnoreCase) &&
+                coldPreviewManifest.Chunks.Length > 0,
+            "Cold-boot Hangar assets must resolve through the advertised Unity bundle manifest before gameplay activation.");
+        using (var coldPreviewChunk = new MemoryStream())
+        {
+            await client.ContentProvider("progression-smoke-assets", localTarget)
+                .CopyChunkToAsync(coldPreviewManifest.Chunks[0], coldPreviewChunk);
+            Require(coldPreviewChunk.Length > 0,
+                "The cold-boot Hangar preview bundle must be downloadable from the already-running content host.");
+        }
         var verseSelect = Find(initialSurface.Surface.Root, "aetheria.hangar.verse");
         Require(verseSelect.Kind == "control.select" &&
                 verseSelect.Props["value"] == AetheriaProgressionSources.Local &&

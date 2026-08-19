@@ -65,6 +65,9 @@ The preview is a standard Eve `world.scene3d` containing one
 provider asset manifest and carries the selected loadout identity/equipment
 projection. It does not read gameplay frame, entity-view, or zone-render
 pointers and does not create or load a run.
+The daemon publishes that asset manifest and Eve asset catalog during cold
+presentation boot, before serving the Hangar. Gameplay topology reuses the same
+publication primitive; the first gameplay tick is never a launcher dependency.
 
 Forbidden writers: Unity, Electron, Eve lowerers, mode session checkpoints,
 witness seeders, and mode-local inventory stores cannot mutate Hangar assets or
@@ -96,5 +99,6 @@ path. Generic New Game must not return as a gameplay-state writer.
 - the portable surface exposes owned bays, ship preview, fit summary, existing
   inventory/refit entry, three mode selectors, and Launch;
 - on a fresh daemon with no run, the preview lowers one visible entity for the
-  selected ship and follows ship/loadout changes without touching gameplay state;
+  selected ship, resolves and downloads its current-platform Unity bundle, and
+  follows ship/loadout changes without touching gameplay state;
 - attaching a renderer does not change admission output.
