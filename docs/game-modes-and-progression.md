@@ -202,9 +202,12 @@ generation. Catalog and name-corpus records are hydrated at daemon boot;
 backing-store hydration cannot run inside a mutation transaction and waits for
 any active transaction before publishing records or observers. Command ingress
 and periodic multi-document publication use that same owner and cannot flush
-the batch halfway through. Unexpected generation or surface-projection failure
-escapes the transaction, leaving the command pending; it cannot become a denial
-receipt around partially staged deployment state. Aetheria exposes only a
+the batch halfway through. Each Eve command owns its own finality transaction;
+one poison request cannot roll back or starve unrelated commands. Unexpected
+generation or finality failure escapes that command transaction and leaves only
+that command pending; it cannot become a denial receipt around partially staged
+deployment state. Eve surfaces are derived after canonical command finality and
+cannot rewrite the accepted state if projection refresh fails. Aetheria exposes only a
 snapshotting read facade for cache inspection, and its database rejects
 authoritative record writes outside the state-node transaction.
 CultCache directory storage writes immutable generation pages and exposes the
@@ -232,6 +235,13 @@ Preparation or mount failure discards the candidate without remounting or
 reconstructing the prior surface. A failed route therefore cannot strand the
 client without a usable Hangar. Aetheria's Unity
 shell has no Verse, Hangar, or navigation policy code.
+
+Remote Verse discovery, submission, and receipt waiting run in a bounded
+per-command forwarding worker, never inside the state mutation gate or the
+simulation tick. The first attempt commits only the immutable route pin. A
+remote receipt later enters one short finality transaction with the local
+receipt and inbox deletion. Timeout leaves that request pending without
+blocking local commands, ticks, or other state writers.
 
 The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and

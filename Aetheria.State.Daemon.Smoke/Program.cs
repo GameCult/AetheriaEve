@@ -118,7 +118,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         RunCheck(EveryAdvertisedModeUsesTheSharedDeploymentBoundary);
         RunCheck(ConcurrentHangarCommandIdsAdmitOneImmutablePayload);
         RunCheck(StateNodeCommitScopeCannotBeFlushedHalfwayByCommandIngress);
-        RunCheck(FailedLaunchProjectionRollsBackTheWholeDeployment);
+        RunCheck(FailedPostGenerationStepRollsBackTheWholeDeployment);
     }
 
     public void RunCommandScale() => RunCheck(FrameSizeDoesNotGrowWithCommandChronology);
@@ -518,7 +518,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         }
     }
 
-    private static void FailedLaunchProjectionRollsBackTheWholeDeployment()
+    private static void FailedPostGenerationStepRollsBackTheWholeDeployment()
     {
         var root = Path.Combine(Path.GetTempPath(), $"aetheria-launch-rollback-{Guid.NewGuid():N}");
         var statePath = Path.Combine(root, "aetheria.cc");
@@ -568,14 +568,14 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             originalRevision,
                             "2026-08-19T00:00:02Z").ConfigureAwait(false);
                         Require(receipt.Accepted, "rollback probe requires an otherwise valid deployment");
-                        throw new InvalidOperationException("injected surface publication failure");
+                        throw new InvalidOperationException("injected post-generation finality failure");
                     }).GetAwaiter().GetResult();
                 }
-                catch (InvalidOperationException error) when (error.Message == "injected surface publication failure")
+                catch (InvalidOperationException error) when (error.Message == "injected post-generation finality failure")
                 {
                     rolledBack = true;
                 }
-                Require(rolledBack, "surface publication failure must escape the deployment transaction");
+                Require(rolledBack, "post-generation finality failure must escape the deployment transaction");
             }
 
             using var reopened = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
@@ -598,7 +598,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     reopened.Documents<AetheriaRunState>().Count == 0 &&
                     pendingRequest != null &&
                     receiptDocument == null,
-                "a failed post-generation projection must leave no run, deployment, session, or denial receipt and keep the request pending");
+                "a failed post-generation finality step must leave no run, deployment, session, or denial receipt and keep the request pending");
         }
         finally
         {

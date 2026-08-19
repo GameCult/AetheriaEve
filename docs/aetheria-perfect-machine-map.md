@@ -29,9 +29,15 @@ Date: 2026-06-13
 > the `.cc` persistence file as an alternate source of truth. Catalog and name
 > corpus hydration happen before command mutation; CultCache rejects hydration
 > inside an ambient transaction and serializes concurrent hydration with the
-> transaction gate. Unexpected launch or projection exceptions escape and roll
-> back the batch, leaving the request pending rather than minting a denial
-> receipt over partial deployment state. CultCache v4 writes content-addressed record pages,
+> transaction gate. Every Eve request owns one finality transaction, so a
+> poison request cannot roll back unrelated commands. Unexpected launch or
+> finality exceptions roll back only that request and leave it pending rather
+> than minting a denial receipt over partial deployment state. Eve projection
+> refresh is derived after command finality and cannot revise canonical state.
+> Remote discovery, submission, and receipt waiting run in a bounded
+> per-command worker outside both the mutation gate and simulation tick; only
+> route pinning and final receipt/inbox deletion use short state transactions.
+> CultCache v4 writes content-addressed record pages,
 > exposes the batch through one atomic manifest generation swap, and leases the
 > selected manifest generation until a reader has hydrated every referenced
 > page. Observer callbacks run only after that read lease is released.

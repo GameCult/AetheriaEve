@@ -32,6 +32,8 @@ CopyState(seed, remoteState);
 
 const string localVerse = "aetheria.progression-smoke.local";
 const string remoteVerse = "aetheria.progression-smoke.remote";
+const string poisonCommandId = "progression-smoke-poison-command";
+const string delayedRemoteCommandId = "progression-smoke-delayed-remote-command";
 var localTarget = new CultMeshSessionTarget(localVerse, "progression-local");
 var remoteTarget = new CultMeshSessionTarget(remoteVerse, "progression-remote");
 var localPort = FreeTcpPort();
@@ -80,6 +82,53 @@ try
                 verseSelect.Props["value"] == AetheriaProgressionSources.Local &&
                 verseSelect.Children.Any(option => option.Props["value"] == remoteVerse),
             "The daemon-published Hangar surface must expose Local plus Odin-discovered Verses.");
+
+        var poisonRequest = new EveSurfaceCommandRequest(
+            initialSurface.ProviderId,
+            initialSurface.Surface.Id,
+            CultMesh.OperationInvocation(
+                "aetheria.hangar.injected-failure",
+                idempotencyKey: poisonCommandId),
+            CultMesh.OperationPayload(),
+            DateTimeOffset.UtcNow,
+            "progression-verse-smoke");
+        const string validModeCommandId = "progression-smoke-valid-after-poison";
+        var validModeRequest = new EveSurfaceCommandRequest(
+            initialSurface.ProviderId,
+            initialSurface.Surface.Id,
+            CultMesh.OperationInvocation(
+                initialSurface.Commands.Single(template => template.Command == AetheriaRuntimeHangarCommands.SelectArena).Operation,
+                idempotencyKey: validModeCommandId),
+            CultMesh.OperationPayload(),
+            DateTimeOffset.UtcNow.AddTicks(1),
+            "progression-verse-smoke");
+        await client.SubmitDocumentAsync(
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + poisonCommandId,
+            poisonRequest,
+            "progression-verse-smoke",
+            "headless-smoke");
+        await client.SubmitDocumentAsync(
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + validModeCommandId,
+            validModeRequest,
+            "progression-verse-smoke",
+            "headless-smoke");
+        var validModeReceipt = await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(validModeCommandId).ToString(),
+            (EveCommandReceiptDocument receipt) => receipt.State == "accepted",
+            TimeSpan.FromSeconds(5));
+        var draftAfterPoison = await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaStateNode.HangarDraftKey.ToString(),
+            (AetheriaHangarDraftState draft) => draft.SelectedMode == AetheriaGameModes.Arena,
+            TimeSpan.FromSeconds(5));
+        Require(validModeReceipt.CommandId == validModeCommandId &&
+                draftAfterPoison.SelectedMode == AetheriaGameModes.Arena,
+            "one poison Hangar request must remain isolated while a later valid command reaches independent finality");
 
         await SubmitAsync(
             client,
@@ -132,7 +181,53 @@ try
                 "progression-verse-smoke",
                 out var removeRequest),
             "The Hangar Eve surface must translate loadout-to-storage drag into a typed remove operation.");
-        var removeReceipt = await SubmitRequestAsync(client, localTarget, removeRequest!);
+        removeRequest = new EveSurfaceCommandRequest(
+            removeRequest!.ProviderId,
+            removeRequest.SurfaceId,
+            new CultMeshOperationInvocationDescriptor(
+                removeRequest.Command,
+                removeRequest.Operation.SchemaId,
+                removeRequest.Operation.RouteHint,
+                delayedRemoteCommandId),
+            removeRequest.Payload,
+            removeRequest.IssuedAt,
+            removeRequest.ClientId,
+            removeRequest.CommandBoundary,
+            removeRequest.ReceiptSchema);
+        var removeReceiptTask = SubmitRequestAsync(client, localTarget, removeRequest!);
+        await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.ProgressionCommandRoute(removeRequest!.CommandId).ToString(),
+            (AetheriaProgressionCommandRouteDocument route) =>
+                route.CommandId == removeRequest.CommandId && route.VerseId == remoteVerse,
+            TimeSpan.FromSeconds(5));
+        var localFinality = Stopwatch.StartNew();
+        var selectLocalReceipt = await SubmitAsync(
+            client,
+            localTarget,
+            remoteSurface,
+            AetheriaRuntimeHangarCommands.SelectVerse,
+            new Dictionary<string, string> { ["value"] = AetheriaProgressionSources.Local });
+        localFinality.Stop();
+        Require(selectLocalReceipt.State == "accepted" &&
+                localFinality.Elapsed < TimeSpan.FromMilliseconds(1500) &&
+                !removeReceiptTask.IsCompleted,
+            "remote receipt waiting must not hold the state gate or block an unrelated local command");
+        var localDuringRemoteWait = await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
+            (EveSurfaceDocument surface) =>
+                Find(surface.Surface.Root, "aetheria.hangar.verse").Props["value"] == AetheriaProgressionSources.Local,
+            TimeSpan.FromSeconds(5));
+        await SubmitAsync(
+            client,
+            localTarget,
+            localDuringRemoteWait,
+            AetheriaRuntimeHangarCommands.SelectVerse,
+            new Dictionary<string, string> { ["value"] = remoteVerse });
+        var removeReceipt = await removeReceiptTask;
         Require(removeReceipt.State == "accepted",
             "The remote progression Verse must accept the Eve loadout-to-storage drop.");
         var updatedRemoteHangar = await ReadUntilAsync(
@@ -311,8 +406,23 @@ try
 
     if (!Stop(local))
         throw new InvalidOperationException("The local daemon could not be stopped for the restart witness.");
-    local = StartDaemon(root, localState, "progression-local", localVerse, localPort,
-        "--odin-discovery-endpoint", remoteEndpoint);
+    var previousFailureInjection = Environment.GetEnvironmentVariable("AETHERIA_DEV_INJECT_HANGAR_FAILURE_COMMAND_ID");
+    var previousReceiptDelayCommand = Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_RECEIPT_COMMAND_ID");
+    var previousReceiptDelay = Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_RECEIPT_MS");
+    Environment.SetEnvironmentVariable("AETHERIA_DEV_INJECT_HANGAR_FAILURE_COMMAND_ID", poisonCommandId);
+    Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_RECEIPT_COMMAND_ID", delayedRemoteCommandId);
+    Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_RECEIPT_MS", "3000");
+    try
+    {
+        local = StartDaemon(root, localState, "progression-local", localVerse, localPort,
+            "--odin-discovery-endpoint", remoteEndpoint);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("AETHERIA_DEV_INJECT_HANGAR_FAILURE_COMMAND_ID", previousFailureInjection);
+        Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_RECEIPT_COMMAND_ID", previousReceiptDelayCommand);
+        Environment.SetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_RECEIPT_MS", previousReceiptDelay);
+    }
     await WaitForEndpointAsync(local, localPort, TimeSpan.FromSeconds(30));
     await WaitForVerseAdvertisementAsync(
         localEndpoint,
@@ -332,7 +442,7 @@ try
             "Daemon restart must preserve the selected progression Verse by stable identity.");
     }
 
-    Console.WriteLine("Aetheria Hangar Verse discovery, raw-write rejection, pinned forwarding, remote spatial refit, Terminus launch/continue navigation, and restart smoke passed.");
+    Console.WriteLine("Aetheria Hangar Verse discovery, poison-command isolation, nonblocking pinned forwarding, remote spatial refit, Terminus launch/continue navigation, and restart smoke passed.");
 }
 catch
 {

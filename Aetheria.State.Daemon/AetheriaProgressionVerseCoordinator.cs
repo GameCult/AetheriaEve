@@ -333,6 +333,18 @@ internal sealed class AetheriaProgressionVerseCoordinator : IDisposable
             "aetheria-progression-router",
             cancellationToken).ConfigureAwait(false);
 
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_RECEIPT_COMMAND_ID"),
+                request.CommandId,
+                StringComparison.Ordinal) &&
+            int.TryParse(
+                Environment.GetEnvironmentVariable("AETHERIA_DEV_DELAY_PROGRESSION_RECEIPT_MS"),
+                out var developmentDelayMs) &&
+            developmentDelayMs > 0)
+        {
+            await Task.Delay(developmentDelayMs, cancellationToken).ConfigureAwait(false);
+        }
+
         var receiptKey = AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(request.CommandId).ToString();
         var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(8);
         while (DateTimeOffset.UtcNow < deadline)
