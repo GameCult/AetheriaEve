@@ -84,7 +84,7 @@ namespace GameCult.Aetheria.State.Verse
         public const string StarbridgePlayerSeat = "gamecult.aetheria.starbridge_player_seat.v1";
         public const string VerseAuthorityPolicy = AetheriaRuntimeVerseAuthoritySchemas.Policy;
         public const string AuthorityLease = AetheriaRuntimeVerseAuthoritySchemas.Lease;
-        public const string ArenaControllerBinding = AetheriaRuntimeVerseAuthoritySchemas.ArenaControllerBinding;
+        public const string ArenaRoster = AetheriaRuntimeVerseAuthoritySchemas.ArenaRoster;
         public const string SoaView = "gamecult.aetheria.daemon_soa_view.v1";
         public const string ProviderAdvertisement = "gamecult.aetheria.daemon_provider_advertisement.v1";
         public const string Health = "gamecult.aetheria.daemon_health.v1";
@@ -335,7 +335,7 @@ namespace GameCult.Aetheria.State.Verse
                     AetheriaRuntimeDaemonSchemas.StarbridgePlayerSeat,
                     AetheriaRuntimeDaemonSchemas.VerseAuthorityPolicy,
                     AetheriaRuntimeDaemonSchemas.AuthorityLease,
-                    AetheriaRuntimeDaemonSchemas.ArenaControllerBinding
+                    AetheriaRuntimeDaemonSchemas.ArenaRoster
                 },
                 CommandBoundaryIds = new[] { "aetheria.daemon.commands" }
             };

@@ -304,8 +304,7 @@ while (!stopped.Task.IsCompleted)
     {
         var firstTick = await TickAsync(
             node, options, unityBundles, worldPhysics, latestFrame, ingressState,
-            progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token,
-            refreshControlPlane: false).ConfigureAwait(false);
+            progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token).ConfigureAwait(false);
         TraceStartup("first-tick");
         latestFrame = firstTick.Frame;
         initialPrepared = PreparePublication(
@@ -374,8 +373,7 @@ while (!stopped.Task.IsCompleted)
         var buildPublications = DateTimeOffset.UtcNow >= nextApiPublicationUtc;
         var tick = await TickAsync(
             node, options, unityBundles, worldPhysics, latestFrame, ingressState,
-            progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token,
-            refreshControlPlane: buildPublications).ConfigureAwait(false);
+            progressionForwardingTasks, hangarProjection, progressionForwardingShutdown.Token).ConfigureAwait(false);
         ThrowIfClientHostFaulted(cultMeshClientHost);
         latestFrame = tick.Frame;
         await PublishHotEntityStateAsync(
@@ -476,8 +474,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     AetheriaDaemonIngressState ingressState,
     ConcurrentDictionary<string, Task> progressionForwardingTasks,
     AetheriaHangarProjectionOwner<AetheriaPreparedHangarProjection> hangarProjection,
-    CancellationToken progressionForwardingCancellation,
-    bool refreshControlPlane)
+    CancellationToken progressionForwardingCancellation)
 {
     var traceTickPhases = string.Equals(
         Environment.GetEnvironmentVariable("AETHERIA_TRACE_TICK_PHASES"),
@@ -501,10 +498,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     TracePhase("core-ingress");
     await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
     TracePhase("provider-ingress");
-    if (!ingressState.ControlPlaneInitialized || refreshControlPlane)
-        await RefreshControlPlaneInputsAsync(node, ingressState).ConfigureAwait(false);
-    else
-        await RefreshGameSessionInputsAsync(node, ingressState).ConfigureAwait(false);
+    await RefreshControlPlaneInputsAsync(node, ingressState).ConfigureAwait(false);
 
     var fixedDeltaSeconds = currentFrame?.FixedDeltaSeconds > 0
         ? currentFrame.FixedDeltaSeconds
@@ -550,7 +544,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
             ingressState.RunId,
             ingressState.ModePolicyId,
             authorityPolicy,
-            ingressState.ArenaControllerBindings,
+            ingressState.ArenaRoster,
             options.DaemonId,
             policyRejectedCommandIds)
         : AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
@@ -794,7 +788,10 @@ static async Task RefreshControlPlaneInputsAsync(
         .MutableDocument<AetheriaRuntimeStarbridgeSessionDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgeSessionLatest)
         .ReadAsync().ConfigureAwait(false);
     ingressState.AuthorityLeases = node.Documents<AetheriaRuntimeAuthorityLeaseDocument>().ToArray();
-    ingressState.ArenaControllerBindings = node.Documents<AetheriaRuntimeArenaControllerBindingDocument>().ToArray();
+    ingressState.ArenaRoster = node.Documents<AetheriaRuntimeArenaRosterDocument>()
+        .SingleOrDefault(value => value != null &&
+            string.Equals(value.SessionId, ingressState.SessionId, StringComparison.Ordinal) &&
+            string.Equals(value.RunId, ingressState.RunId, StringComparison.Ordinal));
     ingressState.ControlPlaneInitialized = true;
 }
 
@@ -3440,7 +3437,6 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                     request.CommandId,
                     options.VerseId,
                     options.DaemonId,
-                    request.ClientId,
                     now).ConfigureAwait(false);
                 accepted = deployment != null;
                 diagnostic = accepted ? "" : "No resumable deployment exists for the selected ship and mode.";
@@ -3451,6 +3447,27 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                         options.VerseId,
                         request.ProviderId,
                         SurfaceForMode(deployment.Mode),
+                        "interactive-world",
+                        authorityRuntimeId: options.DaemonId);
+                }
+                break;
+            }
+            case AetheriaRuntimeHangarCommands.JoinArena:
+            {
+                var seat = await AetheriaDaemonHangarCoordinator.JoinArenaAsync(
+                    node,
+                    options.SessionId,
+                    request.ClientId,
+                    now).ConfigureAwait(false);
+                accepted = seat != null;
+                diagnostic = accepted ? "" : "The active Arena has no open controller seat.";
+                if (accepted)
+                {
+                    activatesSession = true;
+                    navigation = new EveSurfaceNavigationTarget(
+                        options.VerseId,
+                        request.ProviderId,
+                        SurfaceForMode(AetheriaGameModes.Arena),
                         "interactive-world",
                         authorityRuntimeId: options.DaemonId);
                 }
@@ -5155,7 +5172,7 @@ internal sealed class AetheriaDaemonIngressState
     public AetheriaRuntimeStarbridgeScenarioDocument? StarbridgeScenario { get; set; }
     public AetheriaRuntimeStarbridgeSessionDocument? StarbridgeSession { get; set; }
     public AetheriaRuntimeAuthorityLeaseDocument[] AuthorityLeases { get; set; } = [];
-    public AetheriaRuntimeArenaControllerBindingDocument[] ArenaControllerBindings { get; set; } = [];
+    public AetheriaRuntimeArenaRosterDocument? ArenaRoster { get; set; }
 
     public int TakeTerminusSimulationSteps()
     {

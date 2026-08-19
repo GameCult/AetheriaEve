@@ -94,7 +94,7 @@ namespace GameCult.Aetheria.State.Verse
             typeof(AetheriaRuntimeDaemonCommandBoundaryDocument),
             typeof(AetheriaRuntimeVerseAuthorityPolicyDocument),
             typeof(AetheriaRuntimeAuthorityLeaseDocument),
-            typeof(AetheriaRuntimeArenaControllerBindingDocument),
+            typeof(AetheriaRuntimeArenaRosterDocument),
             typeof(AetheriaRuntimeDaemonFrameDocument),
             typeof(AetheriaRuntimeDaemonSoaViewDocument),
             typeof(AetheriaRuntimeCatalogSnapshot),

@@ -224,6 +224,7 @@ public static class AetheriaDaemonHangarCoordinator
                 verseId,
                 hostRuntimeId,
                 controllerRuntimeId,
+                createArenaRoster: true,
                 now).ConfigureAwait(false);
             return receipt;
         }).ConfigureAwait(false);
@@ -241,7 +242,6 @@ public static class AetheriaDaemonHangarCoordinator
         string commandId,
         string verseId,
         string hostRuntimeId,
-        string controllerRuntimeId,
         string now)
     {
         return await node.CommitAsync(async () =>
@@ -259,7 +259,8 @@ public static class AetheriaDaemonHangarCoordinator
                 commandId,
                 verseId,
                 hostRuntimeId,
-                controllerRuntimeId,
+                controllerRuntimeId: "",
+                createArenaRoster: false,
                 now).ConfigureAwait(false);
             return deployment;
         }).ConfigureAwait(false);
@@ -274,6 +275,7 @@ public static class AetheriaDaemonHangarCoordinator
         string verseId,
         string hostRuntimeId,
         string controllerRuntimeId,
+        bool createArenaRoster,
         string now)
     {
         var policy = string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
@@ -308,19 +310,21 @@ public static class AetheriaDaemonHangarCoordinator
                 ModePolicyId = policy.PolicyId
             }).ConfigureAwait(false);
 
-        if (string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) &&
-            !string.IsNullOrWhiteSpace(controllerRuntimeId) &&
-            !string.Equals(controllerRuntimeId, hostRuntimeId, StringComparison.Ordinal))
+        if (string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
         {
-            await BindArenaControllerCoreAsync(
-                node,
-                sessionId,
-                run.RunId,
-                verseId,
-                controllerRuntimeId,
-                run.CurrentEntityKey,
-                DefaultArenaControllerClaims,
-                now).ConfigureAwait(false);
+            if (createArenaRoster)
+            {
+                await CreateArenaRosterCoreAsync(
+                    node, sessionId, run, verseId, hostRuntimeId, controllerRuntimeId, now).ConfigureAwait(false);
+            }
+            else
+            {
+                var roster = await node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
+                        new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(sessionId)))
+                    .ReadAsync().ConfigureAwait(false);
+                if (roster == null || !roster.IsActiveFor(sessionId, run.RunId))
+                    throw new InvalidOperationException("Continued Arena deployment has no matching daemon-owned roster.");
+            }
         }
 
         if (string.Equals(deployment.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
@@ -338,105 +342,144 @@ public static class AetheriaDaemonHangarCoordinator
         }
     }
 
-    public static Task<AetheriaRuntimeArenaControllerBindingDocument> BindArenaControllerAsync(
+    public static Task<AetheriaRuntimeArenaSeat?> JoinArenaAsync(
         AetheriaStateNode node,
         string sessionId,
         string controllerRuntimeId,
-        string controlledEntityKey,
-        IReadOnlyList<string> allowedClaimKinds,
         string now)
     {
         return node.CommitAsync(async () =>
         {
             var session = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
-                .ReadAsync().ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Arena controller binding requires an active game session.");
-            if (!string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) ||
+                .ReadAsync().ConfigureAwait(false);
+            if (session == null ||
+                !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) ||
                 !string.Equals(session.SessionId, sessionId, StringComparison.Ordinal) ||
                 !string.Equals(session.ModePolicyId, AetheriaModePolicies.ArenaServerAuthoritative, StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("Arena controller binding requires the active server-authoritative Arena session.");
+                return null;
             }
-            var run = await node.MutableDocument<AetheriaRunState>(new CultRecordKey(session.RunRecordKey))
+            if (string.IsNullOrWhiteSpace(controllerRuntimeId))
+                throw new InvalidOperationException("Arena join requires an authenticated controller runtime.");
+            var rosterPointer = node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(
+                new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(sessionId)));
+            var roster = await rosterPointer
                 .ReadAsync().ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Arena controller binding requires the active canonical run.");
-            var belongsToRun = false;
-            foreach (var zoneKey in run.ZoneKeys ?? Array.Empty<string>())
-            {
-                var zone = await node.MutableDocument<AetheriaZoneState>(new CultRecordKey(zoneKey))
-                    .ReadAsync().ConfigureAwait(false);
-                if ((zone?.EntityKeys ?? Array.Empty<string>()).Contains(controlledEntityKey, StringComparer.Ordinal))
-                {
-                    belongsToRun = true;
-                    break;
-                }
-            }
-            if (!belongsToRun)
-                throw new InvalidOperationException("Arena controller binding target is not an entity in the active canonical run.");
-            var policy = await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(
-                    AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy)
-                .ReadAsync().ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Arena controller binding requires the active server-authority policy.");
-            return await BindArenaControllerCoreAsync(
-                node,
-                session.SessionId,
-                run.RunId,
-                policy.VerseId,
-                controllerRuntimeId,
-                controlledEntityKey,
-                allowedClaimKinds,
-                now).ConfigureAwait(false);
+                ?? throw new InvalidOperationException("Arena join requires the daemon-owned roster.");
+            if (!roster.IsActiveFor(session.SessionId, session.RunId))
+                throw new InvalidOperationException("Arena roster does not belong to the active session.");
+            var existing = (roster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
+                .SingleOrDefault(seat => string.Equals(
+                    seat.ControllerRuntimeId, controllerRuntimeId, StringComparison.Ordinal) &&
+                    string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal));
+            if (existing != null)
+                return existing;
+            var openIndex = Array.FindIndex(roster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>(), seat =>
+                seat != null && string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Open, StringComparison.Ordinal));
+            if (openIndex < 0)
+                return null;
+            var seats = (roster.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>()).Select(CloneSeat).ToArray();
+            seats[openIndex].ControllerRuntimeId = controllerRuntimeId;
+            seats[openIndex].Status = AetheriaRuntimeArenaSeatStatuses.Active;
+            roster.Seats = seats;
+            roster.Revision = Math.Max(0, roster.Revision) + 1;
+            roster.UpdatedAtUtc = now ?? "";
+            await rosterPointer.ReplaceAsync(roster).ConfigureAwait(false);
+            return seats[openIndex];
         });
     }
 
-    private static readonly string[] DefaultArenaControllerClaims =
+    public static readonly AetheriaRuntimeDaemonCommandKinds[] DefaultArenaControllerOperations =
     [
-        AetheriaRuntimeClaimKinds.Movement,
-        AetheriaRuntimeClaimKinds.Targeting,
-        AetheriaRuntimeClaimKinds.Combat,
-        AetheriaRuntimeClaimKinds.Interaction
+        AetheriaRuntimeDaemonCommandKinds.SetMoveVector,
+        AetheriaRuntimeDaemonCommandKinds.SetLookDirection,
+        AetheriaRuntimeDaemonCommandKinds.SetTractorPower,
+        AetheriaRuntimeDaemonCommandKinds.SetTarget,
+        AetheriaRuntimeDaemonCommandKinds.ClearTarget,
+        AetheriaRuntimeDaemonCommandKinds.TargetNearest,
+        AetheriaRuntimeDaemonCommandKinds.TargetNext,
+        AetheriaRuntimeDaemonCommandKinds.TargetPrevious,
+        AetheriaRuntimeDaemonCommandKinds.TargetReticle,
+        AetheriaRuntimeDaemonCommandKinds.FireWeaponGroup,
+        AetheriaRuntimeDaemonCommandKinds.SetWeaponGroupActive,
+        AetheriaRuntimeDaemonCommandKinds.SetWeaponGroupMembership,
+        AetheriaRuntimeDaemonCommandKinds.SetBehaviorActive,
+        AetheriaRuntimeDaemonCommandKinds.ActivateConsumable,
+        AetheriaRuntimeDaemonCommandKinds.SensorPing,
+        AetheriaRuntimeDaemonCommandKinds.SetHeatsinksEnabled,
+        AetheriaRuntimeDaemonCommandKinds.ToggleShieldEnabled,
+        AetheriaRuntimeDaemonCommandKinds.Dock,
+        AetheriaRuntimeDaemonCommandKinds.DockNearest,
+        AetheriaRuntimeDaemonCommandKinds.Undock,
+        AetheriaRuntimeDaemonCommandKinds.EnterWormhole
     ];
 
-    private static async Task<AetheriaRuntimeArenaControllerBindingDocument> BindArenaControllerCoreAsync(
+    private static async Task<AetheriaRuntimeArenaRosterDocument> CreateArenaRosterCoreAsync(
         AetheriaStateNode node,
         string sessionId,
-        string runId,
+        AetheriaRunState run,
         string verseId,
+        string hostRuntimeId,
         string controllerRuntimeId,
-        string controlledEntityKey,
-        IReadOnlyList<string> allowedClaimKinds,
         string now)
     {
-        if (string.IsNullOrWhiteSpace(controllerRuntimeId))
-            throw new InvalidOperationException("Arena controller runtime identity is required.");
-        if (string.IsNullOrWhiteSpace(controlledEntityKey))
-            throw new InvalidOperationException("Arena controlled entity identity is required.");
-        var claims = (allowedClaimKinds ?? Array.Empty<string>())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        if (claims.Length == 0 || claims.Any(value => !DefaultArenaControllerClaims.Contains(value, StringComparer.Ordinal)))
-            throw new InvalidOperationException("Arena controller bindings may grant only movement, targeting, combat, or interaction operation claims.");
-
-        var key = new CultRecordKey(AetheriaRuntimeArenaControllerBindingDocument.RecordKey(sessionId, controlledEntityKey));
-        var pointer = node.MutableDocument<AetheriaRuntimeArenaControllerBindingDocument>(key);
-        var existing = await pointer.ReadAsync().ConfigureAwait(false);
-        var binding = new AetheriaRuntimeArenaControllerBindingDocument
+        var entityKeys = new List<string>();
+        foreach (var zoneKey in run.ZoneKeys ?? Array.Empty<string>())
         {
-            BindingId = key.ToString(),
+            var zone = await node.MutableDocument<AetheriaZoneState>(new CultRecordKey(zoneKey))
+                .ReadAsync().ConfigureAwait(false);
+            foreach (var entityKey in zone?.EntityKeys ?? Array.Empty<string>())
+            {
+                var entity = await node.MutableDocument<AetheriaEntitySnapshot>(new CultRecordKey(entityKey))
+                    .ReadAsync().ConfigureAwait(false);
+                if (entity != null && entity.IsActive && string.Equals(entity.Kind, "ship", StringComparison.Ordinal))
+                    entityKeys.Add(entityKey);
+            }
+        }
+        var ordered = entityKeys
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(key => string.Equals(key, run.CurrentEntityKey, StringComparison.Ordinal) ? 0 : 1)
+            .ThenBy(key => key, StringComparer.Ordinal)
+            .ToArray();
+        if (ordered.Length == 0 || !string.Equals(ordered[0], run.CurrentEntityKey, StringComparison.Ordinal))
+            throw new InvalidOperationException("Arena roster requires the active player ship as its primary seat.");
+        var key = new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(sessionId));
+        var seats = ordered.Select((entityKey, index) => new AetheriaRuntimeArenaSeat
+        {
+            SeatId = $"{key}:seat:{index}",
+            ControlledEntityKey = entityKey,
+            ControllerRuntimeId = index == 0 && !string.IsNullOrWhiteSpace(controllerRuntimeId) &&
+                !string.Equals(controllerRuntimeId, hostRuntimeId, StringComparison.Ordinal)
+                    ? controllerRuntimeId
+                    : "",
+            AllowedOperationKinds = DefaultArenaControllerOperations.ToArray(),
+            Status = index == 0 && !string.IsNullOrWhiteSpace(controllerRuntimeId) &&
+                !string.Equals(controllerRuntimeId, hostRuntimeId, StringComparison.Ordinal)
+                    ? AetheriaRuntimeArenaSeatStatuses.Active
+                    : AetheriaRuntimeArenaSeatStatuses.Open
+        }).ToArray();
+        var roster = new AetheriaRuntimeArenaRosterDocument
+        {
+            RosterId = key.ToString(),
             VerseId = string.IsNullOrWhiteSpace(verseId) ? "aetheria.local" : verseId,
             SessionId = sessionId ?? "",
-            RunId = runId ?? "",
-            ControllerRuntimeId = controllerRuntimeId,
-            ControlledEntityKey = controlledEntityKey,
-            AllowedClaimKinds = claims,
-            Status = AetheriaRuntimeArenaControllerBindingStatuses.Active,
-            Revision = Math.Max(0, existing?.Revision ?? 0) + 1,
+            RunId = run.RunId ?? "",
+            Revision = 1,
+            Seats = seats,
             UpdatedAtUtc = now ?? ""
         };
-        await pointer.ReplaceAsync(binding).ConfigureAwait(false);
-        return binding;
+        await node.MutableDocument<AetheriaRuntimeArenaRosterDocument>(key).ReplaceAsync(roster).ConfigureAwait(false);
+        return roster;
     }
+
+    private static AetheriaRuntimeArenaSeat CloneSeat(AetheriaRuntimeArenaSeat seat) => new()
+    {
+        SeatId = seat.SeatId,
+        ControlledEntityKey = seat.ControlledEntityKey,
+        ControllerRuntimeId = seat.ControllerRuntimeId,
+        AllowedOperationKinds = (seat.AllowedOperationKinds ?? Array.Empty<AetheriaRuntimeDaemonCommandKinds>()).ToArray(),
+        Status = seat.Status
+    };
 
     private static async Task<AetheriaDeploymentReceipt?> FindContinuationAsync(
         AetheriaStateNode node,

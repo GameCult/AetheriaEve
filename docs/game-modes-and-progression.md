@@ -110,9 +110,11 @@ The authority policy differs without changing the document model:
 - **Arena:** the authoritative server decides all gameplay state; humans and
   AIs submit operations and consume observations. The current minimal Arena
   bootstrap installs `aetheria.mode.arena.server.v1` atomically with deployment
-  activation. A durable controller binding admits an authenticated runtime's
-  movement, targeting, combat, and interaction operations only for its
-  assigned actor and active session. Those operations remain proposals: the
+  activation. One daemon-owned roster assigns exact actors and operation kinds
+  to controller runtimes. Launch may fill the first seat once; Continue cannot
+  rewrite it. Additional humans and headless AIs request the next open seat
+  through the same Hangar Eve command, without choosing their own actor. Those
+  operations remain proposals: the
   daemon validates and simulates them, authors the committed fact, and records
   the proposing runtime separately. Controller identity is never rewritten as
   host identity, and no controller may author canonical facts directly.
@@ -342,25 +344,26 @@ per-principal Hangar/draft record ownership before it may expose player
 progression. Non-loopback daemon publication currently fails closed at startup
 until that principal boundary exists. Arena deployments carry
 `aetheria.mode.arena.server.v1`, install the matching host-finality policy, and
-bind the launching controller to the deployed actor in the same transaction.
+create one authoritative session roster in the same transaction. The roster,
+not Continue or a client-supplied actor id, owns controller assignment.
 Starbridge still leaves `ModePolicyId` empty until its Pilot-correction protocol
 is installed.
 Settlement, currencies/unlocks, richer fitting
-interaction, complete Starbridge admission, and the Arena multi-controller
-match/score harness still need to enter
+interaction, complete Starbridge admission, and the Arena scored match harness
+still need to enter
 the same Hangar boundary. The old main-menu
 `New Game` writer is no longer a product run-creation authority. Explicit
 Terminus proof profiles remain verification-only inputs.
 
-Arena still lacks its complete match/score document family and preserved
-multi-controller headless harness. Its minimal daemon session now proves the
-operation/fact split for one durable controller binding, not a complete PvP or
-balance run. Starbridge's
+Arena still lacks its complete match/score document family and public
+observation/operation replay witness. Its minimal daemon session now preserves
+multiple controller seats and the operation/fact split, but does not yet prove
+a complete PvP or balance run through a real transport. Starbridge's
 minimal session bootstrap likewise does not by itself prove pilot-veto
 convergence.
 
 The next state-architecture cut is exactly-once Settlement plus Starbridge
-admission and the Arena match/controller roster. Until those cuts land, documentation
+admission and the Arena match/score/replay family. Until those cuts land, documentation
 and verification must not describe the local starter Hangar as completed
 cross-mode progression, or a generic simulation smoke as Arena authority proof.
 

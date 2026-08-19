@@ -54,9 +54,11 @@ sole local-daemon authority for the same shared pilot mechanics. All three modes
 must run headlessly; renderer attachment cannot become an authority input. The
 cross-mode contract is defined in `docs/game-modes-and-progression.md`.
 
-Arena therefore has two typed gates, not one ambiguous authority switch. A
-durable controller binding admits a runtime's operation only for its active
-session, assigned actor, and allowed claim kinds. The host-authoritative Verse
+Arena therefore has two typed gates, not one ambiguous authority switch. One
+daemon-owned roster admits a runtime's operation only for its active session,
+assigned seat, and exact allowed operation kinds. Launch creates that roster,
+Continue preserves it, and a Hangar Eve command lets additional human or
+headless controllers request the next open seat without choosing an actor. The host-authoritative Verse
 policy governs fact production and finality. Accepted controller operations
 retain proposer provenance, while every resulting committed fact is authored by
 the Arena daemon. An AI policy uses the same actor-scoped movement, targeting,
@@ -320,8 +322,8 @@ Supported now:
 - `host-authoritative`
 - `delegated-runtime`
 - `interest-lease`
-- Arena controller bindings for session/runtime/actor/claim-scoped operation
-  admission under a separate `host-authoritative` fact policy
+- one Arena session roster for runtime/actor/exact-operation admission under a
+  separate `host-authoritative` fact policy
 
 Represented but fail closed:
 

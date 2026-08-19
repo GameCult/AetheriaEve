@@ -344,7 +344,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.EquipItem) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.RemoveItem) &&
                         surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Launch) &&
-                        surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Continue),
+                        surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.Continue) &&
+                        surface.Commands.Any(command => command.Command == AetheriaRuntimeHangarCommands.JoinArena),
                     "the daemon-owned Hangar surface must advertise Verse selection, loadout, launch, and continuation operations");
                 var alternatePreviewSurface = AetheriaRuntimeHangarSurfaceBuilder.Build(
                     hangar, ship.ShipId, draft.SelectedMode, "2026-08-08T00:00:01Z", 2,
@@ -481,7 +482,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     SessionId = arenaSession.SessionId,
                     ActorEntityKey = arenaSession.ControlledEntityKey
                 };
-                var controllerBindings = node.Documents<AetheriaRuntimeArenaControllerBindingDocument>().ToArray();
+                var arenaRoster = node.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
                 var remoteAdmission = AetheriaRuntimeArenaOperationAdmission.Authorize(
                     remoteCommand,
                     arenaSession.Mode,
@@ -489,7 +490,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     arenaSession.RunId,
                     arenaSession.ModePolicyId,
                     arenaPolicy,
-                    controllerBindings,
+                    arenaRoster,
                     "daemon-smoke");
                 Require(AetheriaRuntimeAuthorityRouter.Authorize(hostCommand, arenaPolicy, [], "daemon-smoke").Authorized &&
                         AetheriaRuntimeAuthorityRouter.Authorize(remoteCommand, arenaPolicy, [], "daemon-smoke").Reason == "host-authority-required" &&
@@ -524,15 +525,15 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 };
                 Require(!AetheriaRuntimeArenaOperationAdmission.Authorize(
                             crossActor, arenaSession.Mode, arenaSession.SessionId, arenaSession.RunId,
-                            arenaSession.ModePolicyId, arenaPolicy, controllerBindings, "daemon-smoke").Authorized &&
+                            arenaSession.ModePolicyId, arenaPolicy, arenaRoster, "daemon-smoke").Authorized &&
                         AetheriaRuntimeArenaOperationAdmission.Authorize(
                             privileged, arenaSession.Mode, arenaSession.SessionId, arenaSession.RunId,
-                            arenaSession.ModePolicyId, arenaPolicy, controllerBindings, "daemon-smoke").Reason ==
-                            "arena-controller-claim-not-allowed" &&
+                            arenaSession.ModePolicyId, arenaPolicy, arenaRoster, "daemon-smoke").Reason ==
+                            "arena-controller-operation-not-allowed" &&
                         AetheriaRuntimeArenaOperationAdmission.Authorize(
                             unbound, arenaSession.Mode, arenaSession.SessionId, arenaSession.RunId,
-                            arenaSession.ModePolicyId, arenaPolicy, controllerBindings, "daemon-smoke").Reason ==
-                            "arena-controller-binding-required",
+                            arenaSession.ModePolicyId, arenaPolicy, arenaRoster, "daemon-smoke").Reason ==
+                            "arena-controller-seat-required",
                     "Arena controller admission must reject cross-actor, privileged, and unbound operations");
                 var committedControllerFact = AetheriaRuntimeCommittedCommandFactDocument.FromAppliedCommand(
                     new AetheriaRuntimeDaemonFrameDocument
@@ -546,23 +547,13 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 Require(committedControllerFact.SourceRuntimeId == "daemon-smoke" &&
                         committedControllerFact.ProposedByRuntimeId == "pilot-runtime",
                     "Arena facts must be host-authored while preserving controller provenance separately");
-                var arenaRun = node.MutableDocument<AetheriaRunState>(new CultRecordKey(secondReceipt.RunRecordKey))
-                    .ReadAsync().GetAwaiter().GetResult()!;
-                var secondActor = arenaRun.ZoneKeys
-                    .Select(zoneKey => node.MutableDocument<AetheriaZoneState>(new CultRecordKey(zoneKey))
-                        .ReadAsync().GetAwaiter().GetResult())
-                    .Where(zone => zone != null)
-                    .SelectMany(zone => zone!.EntityKeys ?? Array.Empty<string>())
-                    .First(entityKey => !string.Equals(entityKey, arenaSession.ControlledEntityKey, StringComparison.Ordinal));
-                AetheriaDaemonHangarCoordinator.BindArenaControllerAsync(
+                var joinedSeat = AetheriaDaemonHangarCoordinator.JoinArenaAsync(
                         node,
                         arenaSession.SessionId,
                         "ai-build-b",
-                        secondActor,
-                        [AetheriaRuntimeClaimKinds.Movement, AetheriaRuntimeClaimKinds.Combat],
                         "2026-08-08T00:00:05Z")
                     .GetAwaiter().GetResult();
-                controllerBindings = node.Documents<AetheriaRuntimeArenaControllerBindingDocument>().ToArray();
+                arenaRoster = node.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
                 var secondController = new AetheriaRuntimeDaemonCommandDocument
                 {
                     CommandId = "arena-ai-build-b",
@@ -570,7 +561,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ClientId = "ai-build-b",
                     AuthorRuntimeId = "ai-build-b",
                     SessionId = arenaSession.SessionId,
-                    ActorEntityKey = secondActor
+                    ActorEntityKey = joinedSeat!.ControlledEntityKey
                 };
                 Require(AetheriaRuntimeArenaOperationAdmission.Authorize(
                         secondController,
@@ -579,9 +570,49 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         arenaSession.RunId,
                         arenaSession.ModePolicyId,
                         arenaPolicy,
-                        controllerBindings,
+                        arenaRoster,
                         "daemon-smoke").Authorized,
-                    "Arena must admit a second headless AI build only for its separately bound actor and claims");
+                    "Arena must let the daemon assign a second headless AI build an open roster seat");
+
+                var forbiddenTargetMutation = new AetheriaRuntimeDaemonCommandDocument
+                {
+                    CommandId = "arena-target-mutation",
+                    Kind = AetheriaRuntimeDaemonCommandKinds.SetOverrideShutdown,
+                    ClientId = "pilot-runtime",
+                    AuthorRuntimeId = "pilot-runtime",
+                    SessionId = arenaSession.SessionId,
+                    ActorEntityKey = arenaSession.ControlledEntityKey,
+                    TargetEntityKey = joinedSeat.ControlledEntityKey
+                };
+                Require(AetheriaRuntimeArenaOperationAdmission.Authorize(
+                        forbiddenTargetMutation,
+                        arenaSession.Mode,
+                        arenaSession.SessionId,
+                        arenaSession.RunId,
+                        arenaSession.ModePolicyId,
+                        arenaPolicy,
+                        arenaRoster,
+                        "daemon-smoke").Reason == "arena-controller-operation-not-allowed",
+                    "an Arena seat must not use a coarse combat claim to mutate another actor");
+
+                var primarySeatBeforeContinue = arenaRoster.Seats.Single(seat =>
+                    string.Equals(seat.ControlledEntityKey, arenaSession.ControlledEntityKey, StringComparison.Ordinal));
+                var continuedArena = AetheriaDaemonHangarCoordinator.ContinueAsync(
+                        node,
+                        secondReceipt.DeploymentId,
+                        arenaSession.SessionId,
+                        "continue-arena-without-rebinding",
+                        "aetheria.local",
+                        "daemon-smoke",
+                        "2026-08-08T00:00:05Z")
+                    .GetAwaiter().GetResult();
+                var rosterAfterContinue = node.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
+                var primarySeatAfterContinue = rosterAfterContinue.Seats.Single(seat =>
+                    string.Equals(seat.ControlledEntityKey, arenaSession.ControlledEntityKey, StringComparison.Ordinal));
+                Require(continuedArena?.DeploymentId == secondReceipt.DeploymentId &&
+                        primarySeatAfterContinue.ControllerRuntimeId == primarySeatBeforeContinue.ControllerRuntimeId &&
+                        rosterAfterContinue.Revision == arenaRoster.Revision,
+                    "Continue must preserve the daemon-owned Arena roster instead of rebinding its caller");
 
                 AetheriaDaemonHangarCoordinator.SelectShipAsync(node, selectedShipId, "2026-08-08T00:00:06Z")
                     .GetAwaiter().GetResult();
@@ -589,7 +620,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     .GetAwaiter().GetResult();
                 var resumed = AetheriaDaemonHangarCoordinator.ContinueAsync(
                         node, deploymentId, "smoke-session", "continue-configured", "aetheria.local", "daemon-smoke",
-                        "pilot-runtime", "2026-08-08T00:00:06Z")
+                        "2026-08-08T00:00:06Z")
                     .GetAwaiter().GetResult();
                 settings = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
                     .ReadAsync().GetAwaiter().GetResult()!;
@@ -1100,7 +1131,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             SessionId = session.SessionId,
                             ActorEntityKey = session.ControlledEntityKey
                         };
-                        var bindings = reopened.Documents<AetheriaRuntimeArenaControllerBindingDocument>().ToArray();
+                        var roster = reopened.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
                         Require(AetheriaRuntimeAuthorityRouter.Authorize(host, policy, [], "daemon-smoke").Authorized &&
                                 AetheriaRuntimeAuthorityRouter.Authorize(remote, policy, [], "daemon-smoke").Reason == "host-authority-required" &&
                                 AetheriaRuntimeArenaOperationAdmission.Authorize(
@@ -1110,7 +1141,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                     session.RunId,
                                     session.ModePolicyId,
                                     policy,
-                                    bindings,
+                                    roster,
                                     "daemon-smoke").Authorized,
                             "reopened Arena must preserve bound controller admission without transferring fact authority");
                     }

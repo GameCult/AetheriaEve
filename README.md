@@ -14,9 +14,11 @@ The game begins in the shared Hangar and launches three modes:
 
 All three modes share Hangar progression, ships, equipment, and fitting rules.
 Their CultMesh configurations are distinct. Arena deployment now installs its
-server-authority policy and a durable controller-to-actor operation binding;
-the daemon alone authors resulting facts while retaining controller provenance.
-The multi-controller match/score harness and Starbridge Pilot correction remain
+server-authority policy and one daemon-owned controller roster. Launch assigns
+the first seat once; Continue cannot reassign it, and additional humans or
+headless AIs request open seats through the Hangar Eve surface. The daemon alone
+authors resulting facts while retaining controller provenance. The scored
+match harness and Starbridge Pilot correction remain
 unproven.
 
 ## Projects

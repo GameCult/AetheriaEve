@@ -91,8 +91,10 @@ Date: 2026-06-13
 > authentication and per-principal Hangar/draft keys are not. Local is the only
 > progression path currently proven end to end; the daemon refuses non-loopback
 > publication until that boundary exists. Arena deployment installs
-> `aetheria.mode.arena.server.v1` plus a durable controller-to-actor operation
-> binding while the daemon remains the sole committed-fact author. Starbridge's
+> `aetheria.mode.arena.server.v1` plus one daemon-owned session roster. Launch
+> assigns a seat once, Continue cannot reassign it, and the Hangar Eve command
+> gives additional runtimes the next open seat while the daemon remains the sole
+> committed-fact author. Starbridge's
 > mode-policy identity remains empty until Pilot correction is installed and
 > proven; mode labels alone are not authority evidence.
 

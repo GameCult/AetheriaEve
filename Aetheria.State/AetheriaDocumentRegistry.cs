@@ -75,7 +75,7 @@ public static class AetheriaDocumentRegistry
         typeof(AetheriaRuntimeDaemonSoaViewDocument),
         typeof(AetheriaRuntimeVerseAuthorityPolicyDocument),
         typeof(AetheriaRuntimeAuthorityLeaseDocument),
-        typeof(AetheriaRuntimeArenaControllerBindingDocument),
+        typeof(AetheriaRuntimeArenaRosterDocument),
         typeof(AetheriaRuntimeDaemonCommandDocument),
         typeof(AetheriaRuntimeCommittedCommandFactDocument),
         typeof(AetheriaRuntimeEveCommandDocument),
