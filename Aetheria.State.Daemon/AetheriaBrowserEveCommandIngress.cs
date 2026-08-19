@@ -22,20 +22,23 @@ internal static class AetheriaBrowserEveCommandIngress
     public static void Register(
         ICultNetSchemaServer server,
         AetheriaStateNode node,
-        AetheriaDaemonHostOptions options)
+        AetheriaDaemonHostOptions options,
+        Func<ICultNetSchemaServerPeer, string?> resolveEstablishedRuntimeId)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(resolveEstablishedRuntimeId);
         server.OnCultNet<CultNetOperationRequestMessage>((request, peer) =>
-            HandleAsync(request, peer, node, options));
+            HandleAsync(request, peer, node, options, resolveEstablishedRuntimeId));
     }
 
     private static async Task HandleAsync(
         CultNetOperationRequestMessage request,
         ICultNetSchemaServerPeer peer,
         AetheriaStateNode node,
-        AetheriaDaemonHostOptions options)
+        AetheriaDaemonHostOptions options,
+        Func<ICultNetSchemaServerPeer, string?> resolveEstablishedRuntimeId)
     {
         try
         {
@@ -49,10 +52,14 @@ internal static class AetheriaBrowserEveCommandIngress
             if (!string.Equals(request.PayloadSchema, EveSurfaceCommandRequest.SchemaId, StringComparison.Ordinal))
                 throw new InvalidOperationException($"Unsupported Aetheria command payload '{request.PayloadSchema}'.");
 
+            var establishedRuntimeId = resolveEstablishedRuntimeId(peer);
+            if (string.IsNullOrWhiteSpace(establishedRuntimeId))
+                throw new InvalidOperationException("Aetheria Eve commands require an established CultMesh session identity.");
+
             var intent = MessagePackSerializer.Deserialize<BrowserEveCommandIntent>(
                 Convert.FromBase64String(request.Payload),
                 MessagePackSerializerOptions.Standard.WithResolver(ContractlessStandardResolver.Instance));
-            Validate(request, intent);
+            Validate(request, intent, establishedRuntimeId);
 
             var commandId = string.IsNullOrWhiteSpace(request.MessageId)
                 ? Guid.NewGuid().ToString("N")
@@ -67,7 +74,7 @@ internal static class AetheriaBrowserEveCommandIngress
                 {
                     await node.Database.PutAsync(
                         commandRecordKey,
-                        ToCommandRequest(request, intent, commandId)).ConfigureAwait(false);
+                        ToCommandRequest(request, intent, commandId, establishedRuntimeId)).ConfigureAwait(false);
                 }
                 return receipted;
             }).ConfigureAwait(false);
@@ -89,22 +96,26 @@ internal static class AetheriaBrowserEveCommandIngress
         }
     }
 
-    private static void Validate(CultNetOperationRequestMessage request, BrowserEveCommandIntent intent)
+    private static void Validate(
+        CultNetOperationRequestMessage request,
+        BrowserEveCommandIntent intent,
+        string establishedRuntimeId)
     {
         if (!string.Equals(intent.Schema, EveSurfaceCommandRequest.SchemaId, StringComparison.Ordinal) ||
             !string.Equals(intent.Command, request.Operation, StringComparison.Ordinal))
             throw new InvalidOperationException("Aetheria Eve command envelope disagrees with its operation request.");
         if (string.IsNullOrWhiteSpace(intent.SurfaceId) || string.IsNullOrWhiteSpace(intent.ProviderId))
             throw new InvalidOperationException("Aetheria Eve command requires provider and surface identity.");
-        if (string.IsNullOrWhiteSpace(request.SourceRuntimeId) ||
-            !string.Equals(intent.ClientId, request.SourceRuntimeId, StringComparison.Ordinal))
+        if (!string.Equals(request.SourceRuntimeId, establishedRuntimeId, StringComparison.Ordinal) ||
+            !string.Equals(intent.ClientId, establishedRuntimeId, StringComparison.Ordinal))
             throw new InvalidOperationException("Aetheria Eve command client identity is not bound to its CultNet caller.");
     }
 
     private static EveSurfaceCommandRequest ToCommandRequest(
         CultNetOperationRequestMessage request,
         BrowserEveCommandIntent intent,
-        string commandId)
+        string commandId,
+        string establishedRuntimeId)
     {
         var issuedAt = DateTimeOffset.TryParse(
             intent.IssuedAt,
@@ -128,7 +139,7 @@ internal static class AetheriaBrowserEveCommandIngress
                 commandId),
             payload,
             issuedAt,
-            request.SourceRuntimeId!,
+            establishedRuntimeId,
             intent.CommandBoundary,
             intent.ReceiptSchema);
     }

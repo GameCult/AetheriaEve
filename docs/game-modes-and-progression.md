@@ -345,10 +345,12 @@ delegated envelope; the local client-facing receipt restores the original
 invocation hash. The router rejects a same-ID receipt for either a different
 local payload or a different delegated envelope before re-enveloping it.
 
-The public CultMesh document boundary is command-only. It decodes the registered
-typed `EveSurfaceCommandRequest`, requires the exact command record key, and
-binds `ClientId` to the runtime identity established for that transport session;
-it cannot apply arbitrary raw document puts to Hangar, draft, run, or policy
+The public CultMesh boundary is command-only. Both registered document-put and
+operation-request ingress decode a typed `EveSurfaceCommandRequest` and bind
+`ClientId` to the runtime identity established for that transport session. The
+message `SourceRuntimeId` is only a consistency assertion; it cannot select a
+seat, impersonate the host, or become canonical command provenance. No public
+path can apply arbitrary raw document puts to Hangar, draft, run, or policy
 state. Admission durably binds command ID and payload hash to the provider-owned
 Verse, exact authority runtime, and progression-source revision resolved from
 the referenced Eve surface; client payload strings are consistency hints, not

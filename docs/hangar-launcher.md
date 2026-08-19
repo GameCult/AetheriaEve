@@ -147,6 +147,9 @@ gameplay-state writer.
 - accepted receipt contains a loadout snapshot, not a mutable reference to the
   saved template;
 - all three modes pass through the same admission primitive;
+- browser, Unity, and headless Eve commands require an established CultMesh
+  session identity before journaling; outer and inner caller IDs must match it,
+  and the journal derives `ClientId` from that established identity;
 - Arena deployment, active session, and authority policy carry the same
   nonempty policy id; one daemon-owned roster survives reopen, Continue cannot
   steal a seat, and the Hangar `Join Arena` command assigns an authenticated

@@ -1170,7 +1170,11 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
         });
         return Task.CompletedTask;
     });
-    AetheriaBrowserEveCommandIngress.Register(server, node, options);
+    AetheriaBrowserEveCommandIngress.Register(
+        server,
+        node,
+        options,
+        peer => sessionIdentity.TryGetSourceRuntimeId(peer, out var runtimeId) ? runtimeId : null);
     server.OnCultNet<CultNetSnapshotRequestMessage>(async (request, peer) =>
     {
         try

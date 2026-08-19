@@ -6,7 +6,9 @@ using GameCult.Caching;
 using GameCult.Eve.PluginFields;
 using GameCult.Eve.Surface;
 using GameCult.Mesh;
+using GameCult.Networking;
 using MessagePack;
+using MessagePack.Resolvers;
 using System.Globalization;
 
 try
@@ -122,6 +124,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         RunCheck(FailedPostGenerationStepRollsBackTheWholeDeployment);
         RunCheck(RemoteHangarReceiptMustFinalizeThePinnedEnvelope);
         RunCheck(NewerHangarMutationDiscardsPreparedOlderProjection);
+        RunCheck(BrowserOperationIngressRequiresEstablishedPeerIdentity);
     }
 
     private static void HangarProjectionRoundTripsAsOneGeneration()
@@ -1010,6 +1013,105 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     envelope.ProgressionSourceRevision == 0 &&
                     envelope.ProgressionAuthorityRuntimeId == "daemon-smoke",
                 "the immutable Hangar command envelope must retain the progression target that authored the request");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void BrowserOperationIngressRequiresEstablishedPeerIdentity()
+    {
+        const string daemonId = "daemon:operation-ingress";
+        const string seatA = "pilot:seat-a";
+        const string seatB = "pilot:seat-b";
+        var root = Path.Combine(Path.GetTempPath(), $"aetheria-operation-identity-{Guid.NewGuid():N}");
+        var statePath = Path.Combine(root, "aetheria.cc");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var node = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
+            var server = new OperationIngressTestServer();
+            var peer = new OperationIngressTestPeer();
+            using var sessionIdentity = new CultMeshSessionIdentityServer(
+                server,
+                daemonId,
+                ["verse:operation-ingress"],
+                [CultMeshProtocols.Documents.Value],
+                ["route:test"]);
+            AetheriaBrowserEveCommandIngress.Register(
+                server,
+                node,
+                new AetheriaDaemonHostOptions { DaemonId = daemonId },
+                candidate => sessionIdentity.TryGetSourceRuntimeId(candidate, out var runtimeId) ? runtimeId : null);
+
+            CultNetOperationRequestMessage Request(string commandId, string assertedRuntimeId)
+            {
+                var intent = new AetheriaBrowserEveCommandIngress.BrowserEveCommandIntent
+                {
+                    Type = "eve.command",
+                    Schema = EveSurfaceCommandRequest.SchemaId,
+                    ProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
+                    SurfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
+                    Command = AetheriaRuntimeHangarCommands.SelectTerminus,
+                    CommandBoundary = "receipt",
+                    ReceiptSchema = EveCommandReceiptDocument.SchemaId,
+                    Payload = new Dictionary<string, object?>
+                    {
+                        ["mode"] = AetheriaGameModes.Terminus
+                    },
+                    IssuedAt = "2026-08-19T00:00:00Z",
+                    ClientId = assertedRuntimeId
+                };
+                return new CultNetOperationRequestMessage
+                {
+                    MessageId = commandId,
+                    ServiceId = AetheriaBrowserEveCommandIngress.ServiceId,
+                    Operation = intent.Command,
+                    PayloadSchema = EveSurfaceCommandRequest.SchemaId,
+                    PayloadEncoding = "messagepack-base64",
+                    Payload = Convert.ToBase64String(MessagePackSerializer.Serialize(
+                        intent,
+                        MessagePackSerializerOptions.Standard.WithResolver(ContractlessStandardResolver.Instance))),
+                    SourceRuntimeId = assertedRuntimeId,
+                    TargetRuntimeId = daemonId
+                };
+            }
+
+            EveSurfaceCommandRequest? Queued(string commandId) =>
+                node.MutableDocument<EveSurfaceCommandRequest>(new CultRecordKey(
+                        $"eve:command-invocations:{AetheriaRuntimeVerseRecordKeys.StableToken(commandId)}"))
+                    .ReadAsync().GetAwaiter().GetResult();
+
+            server.DispatchAsync(Request("preauth", seatA), peer).GetAwaiter().GetResult();
+            Require(peer.LastResponse?.Status == "denied" && Queued("preauth") == null,
+                "operation ingress must reject and avoid journaling commands before session identity is established");
+
+            server.DispatchAsync(new CultMeshSessionOpenMessage
+            {
+                MessageId = "session-open-a",
+                SourceRuntimeId = seatA,
+                VerseId = "verse:operation-ingress",
+                AuthorityRuntimeId = daemonId,
+                ProtocolId = CultMeshProtocols.Documents.Value,
+                RouteGeneration = "route:test",
+                ClientNonce = Convert.ToBase64String(new byte[32])
+            }, peer).GetAwaiter().GetResult();
+            Require(peer.LastSessionAcceptance?.Accepted == true,
+                "the operation-ingress smoke must establish the peer through the real CultMesh session identity owner");
+
+            server.DispatchAsync(Request("seat-spoof", seatB), peer).GetAwaiter().GetResult();
+            Require(peer.LastResponse?.Status == "denied" && Queued("seat-spoof") == null,
+                "an established Arena controller must not impersonate another seat through SourceRuntimeId");
+
+            server.DispatchAsync(Request("host-spoof", daemonId), peer).GetAwaiter().GetResult();
+            Require(peer.LastResponse?.Status == "denied" && Queued("host-spoof") == null,
+                "an established Arena controller must not impersonate the daemon host through operation ingress");
+
+            server.DispatchAsync(Request("seat-valid", seatA), peer).GetAwaiter().GetResult();
+            var accepted = Queued("seat-valid");
+            Require(peer.LastResponse?.Status == "queued" && accepted?.ClientId == seatA,
+                "operation ingress must journal the established runtime identity for a matching request");
         }
         finally
         {
@@ -11153,6 +11255,39 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private sealed class OperationIngressTestServer : ICultNetSchemaServer
+    {
+        private readonly Dictionary<Type, Delegate> _handlers = new();
+
+        public void OnCultNet<TMessage>(Func<TMessage, ICultNetSchemaServerPeer, Task> callback)
+            where TMessage : ICultNetSchemaMessage => _handlers[typeof(TMessage)] = callback;
+
+        public void RemoveCultNetMessageListener<TMessage>(Delegate callback)
+            where TMessage : ICultNetSchemaMessage
+        {
+            if (_handlers.TryGetValue(typeof(TMessage), out var current) && current == callback)
+                _handlers.Remove(typeof(TMessage));
+        }
+
+        public Task DispatchAsync<TMessage>(TMessage message, ICultNetSchemaServerPeer peer)
+            where TMessage : ICultNetSchemaMessage =>
+            ((Func<TMessage, ICultNetSchemaServerPeer, Task>)_handlers[typeof(TMessage)])(message, peer);
+    }
+
+    private sealed class OperationIngressTestPeer : ICultNetSchemaServerPeer
+    {
+        public CultNetOperationResponseMessage? LastResponse { get; private set; }
+        public CultMeshSessionAcceptedMessage? LastSessionAcceptance { get; private set; }
+
+        public void SendCultNet<TMessage>(TMessage message) where TMessage : ICultNetSchemaMessage
+        {
+            if (message is CultNetOperationResponseMessage response)
+                LastResponse = response;
+            else if (message is CultMeshSessionAcceptedMessage accepted)
+                LastSessionAcceptance = accepted;
         }
     }
 

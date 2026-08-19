@@ -11,8 +11,11 @@ Date: 2026-06-13
 > root Unity migration are historical evidence, not current mechanism.
 
 > Hangar authority correction, 2026-08-18: the daemon's public document plane
-> accepts registered typed Eve command intents only and binds their client ID to
-> the established transport session; arbitrary document puts cannot write
+> accepts registered typed Eve command intents only. Both document-put and
+> operation-request ingress bind their client ID to the established transport
+> session; wire `SourceRuntimeId` fields are assertions rather than identity
+> owners. An unauthenticated peer or a seat/host impersonation attempt cannot
+> enter the command journal. Arbitrary document puts cannot write
 > Hangar, draft, run, or policy state. The Hangar admission owner plans against a
 > clone, generates the run, then submits Hangar state, immutable
 > Deployment/loadout snapshot, receipt-owned run ID/record key, run state, and
