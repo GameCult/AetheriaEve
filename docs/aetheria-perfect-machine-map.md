@@ -55,7 +55,7 @@ Date: 2026-06-13
 > selected manifest generation until a reader has hydrated every referenced
 > page. Observer callbacks run only after that read lease is released.
 > `ActiveRunKey` is derived, and stale daemon frames cannot replace the
-> session-owned run identity. Every non-selector Hangar control carries its
+> session-owned run identity. Every Hangar control, including the Verse selector, carries its
 > provider-issued Eve surface version plus Verse, supplying authority, and
 > source-revision hints. Admission resolves the canonical tuple from the
 > daemon's stored Hangar projection and rejects stale references or altered

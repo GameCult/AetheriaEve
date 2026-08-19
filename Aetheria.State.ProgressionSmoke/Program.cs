@@ -168,11 +168,25 @@ try
         var localHangarBeforeRemote = await client.ReadAsync<AetheriaHangarState>(
             localTarget,
             AetheriaStateNode.HangarKey.ToString());
+        var selectorSurface = await ReadUntilAsync(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.HangarSurface.ToString(),
+            (EveSurfaceDocument surface) =>
+                surface.Version > initialSurface.Version &&
+                Find(surface.Surface.Root, "aetheria.hangar.verse").Props["value"] == AetheriaProgressionSources.Local,
+            TimeSpan.FromSeconds(5));
+        const string staleSelectorCommandId = "progression-smoke-stale-selector";
+        var staleSelectorRequest = CreateRequest(
+            selectorSurface,
+            AetheriaRuntimeHangarCommands.SelectVerse,
+            new Dictionary<string, string> { ["value"] = remoteVerse },
+            staleSelectorCommandId);
 
         await SubmitAsync(
             client,
             localTarget,
-            initialSurface,
+            selectorSurface,
             AetheriaRuntimeHangarCommands.SelectVerse,
             new Dictionary<string, string> { ["value"] = remoteVerse });
         await ReadUntilAsync(
@@ -338,6 +352,22 @@ try
             (EveSurfaceDocument surface) =>
                 Find(surface.Surface.Root, "aetheria.hangar.verse").Props["value"] == AetheriaProgressionSources.Local,
             TimeSpan.FromSeconds(5));
+        await client.SubmitDocumentAsync(
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.EveCommandRecordPrefix + ":" + staleSelectorCommandId,
+            staleSelectorRequest,
+            "progression-verse-smoke",
+            "headless-smoke");
+        await Task.Delay(500);
+        await RequireMissingAsync<AetheriaHangarCommandEnvelopeDocument>(
+            client,
+            localTarget,
+            AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope(staleSelectorCommandId).ToString());
+        var sourceAfterStaleSelector = await client.ReadAsync<AetheriaProgressionSourceDocument>(
+            localTarget,
+            AetheriaStateNode.ProgressionSourceKey.ToString());
+        Require(sourceAfterStaleSelector.SelectedVerseId == AetheriaProgressionSources.Local,
+            "A delayed Verse selector from an obsolete Eve projection must not change progression authority.");
         await SubmitAsync(
             client,
             localTarget,
@@ -684,24 +714,31 @@ static async Task<EveCommandReceiptDocument> SubmitAsync(
     string command,
     IReadOnlyDictionary<string, string> payload)
 {
+    return await SubmitRequestAsync(client, target, CreateRequest(surface, command, payload));
+}
+
+static EveSurfaceCommandRequest CreateRequest(
+    EveSurfaceDocument surface,
+    string command,
+    IReadOnlyDictionary<string, string> payload,
+    string? commandId = null)
+{
     var commandPayload = new Dictionary<string, string>(payload, StringComparer.Ordinal);
-    if (!string.Equals(command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal) &&
-        string.Equals(surface.Surface.Id, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal))
+    if (string.Equals(surface.Surface.Id, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal))
     {
         foreach (var field in TargetedPayload(surface))
             commandPayload[field.Key] = field.Value;
     }
     var operation = CultMesh.OperationInvocation(
         surface.Commands.Single(template => template.Command == command).Operation,
-        idempotencyKey: "progression-verse-smoke-" + Guid.NewGuid().ToString("N"));
-    var request = new EveSurfaceCommandRequest(
+        idempotencyKey: commandId ?? "progression-verse-smoke-" + Guid.NewGuid().ToString("N"));
+    return new EveSurfaceCommandRequest(
         surface.ProviderId,
         surface.Surface.Id,
         operation,
         CultMesh.OperationPayload(commandPayload),
         DateTimeOffset.UtcNow,
         "progression-verse-smoke");
-    return await SubmitRequestAsync(client, target, request);
 }
 
 static CultMeshOperationPayload TargetedPayload(EveSurfaceDocument surface)

@@ -5234,7 +5234,7 @@ public static class AetheriaHangarCommandJournal
         string localVerseId,
         string localAuthorityRuntimeId)
     {
-        if (!RequiresProgressionTarget(request))
+        if (!IsHangarInvocation(request))
             return ProgressionTarget.None;
 
         var requestedVerseId = Payload(request, AetheriaRuntimeHangarCommands.ExpectedProgressionVerseId).Trim();
@@ -5248,6 +5248,8 @@ public static class AetheriaHangarCommandJournal
 
         if (request.Delegation != null)
         {
+            if (string.Equals(request.Command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal))
+                throw new InvalidOperationException("Verse selection is local to the routing Hangar and cannot be delegated.");
             if (!string.Equals(requestedVerseId, localVerseId, StringComparison.Ordinal) ||
                 !string.Equals(requestedAuthorityRuntimeId, localAuthorityRuntimeId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Delegated Hangar command does not target this Verse authority.");
@@ -5274,15 +5276,37 @@ public static class AetheriaHangarCommandJournal
             !string.Equals(requestedAuthorityRuntimeId, authorityRuntimeId, StringComparison.Ordinal) ||
             requestedSourceRevision != sourceRevision)
             throw new InvalidOperationException("Hangar command progression hints do not match the provider-owned Eve projection.");
+        if (string.Equals(request.Command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal))
+        {
+            var selectedVerseId = Payload(request, "value").Trim();
+            var selector = FindComponent(root, "aetheria.hangar.verse")
+                ?? throw new InvalidOperationException("The canonical Hangar Eve surface has no Verse selector.");
+            if (!(selector.Children ?? Array.Empty<EveSurfaceComponent>()).Any(option =>
+                    string.Equals(Prop(option, "value"), selectedVerseId, StringComparison.Ordinal)))
+                throw new InvalidOperationException("The requested progression Verse was not offered by the canonical Hangar Eve projection.");
+            return ProgressionTarget.None;
+        }
         return new ProgressionTarget(verseId, authorityRuntimeId, sourceRevision);
     }
 
     private static string Prop(EveSurfaceComponent component, string key) =>
         component.Props.TryGetValue(key, out var value) ? value ?? "" : "";
 
-    private static bool RequiresProgressionTarget(EveSurfaceCommandRequest request) =>
-        string.Equals(request.SurfaceId, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal) &&
-        !string.Equals(request.Command, AetheriaRuntimeHangarCommands.SelectVerse, StringComparison.Ordinal);
+    private static EveSurfaceComponent? FindComponent(EveSurfaceComponent component, string id)
+    {
+        if (string.Equals(component.Id, id, StringComparison.Ordinal))
+            return component;
+        foreach (var child in component.Children ?? Array.Empty<EveSurfaceComponent>())
+        {
+            var match = FindComponent(child, id);
+            if (match != null)
+                return match;
+        }
+        return null;
+    }
+
+    private static bool IsHangarInvocation(EveSurfaceCommandRequest request) =>
+        string.Equals(request.SurfaceId, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal);
 
     private static string Payload(EveSurfaceCommandRequest request, string key) =>
         request.PayloadFields.TryGetValue(key, out var value)

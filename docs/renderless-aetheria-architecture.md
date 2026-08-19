@@ -143,12 +143,14 @@ sidecars, and hard-coded remote endpoints cannot select progression truth.
 
 The public document plane accepts typed Eve command intents only; transport
 session identity is checked before an intent enters the daemon-owned command
-inbox. Generic raw document puts cannot mutate gameplay or progression. Remote
+inbox. Generic raw document puts cannot mutate gameplay or progression.
 Hangar controls stamp their provider-issued Eve surface version plus Verse,
 exact supplying authority runtime, and source-revision hints into every
-non-selector command. Admission resolves the tuple from the daemon's canonical
+command, including Verse selection. Admission resolves the tuple from the daemon's canonical
 stored projection and rejects a stale reference or altered hint; payload fields
-cannot select the route. The immutable journal owns that target from admission onward; route resolution
+cannot select the route. Verse selection validates the projection but remains
+local to the routing Hangar and is never delegated. The immutable journal owns
+the target of other commands from admission onward; route resolution
 verifies the named authority and adds the Odin route set without consulting the
 dropdown or choosing a sibling authority. The target Verse's own daemon
 executes the command locally instead of recursively forwarding it. Retries do

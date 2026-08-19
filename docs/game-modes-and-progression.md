@@ -242,11 +242,13 @@ simulation tick. The first attempt commits only the immutable route pin. A
 remote receipt later enters one short finality transaction with the local
 receipt and inbox deletion. Timeout leaves that request pending without
 blocking local commands, ticks, or other state writers.
-Every non-selector Hangar control and inventory-drop target carries a
+Every Hangar control and inventory-drop target, including the Verse selector, carries a
 provider-issued Hangar surface version plus Verse, authority, and source-revision
 hints. Admission resolves the canonical tuple from the daemon's stored Eve
 projection, rejects stale versions or altered hints, and only then preserves
-that provider-owned binding in the immutable command journal.
+that provider-owned binding in the immutable command journal. Verse selection
+validates the same projection but remains a local routing operation; it cannot
+be delegated to the selected progression Verse.
 Classification and route creation read that envelope, never the dropdown's
 current value. A command targeting `Local` executes against the routing
 daemon's local store; a command targeting the daemon's own Verse executes

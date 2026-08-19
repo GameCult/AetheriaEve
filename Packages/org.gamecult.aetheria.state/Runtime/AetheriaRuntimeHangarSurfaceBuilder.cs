@@ -85,7 +85,7 @@ namespace GameCult.Aetheria.State.Verse
                 {
                     Component("aetheria.hangar.launcher", "row", Props(), new[]
                     {
-                        VerseSelect(progressionSource),
+                        VerseSelect(progressionSource, progressionAuthorityRuntimeId ?? "", version),
                         Button("aetheria.hangar.mode.terminus", "TERMINUS", AetheriaRuntimeHangarCommands.SelectTerminus, progressionSource, progressionAuthorityRuntimeId, version,
                             ("selected", (mode == AetheriaGameModes.Terminus).ToString().ToLowerInvariant())),
                         Button("aetheria.hangar.mode.starbridge", "STARBRIDGE", AetheriaRuntimeHangarCommands.SelectStarbridge, progressionSource, progressionAuthorityRuntimeId, version,
@@ -427,7 +427,10 @@ namespace GameCult.Aetheria.State.Verse
                     hangarSurfaceVersion.ToString(CultureInfo.InvariantCulture))
             };
 
-        private static EveSurfaceComponent VerseSelect(AetheriaProgressionSourceDocument source)
+        private static EveSurfaceComponent VerseSelect(
+            AetheriaProgressionSourceDocument source,
+            string progressionAuthorityRuntimeId,
+            long hangarSurfaceVersion)
         {
             var options = (source.AvailableVerses ?? Array.Empty<AetheriaProgressionVerseOption>())
                 .Where(option => !string.IsNullOrWhiteSpace(option.VerseId))
@@ -447,12 +450,16 @@ namespace GameCult.Aetheria.State.Verse
             return Component(
                 "aetheria.hangar.verse",
                 "control.select",
-                Props(
-                    ("label", "VERSE"),
-                    ("value", string.IsNullOrWhiteSpace(source.SelectedVerseId) ? AetheriaProgressionSources.Local : source.SelectedVerseId),
-                    ("command", AetheriaRuntimeHangarCommands.SelectVerse),
-                    ("status", source.Status ?? ""),
-                    ("diagnostic", source.Diagnostic ?? "")),
+                Props(new[]
+                    {
+                        ("label", "VERSE"),
+                        ("value", string.IsNullOrWhiteSpace(source.SelectedVerseId) ? AetheriaProgressionSources.Local : source.SelectedVerseId),
+                        ("command", AetheriaRuntimeHangarCommands.SelectVerse),
+                        ("status", source.Status ?? ""),
+                        ("diagnostic", source.Diagnostic ?? "")
+                    }
+                    .Concat(TargetPayloadProps(source, progressionAuthorityRuntimeId, hangarSurfaceVersion))
+                    .ToArray()),
                 options);
         }
 
