@@ -20,11 +20,11 @@ $expected = @{
         "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#351f70245bd27552ed1921861ddf36dbef32dcba",
         "351f70245bd27552ed1921861ddf36dbef32dcba")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#039c979e72e1109e220157623ef9c625f88029e0",
-        "039c979e72e1109e220157623ef9c625f88029e0")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#baf9df618eb25e132e0a2e883e68910a66ed25c8",
+        "baf9df618eb25e132e0a2e883e68910a66ed25c8")
     "org.gamecult.eve.unity-uitoolkit" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#039c979e72e1109e220157623ef9c625f88029e0",
-        "039c979e72e1109e220157623ef9c625f88029e0")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#baf9df618eb25e132e0a2e883e68910a66ed25c8",
+        "baf9df618eb25e132e0a2e883e68910a66ed25c8")
 }
 
 foreach ($packageName in $expected.Keys) {
@@ -89,9 +89,9 @@ if ($receiptContractSource -notmatch [regex]::Escape("AuthorityRuntimeId")) {
 
 $scenePackage = Get-ChildItem (Join-Path $ProjectPath "Library/PackageCache") -Directory |
     Where-Object Name -Like "org.gamecult.eve.unity-scene@*" |
-    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.121" } |
+    Where-Object { (Get-Content (Join-Path $_.FullName "package.json") -Raw | ConvertFrom-Json).version -eq "0.3.122" } |
     Select-Object -First 1
-if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.121 package is missing from Library/PackageCache." }
+if (-not $scenePackage) { throw "Resolved Eve Unity scene 0.3.122 package is missing from Library/PackageCache." }
 $advertisedInputSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityAdvertisedInputAction.cs") -Raw
 $inputDriverSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityPlayableWorldInputDriver.cs") -Raw
 $actionBarSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/EveUnityInputActionBar.cs") -Raw
@@ -175,6 +175,12 @@ if (-not $uiToolkitPackage) { throw "Resolved Eve Unity UI Toolkit 0.1.7 package
 $uiToolkitLowererSource = Get-Content (Join-Path $uiToolkitPackage.FullName "Runtime/EveUiToolkitSurfaceLowerer.cs") -Raw
 if ($uiToolkitLowererSource -notmatch 'unity-uitoolkit-.*Guid\.NewGuid') {
     throw "Resolved Eve Unity UI Toolkit commands do not mint invocation-scoped idempotency keys."
+}
+$receiptTransportSource = Get-Content (Join-Path $scenePackage.FullName "Runtime/CultMesh/EveUnityCultMeshLiveProviderTransport.cs") -Raw
+foreach ($requiredReceiptFinality in @("_pendingCommands", "IsTerminalReceiptState", 'string.Equals(state, "pending"')) {
+    if ($receiptTransportSource -notmatch [regex]::Escape($requiredReceiptFinality)) {
+        throw "Resolved Eve Unity scene package is missing receipt finality boundary '$requiredReceiptFinality'."
+    }
 }
 if ($uiToolkitLowererSource -match 'preview\s*==\s*null\s*\|\|\s*!preview\.IsValid') {
     throw "Unity inventory preview is suppressing a provider-owned drop command."

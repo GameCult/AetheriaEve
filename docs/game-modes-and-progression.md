@@ -262,6 +262,10 @@ gestures emit the provider-advertised typed refit operation even when the local
 preview predicts rejection; only the progression authority's receipt accepts
 or denies the mutation.
 
+An Eve `pending` receipt is an observation, not finality. The client retains
+the immutable command, retries, and exact receipt lease until the provider
+publishes a matching terminal `accepted`, `denied`, or `reconciled` receipt.
+
 The public CultMesh document boundary is command-only. It decodes the registered
 typed `EveSurfaceCommandRequest`, requires the exact command record key, and
 binds `ClientId` to the runtime identity established for that transport session;
