@@ -99,8 +99,11 @@ The preview is a standard Eve `world.scene3d` containing one
 catalog by provider, Verse, authority runtime, record, Odin rendezvous routes,
 and exact required asset-catalog version. A lowerer stages the surface and that
 catalog generation as one candidate; a same-provider catalog change cannot
-bypass preload merely because provider identity is unchanged. When progression
-is local, those fields identify the local daemon. When
+bypass preload merely because provider identity is unchanged. Once committed,
+that pinned catalog remains the presentation owner until a newer base surface
+declares another generation. Catalog watches may satisfy an in-flight surface
+candidate, but cannot silently advance a pinned mounted surface. When
+progression is local, those fields identify the local daemon. When
 another Verse is selected, they identify the progression authority that supplied
 the Hangar and catalog; the routing daemon does not re-author remote assets or
 satisfy remote references from a same-named local catalog. The preview carries
