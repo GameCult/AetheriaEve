@@ -203,7 +203,7 @@ foreach ($lifecycleBoundary in @('--lifecycle-pipe', 'NamedPipeClientStream', 'W
     }
 }
 $editorDaemonSource = Get-Content (Join-Path $ProjectPath "Assets/Editor/AetheriaDaemonDevelopmentWindow.cs") -Raw
-foreach ($lifecycleBoundary in @('--lifecycle-pipe', 'NamedPipeClientStream', 'RequestDaemonShutdown', 'LifecyclePipeSessionKey', 'WriteAllLines')) {
+foreach ($lifecycleBoundary in @('--lifecycle-pipe', 'NamedPipeClientStream', 'RequestDaemonShutdown', 'MatchesProcessInstance', 'StartTime.ToUniversalTime().Ticks', 'WriteAllLines')) {
     if ($editorDaemonSource -notmatch [regex]::Escape($lifecycleBoundary)) {
         throw "Unity editor daemon owner is missing reattach-safe lifecycle boundary '$lifecycleBoundary'."
     }

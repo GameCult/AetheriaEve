@@ -168,12 +168,11 @@ namespace Aetheria.Editor
     [InitializeOnLoad]
     internal static class AetheriaDaemonDevelopmentController
     {
-        private const string ProcessIdSessionKey = "Aetheria.DaemonDevelopment.ProcessId";
-        private const string LifecyclePipeSessionKey = "Aetheria.DaemonDevelopment.LifecyclePipe";
         private const string PortPreference = "Aetheria.DaemonDevelopment.Port";
         private static Process _launcher;
         private static Process _daemon;
         private static string _daemonLifecyclePipeName = "";
+        private static long _daemonStartTimeUtcTicks;
         private static bool _restartWhenStopped;
         private static string _pendingClockAction = "";
         private static string _status = "Stopped";
@@ -282,12 +281,21 @@ namespace Aetheria.Editor
             {
                 Debug.LogWarning($"Could not stop Aetheria daemon launcher: {exception.Message}");
             }
+            _launcher?.Dispose();
+            _launcher = null;
             try
             {
                 if (TryRefreshDaemon())
                 {
-                    if (!RequestDaemonShutdown(_daemon, _daemonLifecyclePipeName))
+                    if (!RequestDaemonShutdown(_daemon, _daemonStartTimeUtcTicks, _daemonLifecyclePipeName))
                     {
+                        if (!MatchesProcessInstance(_daemon, _daemonStartTimeUtcTicks))
+                        {
+                            Debug.LogWarning("Discarded a stale Aetheria daemon locator before termination escalation.");
+                            ClearDaemonReference();
+                            TryDelete(PidPath);
+                            return;
+                        }
                         Debug.LogWarning("Aetheria daemon did not checkpoint and exit in time; escalating termination.");
                         _daemon.Kill();
                         daemonStopped = _daemon.WaitForExit(5000);
@@ -299,8 +307,6 @@ namespace Aetheria.Editor
                 daemonStopped = false;
                 Debug.LogWarning($"Could not stop Aetheria daemon: {exception.Message}");
             }
-            _launcher?.Dispose();
-            _launcher = null;
             if (!daemonStopped)
             {
                 _status = $"Stop failed; daemon PID {_daemon?.Id.ToString(CultureInfo.InvariantCulture) ?? "unknown"} is still owned";
@@ -310,9 +316,8 @@ namespace Aetheria.Editor
             }
             _daemon?.Dispose();
             _daemon = null;
-            SessionState.EraseInt(ProcessIdSessionKey);
-            SessionState.EraseString(LifecyclePipeSessionKey);
             _daemonLifecyclePipeName = "";
+            _daemonStartTimeUtcTicks = 0;
             TryDelete(PidPath);
             _status = "Stopped";
             Changed?.Invoke();
@@ -431,15 +436,18 @@ namespace Aetheria.Editor
             try
             {
                 if (_daemon.HasExited) return false;
-                if (string.Equals(_daemon.ProcessName, "Aetheria.State.Daemon", StringComparison.OrdinalIgnoreCase))
-                    return true;
             }
             catch (InvalidOperationException)
             {
+                ClearDaemonReference();
+                return false;
             }
             catch (System.ComponentModel.Win32Exception)
             {
+                ClearDaemonReference();
+                return false;
             }
+            if (MatchesProcessInstance(_daemon, _daemonStartTimeUtcTicks)) return true;
 
             ClearDaemonReference();
             return false;
@@ -449,9 +457,9 @@ namespace Aetheria.Editor
         {
             _daemon?.Dispose();
             _daemon = null;
-            SessionState.EraseInt(ProcessIdSessionKey);
-            SessionState.EraseString(LifecyclePipeSessionKey);
             _daemonLifecyclePipeName = "";
+            _daemonStartTimeUtcTicks = 0;
+            TryDelete(PidPath);
         }
 
         private static bool TryTakeDaemonExit(out int exitCode)
@@ -480,11 +488,6 @@ namespace Aetheria.Editor
 
         private static void Reattach()
         {
-            var processId = SessionState.GetInt(ProcessIdSessionKey, -1);
-            var lifecyclePipeName = SessionState.GetString(LifecyclePipeSessionKey, "");
-            if (processId > 0 && TryAttach(processId, "Reattached to", lifecyclePipeName)) return;
-            SessionState.EraseInt(ProcessIdSessionKey);
-            SessionState.EraseString(LifecyclePipeSessionKey);
             TryAttachPidFile();
         }
 
@@ -495,11 +498,16 @@ namespace Aetheria.Editor
                 if (!File.Exists(PidPath))
                     return;
                 var locator = File.ReadAllLines(PidPath);
-                if (locator.Length < 2 ||
+                if (locator.Length < 3 ||
                     !int.TryParse(locator[0].Trim(), out var processId) ||
-                    string.IsNullOrWhiteSpace(locator[1]))
+                    !long.TryParse(locator[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var startTimeUtcTicks) ||
+                    string.IsNullOrWhiteSpace(locator[2]))
+                {
+                    TryDelete(PidPath);
                     return;
-                TryAttach(processId, "Attached to", locator[1].Trim());
+                }
+                if (!TryAttach(processId, startTimeUtcTicks, "Attached to", locator[2].Trim()))
+                    TryDelete(PidPath);
             }
             catch (IOException)
             {
@@ -507,13 +515,16 @@ namespace Aetheria.Editor
             }
         }
 
-        private static bool TryAttach(int processId, string statusPrefix, string lifecyclePipeName)
+        private static bool TryAttach(
+            int processId,
+            long startTimeUtcTicks,
+            string statusPrefix,
+            string lifecyclePipeName)
         {
             try
             {
                 var process = Process.GetProcessById(processId);
-                if (process.HasExited ||
-                    !string.Equals(process.ProcessName, "Aetheria.State.Daemon", StringComparison.OrdinalIgnoreCase))
+                if (!MatchesProcessInstance(process, startTimeUtcTicks))
                 {
                     process.Dispose();
                     return false;
@@ -522,8 +533,7 @@ namespace Aetheria.Editor
                 _daemon?.Dispose();
                 _daemon = process;
                 _daemonLifecyclePipeName = lifecyclePipeName;
-                SessionState.SetInt(ProcessIdSessionKey, processId);
-                SessionState.SetString(LifecyclePipeSessionKey, lifecyclePipeName);
+                _daemonStartTimeUtcTicks = startTimeUtcTicks;
                 _status = $"{statusPrefix} Debug daemon (PID {processId})";
                 Changed?.Invoke();
                 return true;
@@ -620,12 +630,12 @@ namespace Aetheria.Editor
             _daemon?.Dispose();
             _daemon = daemon;
             _daemonLifecyclePipeName = lifecyclePipeName;
-            SessionState.SetInt(ProcessIdSessionKey, daemon.Id);
-            SessionState.SetString(LifecyclePipeSessionKey, lifecyclePipeName);
+            _daemonStartTimeUtcTicks = daemon.StartTime.ToUniversalTime().Ticks;
             var temporaryPidPath = PidPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             File.WriteAllLines(temporaryPidPath, new[]
             {
                 daemon.Id.ToString(CultureInfo.InvariantCulture),
+                _daemonStartTimeUtcTicks.ToString(CultureInfo.InvariantCulture),
                 lifecyclePipeName
             });
             if (File.Exists(PidPath)) File.Delete(PidPath);
@@ -634,9 +644,10 @@ namespace Aetheria.Editor
             Changed?.Invoke();
         }
 
-        private static bool RequestDaemonShutdown(Process daemon, string pipeName)
+        private static bool RequestDaemonShutdown(Process daemon, long startTimeUtcTicks, string pipeName)
         {
             if (daemon == null || daemon.HasExited) return true;
+            if (!MatchesProcessInstance(daemon, startTimeUtcTicks)) return false;
             if (string.IsNullOrWhiteSpace(pipeName)) return false;
             try
             {
@@ -658,6 +669,29 @@ namespace Aetheria.Editor
             {
                 Debug.LogWarning($"Could not request graceful Aetheria daemon shutdown: {exception.Message}");
                 return daemon.HasExited;
+            }
+        }
+
+        private static bool MatchesProcessInstance(Process process, long startTimeUtcTicks)
+        {
+            if (process == null || startTimeUtcTicks <= 0) return false;
+            try
+            {
+                return !process.HasExited &&
+                       string.Equals(process.ProcessName, "Aetheria.State.Daemon", StringComparison.OrdinalIgnoreCase) &&
+                       process.StartTime.ToUniversalTime().Ticks == startTimeUtcTicks;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                return false;
             }
         }
 

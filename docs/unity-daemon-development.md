@@ -51,11 +51,13 @@ Mode a lifecycle authority.
 A launcher that owns the daemon process requests `shutdown` and waits for exit
 before escalating to process termination. Attached parents may use standard
 input; Unity launchers use a current-user-only named lifecycle pipe. The editor
-persists that pipe locator beside the PID so domain reload and PID reattachment
-retain the same stop authority. The daemon checkpoints the latest authoritative
-frame even while a playable subscription remains active. Ctrl+C, standard input,
-and the lifecycle pipe converge before that checkpoint; process killing is
-failure recovery, not the ordinary persistence mechanism.
+persists one atomic process locator containing PID, process start time, and pipe
+name, so domain reload and PID reattachment retain the same stop authority
+without treating a recycled PID or matching executable name as ownership. The
+daemon checkpoints the latest authoritative frame even while a playable
+subscription remains active. Ctrl+C, standard input, and the lifecycle pipe
+converge before that checkpoint; process killing is failure recovery, not the
+ordinary persistence mechanism.
 
 The editor connects through the daemon's `cultnet+tcp` control endpoint. The
 advertised session then selects the dedicated content and QUIC realtime planes;
