@@ -70,6 +70,7 @@ namespace GameCult.Aetheria.State.Verse
         // Admission lower bound and diagnostic only. The live dequeue frame owns execution.
         [Key(9)] public long GameplayFrameId { get; set; } = -1;
         [Key(10)] public string GameplaySurfaceId { get; set; } = "";
+        [Key(11)] public string GameplayRunRecordKey { get; set; } = "";
     }
 
     [CultDocument("gamecult.aetheria.progression_command_route", "gamecult.aetheria.progression_command_route.v1")]

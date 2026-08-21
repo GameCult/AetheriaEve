@@ -178,13 +178,16 @@ The authority policy differs without changing the document model:
   until the QUIC path can identify and filter each receiving controller; local
   headless and rendered clients consume the same authenticated document/body
   boundary meanwhile.
-  The public gameplay journal pins the admitted session, run, and surface in
-  one immutable envelope. Its admitted frame is a lower bound and diagnostic,
+  The public gameplay journal pins the admitted session, run id, run-record key,
+  and surface in one immutable envelope. Its admitted frame is a lower bound and diagnostic,
   not an equality lock: the live tick/dequeue frame owns command translation
   and may advance normally within that session/run. The periodically persisted
   frame is presentation/checkpoint state and never decides input finality. A
   queued operation targeting a predecessor session/run, another surface, or a
   regressed frame receives a stale-generation denial instead of being rebound.
+  Translation then stamps the exact live `{session, run, frame}` tuple, and one
+  shared pre-policy gate applies it to Terminus, Arena, and Starbridge. Neither
+  daemon-host provenance nor a valid controller seat bypasses that gate.
   At projection and ingress the daemon resolves that stable identity against
   the canonical run to obtain the entity's current zone/index key. Movement,
   zone transfer, compaction, and restart therefore cannot transfer a seat when

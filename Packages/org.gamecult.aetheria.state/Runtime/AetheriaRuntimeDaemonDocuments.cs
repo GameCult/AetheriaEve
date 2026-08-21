@@ -854,6 +854,9 @@ namespace GameCult.Aetheria.State.Verse
         [Key(31)]
         public AetheriaRuntimeTradeSaleCommand TradeSale { get; set; } = new AetheriaRuntimeTradeSaleCommand();
 
+        [Key(32)]
+        public string RunId { get; set; } = "";
+
         public static AetheriaRuntimeDaemonCommandDocument Create(
             AetheriaRuntimeDaemonCommandKinds kind,
             string clientId,

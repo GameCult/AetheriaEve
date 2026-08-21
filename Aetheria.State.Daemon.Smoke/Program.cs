@@ -610,6 +610,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     CurrentEntityKey = AetheriaRuntimeRunCheckpointCommit.EntityRecordKey("arena-admission-smoke", 0, 0),
                     Zones = [new AetheriaRuntimeZoneSnapshotCommit { ZoneIndex = 0, Entities = [admissionEntity] }]
                 };
+                const long arenaAdmissionFrameId = 1;
                 var hostCommand = new AetheriaRuntimeDaemonCommandDocument
                 {
                     CommandId = "arena-host",
@@ -617,6 +618,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ClientId = "daemon-smoke",
                     AuthorRuntimeId = "daemon-smoke",
                     SessionId = arenaSession.SessionId,
+                    RunId = arenaSession.RunId,
+                    ObservedFrameId = arenaAdmissionFrameId,
                     ActorEntityKey = arenaAdmissionRun.CurrentEntityKey
                 };
                 var remoteCommand = new AetheriaRuntimeDaemonCommandDocument
@@ -626,6 +629,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ClientId = "pilot-runtime",
                     AuthorRuntimeId = "pilot-runtime",
                     SessionId = arenaSession.SessionId,
+                    RunId = arenaSession.RunId,
+                    ObservedFrameId = arenaAdmissionFrameId,
                     ActorEntityKey = arenaAdmissionRun.CurrentEntityKey
                 };
                 var remoteAdmission = AetheriaRuntimeArenaOperationAdmission.Authorize(
@@ -633,6 +638,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     arenaSession.Mode,
                     arenaSession.SessionId,
                     arenaSession.RunId,
+                    arenaAdmissionFrameId,
                     arenaSession.ModePolicyId,
                     arenaPolicy,
                     arenaAdmissionRun,
@@ -642,6 +648,55 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         AetheriaRuntimeAuthorityRouter.Authorize(remoteCommand, arenaPolicy, [], "daemon-smoke").Reason == "host-authority-required" &&
                         remoteAdmission.Authorized,
                     "Arena must keep fact authority on the host while admitting a bound controller operation");
+                var staleHostCommand = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
+                    MessagePackSerializer.Serialize(hostCommand));
+                staleHostCommand.CommandId = "arena-stale-host";
+                staleHostCommand.ObservedFrameId--;
+                var staleRemoteCommand = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
+                    MessagePackSerializer.Serialize(remoteCommand));
+                staleRemoteCommand.CommandId = "arena-stale-remote";
+                staleRemoteCommand.ObservedFrameId--;
+                var predecessorRunCommand = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
+                    MessagePackSerializer.Serialize(remoteCommand));
+                predecessorRunCommand.CommandId = "arena-predecessor-run";
+                predecessorRunCommand.RunId = "run:previous-arena";
+                var generationRejected = new List<string>();
+                var currentGeneration = AetheriaGameplayOperationGeneration.SelectCurrent(
+                    [hostCommand, remoteCommand, staleHostCommand, staleRemoteCommand, predecessorRunCommand],
+                    arenaSession.SessionId,
+                    arenaSession.RunId,
+                    arenaAdmissionFrameId,
+                    generationRejected);
+                Require(currentGeneration.Select(command => command.CommandId)
+                            .OrderBy(value => value, StringComparer.Ordinal)
+                            .SequenceEqual(new[] { hostCommand.CommandId, remoteCommand.CommandId }
+                                .OrderBy(value => value, StringComparer.Ordinal)) &&
+                        generationRejected.Contains(staleHostCommand.CommandId) &&
+                        generationRejected.Contains(staleRemoteCommand.CommandId) &&
+                        generationRejected.Contains(predecessorRunCommand.CommandId) &&
+                        AetheriaRuntimeArenaOperationAdmission.Authorize(
+                            staleHostCommand,
+                            arenaSession.Mode,
+                            arenaSession.SessionId,
+                            arenaSession.RunId,
+                            arenaAdmissionFrameId,
+                            arenaSession.ModePolicyId,
+                            arenaPolicy,
+                            arenaAdmissionRun,
+                            arenaRoster,
+                            "daemon-smoke").Reason == "stale-gameplay-generation" &&
+                        AetheriaRuntimeArenaOperationAdmission.Authorize(
+                            staleRemoteCommand,
+                            arenaSession.Mode,
+                            arenaSession.SessionId,
+                            arenaSession.RunId,
+                            arenaAdmissionFrameId,
+                            arenaSession.ModePolicyId,
+                            arenaPolicy,
+                            arenaAdmissionRun,
+                            arenaRoster,
+                            "daemon-smoke").Reason == "stale-gameplay-generation",
+                    "every Arena host/controller operation must match the exact live session, run, and frame before policy admission");
                 var crossActor = new AetheriaRuntimeDaemonCommandDocument
                 {
                     CommandId = "arena-cross-actor",
@@ -649,6 +704,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ClientId = "pilot-runtime",
                     AuthorRuntimeId = "pilot-runtime",
                     SessionId = arenaSession.SessionId,
+                    RunId = arenaSession.RunId,
+                    ObservedFrameId = arenaAdmissionFrameId,
                     ActorEntityKey = "entity:someone-else"
                 };
                 var privileged = new AetheriaRuntimeDaemonCommandDocument
@@ -658,6 +715,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ClientId = "pilot-runtime",
                     AuthorRuntimeId = "pilot-runtime",
                     SessionId = arenaSession.SessionId,
+                    RunId = arenaSession.RunId,
+                    ObservedFrameId = arenaAdmissionFrameId,
                     ActorEntityKey = arenaAdmissionRun.CurrentEntityKey
                 };
                 var unbound = new AetheriaRuntimeDaemonCommandDocument
@@ -667,17 +726,22 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ClientId = "unbound-runtime",
                     AuthorRuntimeId = "unbound-runtime",
                     SessionId = arenaSession.SessionId,
+                    RunId = arenaSession.RunId,
+                    ObservedFrameId = arenaAdmissionFrameId,
                     ActorEntityKey = arenaAdmissionRun.CurrentEntityKey
                 };
                 Require(!AetheriaRuntimeArenaOperationAdmission.Authorize(
                             crossActor, arenaSession.Mode, arenaSession.SessionId, arenaSession.RunId,
+                            arenaAdmissionFrameId,
                             arenaSession.ModePolicyId, arenaPolicy, arenaAdmissionRun, arenaRoster, "daemon-smoke").Authorized &&
                         AetheriaRuntimeArenaOperationAdmission.Authorize(
                             privileged, arenaSession.Mode, arenaSession.SessionId, arenaSession.RunId,
+                            arenaAdmissionFrameId,
                             arenaSession.ModePolicyId, arenaPolicy, arenaAdmissionRun, arenaRoster, "daemon-smoke").Reason ==
                             "arena-controller-operation-not-allowed" &&
                         AetheriaRuntimeArenaOperationAdmission.Authorize(
                             unbound, arenaSession.Mode, arenaSession.SessionId, arenaSession.RunId,
+                            arenaAdmissionFrameId,
                             arenaSession.ModePolicyId, arenaPolicy, arenaAdmissionRun, arenaRoster, "daemon-smoke").Reason ==
                             "arena-controller-seat-required",
                     "Arena controller admission must reject cross-actor, privileged, and unbound operations");
@@ -735,10 +799,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 joinedContact.EntityId = "arena-b-contact-stable";
                 var seatRun = new AetheriaRuntimeRunCheckpointCommit
                 {
-                    RunId = "arena-seat-smoke",
+                    RunId = arenaSession.RunId,
                     GameMode = AetheriaGameModes.Arena,
                     CurrentZoneIndex = 0,
-                    CurrentEntityKey = AetheriaRuntimeRunCheckpointCommit.EntityRecordKey("arena-seat-smoke", 0, 0),
+                    CurrentEntityKey = AetheriaRuntimeRunCheckpointCommit.EntityRecordKey(arenaSession.RunId, 0, 0),
                     Zones =
                     [
                         new AetheriaRuntimeZoneSnapshotCommit
@@ -860,23 +924,26 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     translatedSeatCommand,
                     "aetheria.local");
                 var seatMovement = seatExecution.Intents.Movements.SingleOrDefault();
+                var seatAdmission = AetheriaRuntimeArenaOperationAdmission.Authorize(
+                    translatedSeatCommand,
+                    arenaSession.Mode,
+                    arenaSession.SessionId,
+                    arenaSession.RunId,
+                    seatFrame.FrameId,
+                    arenaSession.ModePolicyId,
+                    arenaPolicy,
+                    seatRun,
+                    arenaRoster,
+                    "daemon-smoke");
                 Require(seatBinding.Authorized &&
                         translatedSeatCommand.ActorEntityKey == initialJoinedEntityKey &&
-                        AetheriaRuntimeArenaOperationAdmission.Authorize(
-                            translatedSeatCommand,
-                            arenaSession.Mode,
-                            arenaSession.SessionId,
-                            arenaSession.RunId,
-                            arenaSession.ModePolicyId,
-                            arenaPolicy,
-                            seatRun,
-                            arenaRoster,
-                            "daemon-smoke").Authorized &&
+                        seatAdmission.Authorized &&
                         seatMovement?.ActorEntityKey == initialJoinedEntityKey &&
                         seatFact.SourceRuntimeId == "daemon-smoke" &&
                         seatFact.ProposedByRuntimeId == "ai-build-b",
                     $"ordinary Arena input must derive the seat actor at ingress and retain daemon fact authority with controller provenance; " +
                     $"bound={seatBinding.Authorized}, actor={translatedSeatCommand.ActorEntityKey}, kind={translatedSeatCommand.Kind}, " +
+                    $"run={translatedSeatCommand.RunId}, observedFrame={translatedSeatCommand.ObservedFrameId}, admission={seatAdmission.Reason}, " +
                     $"direction={translatedSeatCommand.DirectionX},{translatedSeatCommand.DirectionY}, magnitude={translatedSeatCommand.ScalarValue}, " +
                     $"applied={string.Join(',', seatExecution.AppliedCommandIds)}, rejected={string.Join(',', seatExecution.RejectedCommandIds)}, " +
                     $"movement={seatMovement?.ActorEntityKey ?? "none"}");
@@ -1088,6 +1155,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ClientId = "ai-build-b",
                     AuthorRuntimeId = "ai-build-b",
                     SessionId = arenaSession.SessionId,
+                    RunId = arenaSession.RunId,
+                    ObservedFrameId = seatFrame.FrameId,
                     ActorEntityKey = reindexedJoinedEntityKey
                 };
                 Require(AetheriaRuntimeArenaOperationAdmission.Authorize(
@@ -1095,6 +1164,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         arenaSession.Mode,
                         arenaSession.SessionId,
                         arenaSession.RunId,
+                        seatFrame.FrameId,
                         arenaSession.ModePolicyId,
                         arenaPolicy,
                         seatRun,
@@ -1109,6 +1179,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ClientId = "pilot-runtime",
                     AuthorRuntimeId = "pilot-runtime",
                     SessionId = arenaSession.SessionId,
+                    RunId = arenaSession.RunId,
+                    ObservedFrameId = seatFrame.FrameId,
                     ActorEntityKey = movedPrimaryEntityKey,
                     TargetEntityKey = reindexedJoinedEntityKey
                 };
@@ -1117,6 +1189,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         arenaSession.Mode,
                         arenaSession.SessionId,
                         arenaSession.RunId,
+                        seatFrame.FrameId,
                         arenaSession.ModePolicyId,
                         arenaPolicy,
                         seatRun,
@@ -1407,6 +1480,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 .ReadAsync().GetAwaiter().GetResult();
             Require(acceptedEnvelope?.GameplaySessionId == ingressSession.SessionId &&
                     acceptedEnvelope.GameplayRunId == ingressSession.RunId &&
+                    acceptedEnvelope.GameplayRunRecordKey == ingressSession.RunRecordKey &&
                     acceptedEnvelope.GameplayFrameId == ingressFrame.FrameId &&
                     acceptedEnvelope.GameplaySurfaceId == AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
                 "gameplay ingress must pin the authoritative session, run, frame, and surface generation");
@@ -1430,10 +1504,14 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     advancedCommand?.ObservedFrameId == advancedFrame.FrameId,
                 "normal live-frame advance must stamp gameplay input at dequeue instead of rejecting a cached-frame command");
             var dequeueRejected = new List<string>();
-            var dequeued = AetheriaTerminusOperationAdmission.AuthorizedCommands(
+            var dequeueGeneration = AetheriaGameplayOperationGeneration.SelectCurrent(
                 [advancedCommand!],
                 ingressSession.SessionId,
+                ingressSession.RunId,
                 advancedFrame.FrameId,
+                dequeueRejected);
+            var dequeued = AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
+                dequeueGeneration,
                 AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(
                     "verse:operation-ingress", daemonId),
                 [],
@@ -2423,6 +2501,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     }
                     else if (string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
                     {
+                        const long reopenedArenaFrameId = 1;
                         Require(session.ModePolicyId == AetheriaModePolicies.ArenaServerAuthoritative &&
                                 policy.PolicyId == session.ModePolicyId &&
                                 policy.DefaultMode == AetheriaRuntimeAuthorityModes.HostAuthoritative &&
@@ -2432,7 +2511,11 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         {
                             CommandId = "arena-reopen-host",
                             Kind = AetheriaRuntimeDaemonCommandKinds.SetMoveVector,
-                            AuthorRuntimeId = "daemon-smoke"
+                            ClientId = "daemon-smoke",
+                            AuthorRuntimeId = "daemon-smoke",
+                            SessionId = session.SessionId,
+                            RunId = session.RunId,
+                            ObservedFrameId = reopenedArenaFrameId
                         };
                         var remote = new AetheriaRuntimeDaemonCommandDocument
                         {
@@ -2441,6 +2524,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             ClientId = "pilot-runtime",
                             AuthorRuntimeId = "pilot-runtime",
                             SessionId = session.SessionId,
+                            RunId = session.RunId,
+                            ObservedFrameId = reopenedArenaFrameId,
                             ActorEntityKey = session.ControlledEntityKey
                         };
                         var roster = reopened.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
@@ -2473,6 +2558,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                     session.Mode,
                                     session.SessionId,
                                     session.RunId,
+                                    reopenedArenaFrameId,
                                     session.ModePolicyId,
                                     policy,
                                     reopenedRun,

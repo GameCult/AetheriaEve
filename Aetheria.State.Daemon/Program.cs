@@ -644,15 +644,22 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     var starbridgeSession = ingressState.StarbridgeSession;
     var authorityLeases = ingressState.AuthorityLeases;
     var modeKind = AetheriaGameModes.Classify(ingressState.GameMode);
+    var currentGenerationCommands = AetheriaGameplayOperationGeneration.SelectCurrent(
+        pendingObservedCommands,
+        ingressState.SessionId,
+        ingressState.RunId,
+        currentFrame?.FrameId ?? -1,
+        policyRejectedCommandIds);
     IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> authorizedCommands;
     switch (modeKind)
     {
         case AetheriaGameModeKind.Arena:
             authorizedCommands = AetheriaRuntimeArenaOperationAdmission.AuthorizedCommands(
-                pendingObservedCommands,
+                currentGenerationCommands,
                 ingressState.GameMode,
                 ingressState.SessionId,
                 ingressState.RunId,
+                currentFrame?.FrameId ?? -1,
                 ingressState.ModePolicyId,
                 authorityPolicy,
                 run,
@@ -662,7 +669,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
             break;
         case AetheriaGameModeKind.Starbridge:
             authorizedCommands = AdmitStarbridgeOperations(
-                pendingObservedCommands,
+                currentGenerationCommands,
                 ingressState,
                 run,
                 currentFrame?.FrameId ?? -1,
@@ -670,17 +677,15 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
                 policyRejectedCommandIds);
             break;
         case AetheriaGameModeKind.Terminus:
-            authorizedCommands = AetheriaTerminusOperationAdmission.AuthorizedCommands(
-                pendingObservedCommands,
-                ingressState.SessionId,
-                currentFrame?.FrameId ?? -1,
+            authorizedCommands = AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
+                currentGenerationCommands,
                 authorityPolicy,
                 authorityLeases,
                 options.DaemonId,
                 policyRejectedCommandIds);
             break;
         default:
-            policyRejectedCommandIds.AddRange(pendingObservedCommands.Select(command => command.CommandId));
+            policyRejectedCommandIds.AddRange(currentGenerationCommands.Select(command => command.CommandId));
             authorizedCommands = Array.Empty<AetheriaRuntimeDaemonCommandDocument>();
             break;
     }
@@ -6529,7 +6534,8 @@ public static class AetheriaHangarCommandJournal
             GameplaySessionId = gameplayTarget.SessionId,
             GameplayRunId = gameplayTarget.RunId,
             GameplayFrameId = gameplayTarget.FrameId,
-            GameplaySurfaceId = gameplayTarget.SurfaceId
+            GameplaySurfaceId = gameplayTarget.SurfaceId,
+            GameplayRunRecordKey = gameplayTarget.RunRecordKey
         };
 
     private static GameplayTarget ResolveGameplayTarget(
@@ -6545,7 +6551,12 @@ public static class AetheriaHangarCommandJournal
         if (!AetheriaDaemonFrameProvenance.BelongsToSession(liveFrame, session, hostRuntimeId) ||
             !string.Equals(liveFrame!.GameMode, session.Mode, StringComparison.Ordinal))
             throw new InvalidOperationException("Gameplay command requires the active session's authoritative frame.");
-        return new GameplayTarget(session.SessionId, session.RunId, liveFrame.FrameId, request.SurfaceId);
+        return new GameplayTarget(
+            session.SessionId,
+            session.RunId,
+            session.RunRecordKey,
+            liveFrame.FrameId,
+            request.SurfaceId);
     }
 
     private static void ValidateGameplayTarget(
@@ -6563,6 +6574,7 @@ public static class AetheriaHangarCommandJournal
             !string.Equals(liveFrame!.GameMode, session.Mode, StringComparison.Ordinal) ||
             !string.Equals(envelope.GameplaySessionId, session.SessionId, StringComparison.Ordinal) ||
             !string.Equals(envelope.GameplayRunId, session.RunId, StringComparison.Ordinal) ||
+            !string.Equals(envelope.GameplayRunRecordKey, session.RunRecordKey, StringComparison.Ordinal) ||
             envelope.GameplayFrameId < 0 ||
             liveFrame.FrameId < envelope.GameplayFrameId ||
             !string.Equals(envelope.GameplaySurfaceId, request.SurfaceId, StringComparison.Ordinal))
@@ -6679,8 +6691,13 @@ public static class AetheriaHangarCommandJournal
         public static readonly ProgressionTarget None = new("", "", -1);
     }
 
-    private readonly record struct GameplayTarget(string SessionId, string RunId, long FrameId, string SurfaceId)
+    private readonly record struct GameplayTarget(
+        string SessionId,
+        string RunId,
+        string RunRecordKey,
+        long FrameId,
+        string SurfaceId)
     {
-        public static readonly GameplayTarget None = new("", "", -1, "");
+        public static readonly GameplayTarget None = new("", "", "", -1, "");
     }
 }

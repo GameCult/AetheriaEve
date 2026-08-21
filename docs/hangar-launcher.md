@@ -204,15 +204,17 @@ surface and canonical gameplay frame/body.
   provider advertises only the requesting controller's seat. Explicit snapshots,
   subscription snapshots, live subscription updates, and reconnect all use the
   same authenticated per-peer advertisement projector. One mode-aware gameplay
-  exposure resolver distinguishes local-open play, a complete active Arena or
-  Starbridge generation, and an active scoped mode whose session, installed
-  authority policy, seats/roster, or frame disagree. The active form requires
+  exposure resolver distinguishes `HangarOnly`, `TerminusValid`, `ArenaValid`,
+  `StarbridgeValid`, and `ActiveInvalid`. `HangarOnly` is the no-session launcher
+  boundary; `TerminusValid` requires its matching authoritative frame. The
+  scoped active forms require a complete session, authority policy,
+  seats/roster, and frame generation. The active form requires
   the same policy id, host identity,
   and host-authoritative default as command admission. Its frame must also be
   daemon-authored and authoritative, with the exact active session and host
   identities as well as the run identity. That invalid state
-  fails closed for records, subscriptions, bodies, and provider projection; it
-  can never inherit the local-open export boundary. In Starbridge the exact
+  fails closed for gameplay records, subscriptions, bodies, and provider
+  projection; it can never inherit Terminus exposure. In Starbridge the exact
   Commander seat receives the strategic/canonical gameplay records, each Pilot
   receives only public presentation records plus its own seat records/body, and
   an unseated runtime receives no role-private observation. The subscription server owns

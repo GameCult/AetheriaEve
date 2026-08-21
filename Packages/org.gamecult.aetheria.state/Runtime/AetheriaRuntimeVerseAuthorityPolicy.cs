@@ -369,6 +369,7 @@ namespace GameCult.Aetheria.State.Verse
             string gameMode,
             string sessionId,
             string runId,
+            long liveFrameId,
             string modePolicyId,
             AetheriaRuntimeVerseAuthorityPolicyDocument? factPolicy,
             AetheriaRuntimeRunCheckpointCommit? run,
@@ -383,6 +384,13 @@ namespace GameCult.Aetheria.State.Verse
             var proposerRuntimeId = string.IsNullOrWhiteSpace(command.AuthorRuntimeId)
                 ? command.ClientId ?? ""
                 : command.AuthorRuntimeId;
+
+            if (!string.Equals(command.SessionId ?? "", sessionId ?? "", StringComparison.Ordinal) ||
+                !string.Equals(command.RunId ?? "", runId ?? "", StringComparison.Ordinal) ||
+                command.ObservedFrameId != liveFrameId)
+            {
+                return Denied("stale-gameplay-generation", subjectKey, claimKind, proposerRuntimeId, "");
+            }
 
             if (!IsServerAuthorityActive(gameMode, modePolicyId, factPolicy, hostRuntimeId))
             {
@@ -399,8 +407,6 @@ namespace GameCult.Aetheria.State.Verse
             if (string.Equals(proposerRuntimeId, hostRuntimeId ?? "", StringComparison.Ordinal))
                 return Allowed(subjectKey, claimKind, proposerRuntimeId, "arena.host-operation");
 
-            if (!string.Equals(command.SessionId ?? "", sessionId ?? "", StringComparison.Ordinal))
-                return Denied("controller-session-mismatch", subjectKey, claimKind, proposerRuntimeId, "");
             if (string.IsNullOrWhiteSpace(command.ActorEntityKey))
                 return Denied("controller-actor-required", subjectKey, claimKind, proposerRuntimeId, "");
 
@@ -429,6 +435,7 @@ namespace GameCult.Aetheria.State.Verse
             string gameMode,
             string sessionId,
             string runId,
+            long liveFrameId,
             string modePolicyId,
             AetheriaRuntimeVerseAuthorityPolicyDocument? factPolicy,
             AetheriaRuntimeRunCheckpointCommit? run,
@@ -440,7 +447,7 @@ namespace GameCult.Aetheria.State.Verse
             foreach (var command in commands ?? Enumerable.Empty<AetheriaRuntimeDaemonCommandDocument>())
             {
                 var decision = Authorize(
-                    command, gameMode, sessionId, runId, modePolicyId, factPolicy, run, roster, hostRuntimeId);
+                    command, gameMode, sessionId, runId, liveFrameId, modePolicyId, factPolicy, run, roster, hostRuntimeId);
                 if (decision.Authorized)
                     accepted.Add(command);
                 else if (!string.IsNullOrWhiteSpace(command?.CommandId))

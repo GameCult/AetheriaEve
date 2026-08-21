@@ -31,12 +31,14 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeDaemonCommandKinds kind,
             AetheriaRuntimeDaemonFrameDocument? frame)
         {
-            return AetheriaRuntimeDaemonCommandDocument.Create(
+            var command = AetheriaRuntimeDaemonCommandDocument.Create(
                 kind,
                 ClientId,
                 frame?.SessionId ?? SessionId,
                 frame?.FrameId ?? -1,
                 frame?.Run.CurrentEntityKey ?? "");
+            command.RunId = frame?.Run.RunId ?? "";
+            return command;
         }
 
         internal static AetheriaRuntimeDaemonCommandEnvelope ToEnvelope(AetheriaRuntimeDaemonCommandDocument command)
