@@ -192,7 +192,8 @@ internal static class AetheriaArenaExposurePolicy
 
 internal enum AetheriaGameplayExposureKind
 {
-    LocalOpen,
+    HangarOnly,
+    TerminusValid,
     ArenaValid,
     StarbridgeValid,
     ActiveInvalid
@@ -227,21 +228,32 @@ internal sealed class AetheriaGameplayExposureContext
         AetheriaGameplayExposureKind kind,
         AetheriaArenaExposureContext? arena,
         AetheriaStarbridgeExposureContext? starbridge,
-        string mode)
+        string mode,
+        AetheriaGameSessionState? terminusSession = null,
+        AetheriaRuntimeDaemonFrameDocument? terminusFrame = null)
     {
         Kind = kind;
         Arena = arena;
         Starbridge = starbridge;
         Mode = mode ?? "";
+        TerminusSession = terminusSession;
+        TerminusFrame = terminusFrame;
     }
 
     public AetheriaGameplayExposureKind Kind { get; }
     public AetheriaArenaExposureContext? Arena { get; }
     public AetheriaStarbridgeExposureContext? Starbridge { get; }
     public string Mode { get; }
+    public AetheriaGameSessionState? TerminusSession { get; }
+    public AetheriaRuntimeDaemonFrameDocument? TerminusFrame { get; }
 
-    public static AetheriaGameplayExposureContext LocalOpen { get; } =
-        new(AetheriaGameplayExposureKind.LocalOpen, null, null, AetheriaGameModes.Terminus);
+    public static AetheriaGameplayExposureContext HangarOnly { get; } =
+        new(AetheriaGameplayExposureKind.HangarOnly, null, null, "");
+
+    public static AetheriaGameplayExposureContext FromTerminus(
+        AetheriaGameSessionState session,
+        AetheriaRuntimeDaemonFrameDocument frame) =>
+        new(AetheriaGameplayExposureKind.TerminusValid, null, null, AetheriaGameModes.Terminus, session, frame);
 
     public static AetheriaGameplayExposureContext Unsupported(string? mode) =>
         new(AetheriaGameplayExposureKind.ActiveInvalid, null, null, mode ?? "");
@@ -278,10 +290,13 @@ internal static class AetheriaGameplayExposurePolicy
     {
         var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
         if (session == null)
-            return AetheriaGameplayExposureContext.LocalOpen;
+            return AetheriaGameplayExposureContext.HangarOnly;
         var mode = AetheriaGameModes.Classify(session.Mode);
         if (mode == AetheriaGameModeKind.Terminus)
-            return AetheriaGameplayExposureContext.LocalOpen;
+            return AetheriaDaemonFrameProvenance.BelongsToSession(frame, session, hostRuntimeId) &&
+                string.Equals(frame!.GameMode, AetheriaGameModes.Terminus, StringComparison.Ordinal)
+                    ? AetheriaGameplayExposureContext.FromTerminus(session, frame)
+                    : AetheriaGameplayExposureContext.Unsupported(session.Mode);
         if (mode == AetheriaGameModeKind.Arena)
             return AetheriaGameplayExposureContext.FromArena(
                 AetheriaArenaExposurePolicy.Resolve(node, frame, hostRuntimeId));
@@ -321,7 +336,13 @@ internal static class AetheriaGameplayExposurePolicy
     public static string Generation(AetheriaGameplayExposureContext context) =>
         context.Kind switch
         {
-            AetheriaGameplayExposureKind.LocalOpen => "local-open",
+            AetheriaGameplayExposureKind.HangarOnly => "hangar-only",
+            AetheriaGameplayExposureKind.TerminusValid => string.Join(
+                "\u001f",
+                "terminus",
+                context.TerminusSession!.SessionId,
+                context.TerminusSession.RunId,
+                context.TerminusSession.RunRecordKey),
             AetheriaGameplayExposureKind.ArenaValid => "arena\u001f" + AetheriaArenaExposurePolicy.Generation(context.Arena!),
             AetheriaGameplayExposureKind.StarbridgeValid => StarbridgeGeneration("starbridge", context.Starbridge!),
             _ when context.Arena != null => "invalid-arena\u001f" + AetheriaArenaExposurePolicy.Generation(context.Arena),
@@ -350,7 +371,7 @@ internal static class AetheriaGameplayExposurePolicy
             var receipt = node.Cache.Get<GameCult.Eve.Surface.EveCommandReceiptDocument>(new CultRecordKey(recordKey));
             if (receipt == null || context.Kind == AetheriaGameplayExposureKind.ActiveInvalid)
                 return false;
-            if (context.Kind == AetheriaGameplayExposureKind.LocalOpen)
+            if (context.Kind == AetheriaGameplayExposureKind.TerminusValid)
                 return true;
             if (context.Kind == AetheriaGameplayExposureKind.ArenaValid)
             {
@@ -382,7 +403,8 @@ internal static class AetheriaGameplayExposurePolicy
 
         return context.Kind switch
         {
-            AetheriaGameplayExposureKind.LocalOpen => true,
+            AetheriaGameplayExposureKind.HangarOnly => false,
+            AetheriaGameplayExposureKind.TerminusValid => true,
             AetheriaGameplayExposureKind.ActiveInvalid => false,
             AetheriaGameplayExposureKind.ArenaValid => AetheriaRuntimeArenaObservationAdmission.CanReadRecord(
                 establishedRuntimeId, recordKey, context.Arena!.Roster!, context.Arena.Frame!.Run),
@@ -411,7 +433,8 @@ internal static class AetheriaGameplayExposurePolicy
                 node, establishedRuntimeId, recordKey, context, hangarPrincipalRuntimeId)) &&
             (request.BodyIds ?? Array.Empty<string>()).All(bodyId => context.Kind switch
             {
-                AetheriaGameplayExposureKind.LocalOpen => true,
+                AetheriaGameplayExposureKind.HangarOnly => false,
+                AetheriaGameplayExposureKind.TerminusValid => true,
                 AetheriaGameplayExposureKind.ActiveInvalid => false,
                 AetheriaGameplayExposureKind.ArenaValid => AetheriaRuntimeArenaObservationAdmission.CanReadBody(
                     establishedRuntimeId, bodyId, context.Arena!.Roster!, context.Arena.Frame!.Run),

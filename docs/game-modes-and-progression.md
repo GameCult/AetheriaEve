@@ -153,11 +153,14 @@ The authority policy differs without changing the document model:
   configured principal. One authenticated per-peer projector owns provider
   advertisements for direct snapshots, subscription snapshots, live updates,
   and reconnect. Those paths consume one mode-aware resolved exposure context:
-  `LocalOpen`, `ArenaValid`, `StarbridgeValid`, or `ActiveInvalid`. Missing or
+  `HangarOnly`, `TerminusValid`, `ArenaValid`, `StarbridgeValid`, or
+  `ActiveInvalid`. Missing or
   stale seat/roster/frame state, or a missing/mismatched scoped-mode authority policy, is
-  `ActiveInvalid` and exports nothing. `LocalOpen` applies only when no session
-  exists or the active mode is exactly Terminus; corrupt, unknown, and future
-  active modes fail closed until they earn an exposure policy. A valid frame must be authoritative,
+  `ActiveInvalid` and exports no gameplay topology. `HangarOnly` applies when no
+  session exists and retains only the configured principal's launcher/recovery
+  boundary. `TerminusValid` requires an exact Terminus session and its matching
+  authoritative frame; corrupt, unknown, future, and frame-less active modes
+  fail closed until they earn a complete exposure generation. A valid frame must be authoritative,
   daemon-sourced, and match the active host, session, run record, run id, and
   mode; it is never
   treated as ordinary local-open play. The daemon reconciles live subscriptions
@@ -175,6 +178,11 @@ The authority policy differs without changing the document model:
   until the QUIC path can identify and filter each receiving controller; local
   headless and rendered clients consume the same authenticated document/body
   boundary meanwhile.
+  The public gameplay journal pins the admitted session, run, authoritative
+  frame, and surface in one immutable envelope. Consumption and Terminus tick
+  admission require that exact generation; a queued operation targeting an old
+  surface or predecessor frame receives a stale-generation denial instead of
+  being rebound to the current run.
   At projection and ingress the daemon resolves that stable identity against
   the canonical run to obtain the entity's current zone/index key. Movement,
   zone transfer, compaction, and restart therefore cannot transfer a seat when

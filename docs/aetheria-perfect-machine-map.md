@@ -102,17 +102,25 @@ Date: 2026-06-13
 > Direct snapshots and subscriptions share one authenticated per-peer provider
 > advertisement projection; the stored anonymous advertisement is not client truth.
 > One mode-aware gameplay exposure context owns provider projection and
-> record/body admission. `LocalOpen` is ordinary local Terminus play;
+> record/body admission. `HangarOnly` is the no-session launcher boundary;
+> `TerminusValid` is ordinary local Terminus play with an exact authoritative
+> frame;
 > `ArenaValid` and `StarbridgeValid` require exact
 > session/authority-policy/seat-or-roster/frame generations; `ActiveInvalid`
-> exports nothing. No session and exact Terminus are the only `LocalOpen`
-> states; an unknown, corrupt, or future active mode fails closed until it owns
-> an explicit exposure policy. The installed policy must match
+> exports no gameplay topology. The configured Hangar principal retains the
+> Hangar and its envelope-owned receipts as a recovery boundary. An exact
+> Terminus session without its matching frame is `ActiveInvalid`; an unknown,
+> corrupt, or future active mode likewise fails closed until it owns an explicit
+> exposure policy. The installed policy must match
 > `aetheria.mode.arena.server.v1`, host-authoritative default, and the daemon
 > host identity used by command admission. The frame must be authoritative and
 > daemon-sourced, with exact host, session, run-record, run-id, and mode
 > provenance. Seat publication consumes this same
 > resolved context rather than a separately cached roster.
+> Public gameplay ingress records the exact admitted session, run, frame, and
+> surface in the immutable command envelope. Consumption and Terminus tick
+> admission reject that command if any member of the generation has changed;
+> a queued operation can never rebind to a successor run or a stale frame.
 > Missing scoped-mode truth can never widen authority by masquerading as local play.
 > In Starbridge, the exact Commander seat receives strategic/canonical gameplay
 > records; each Pilot receives only its per-seat current-zone frame, Eve

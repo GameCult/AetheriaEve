@@ -603,6 +603,9 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     await AcceptEveCommandsAsync(node, options).ConfigureAwait(false);
     TracePhase("provider-ingress");
     await RefreshControlPlaneInputsAsync(node, ingressState).ConfigureAwait(false);
+    var activeSession = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
+    if (!AetheriaDaemonFrameProvenance.BelongsToSession(currentFrame, activeSession, options.DaemonId))
+        currentFrame = null;
 
     var fixedDeltaSeconds = currentFrame?.FixedDeltaSeconds > 0
         ? currentFrame.FixedDeltaSeconds
@@ -667,8 +670,16 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
                 policyRejectedCommandIds);
             break;
         case AetheriaGameModeKind.Terminus:
+            var terminusCommands = pendingObservedCommands
+                .Where(command => currentFrame != null &&
+                    string.Equals(command.SessionId, ingressState.SessionId, StringComparison.Ordinal) &&
+                    command.ObservedFrameId == currentFrame.FrameId)
+                .ToArray();
+            policyRejectedCommandIds.AddRange(pendingObservedCommands
+                .Where(command => !terminusCommands.Contains(command))
+                .Select(command => command.CommandId));
             authorizedCommands = AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
-                pendingObservedCommands,
+                terminusCommands,
                 authorityPolicy,
                 authorityLeases,
                 options.DaemonId,
@@ -3016,7 +3027,11 @@ static CultNetRawDocumentRecord? ProjectProviderAdvertisementRecord(
         return record;
     if (context.Kind == AetheriaGameplayExposureKind.ActiveInvalid)
         return null;
-    if (context.Kind == AetheriaGameplayExposureKind.LocalOpen)
+    if (context.Kind == AetheriaGameplayExposureKind.HangarOnly)
+        return string.Equals(establishedRuntimeId, options.HangarPrincipalRuntimeId, StringComparison.Ordinal)
+            ? record
+            : null;
+    if (context.Kind == AetheriaGameplayExposureKind.TerminusValid)
         return record;
     var arena = context.Arena;
     var starbridge = context.Starbridge;
@@ -3700,7 +3715,7 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
     CultRecordKey requestRecordKey,
     EveSurfaceCommandRequest request)
 {
-        string payloadHash;
+        var payloadHash = AetheriaHangarCommandJournal.PayloadHash(request);
         try
         {
             payloadHash = await AetheriaHangarCommandJournal.ValidateAsync(
@@ -3712,7 +3727,22 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
         }
         catch (InvalidOperationException error)
         {
-            Console.Error.WriteLine($"Rejected Hangar command envelope '{request.CommandId}': {error.Message}");
+            Console.Error.WriteLine($"Rejected Eve command envelope '{request.CommandId}': {error.Message}");
+            var staleDenied = new EveCommandReceiptDocument(
+                $"receipt:{request.CommandId}:denied",
+                request.CommandId,
+                request.Command,
+                "denied",
+                "Aetheria",
+                options.DaemonId,
+                request.ProviderId,
+                request.SurfaceId,
+                error.Message,
+                DateTimeOffset.UtcNow.ToString("O"),
+                Math.Max(currentFrame?.FrameId ?? 0, 0),
+                invocationHash: payloadHash);
+            await node.Database.PutAsync(
+                AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(staleDenied.CommandId), staleDenied).ConfigureAwait(false);
             await node.Database.DeleteAsync<EveSurfaceCommandRequest>(requestRecordKey).ConfigureAwait(false);
             return false;
         }
@@ -3749,11 +3779,13 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
             return activatedSession;
         }
 
+        var admittedFrame = node.Cache.Get<AetheriaRuntimeDaemonFrameDocument>(
+            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest);
         if (AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
                 request,
-                currentFrame,
+                admittedFrame,
                 request.ClientId,
-                currentFrame?.SessionId ?? options.SessionId,
+                admittedFrame?.SessionId ?? options.SessionId,
                 out var command) && command != null)
         {
             command.CommandId = request.CommandId;
@@ -3767,8 +3799,8 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
                         new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(activeSession!.SessionId)))
                     .ReadAsync().ConfigureAwait(false);
                 var activeRun = AetheriaDaemonFrameProvenance.BelongsToSession(
-                        currentFrame, activeSession, options.DaemonId)
-                    ? currentFrame!.Run
+                        admittedFrame, activeSession, options.DaemonId)
+                    ? admittedFrame!.Run
                     : await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, activeSession.RunRecordKey)
                         .ConfigureAwait(false);
                 var binding = AetheriaRuntimeArenaOperationAdmission.BindAuthenticatedSurfaceActor(
@@ -6427,6 +6459,9 @@ public static class AetheriaHangarCommandJournal
             var progressionTarget = envelope == null
                 ? ResolveProgressionTarget(node, request, localVerseId, localAuthorityRuntimeId)
                 : ProgressionTarget.None;
+            var gameplayTarget = envelope == null
+                ? ResolveGameplayTarget(node, request, localAuthorityRuntimeId)
+                : GameplayTarget.None;
 
             var pending = await node.MutableDocument<EveSurfaceCommandRequest>(requestRecordKey)
                 .ReadAsync().ConfigureAwait(false);
@@ -6436,7 +6471,7 @@ public static class AetheriaHangarCommandJournal
             if (envelope == null)
             {
                 await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
-                    .ReplaceAsync(NewEnvelope(request, payloadHash, now, progressionTarget)).ConfigureAwait(false);
+                    .ReplaceAsync(NewEnvelope(request, payloadHash, now, progressionTarget, gameplayTarget)).ConfigureAwait(false);
             }
             if (pending == null)
                 await node.Database.PutAsync(requestRecordKey, request).ConfigureAwait(false);
@@ -6458,13 +6493,17 @@ public static class AetheriaHangarCommandJournal
             var envelope = await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
                 .ReadAsync().ConfigureAwait(false);
             ValidateEnvelope(envelope, request, payloadHash);
+            if (envelope == null && IsGameplayInvocation(request))
+                throw new InvalidOperationException("Gameplay command has no immutable admission generation.");
+            if (envelope != null)
+                ValidateGameplayTarget(node, request, envelope, localAuthorityRuntimeId);
             var progressionTarget = envelope == null
                 ? ResolveProgressionTarget(node, request, localVerseId, localAuthorityRuntimeId)
                 : ProgressionTarget.None;
             if (envelope == null)
             {
                 await node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(envelopeKey)
-                    .ReplaceAsync(NewEnvelope(request, payloadHash, now, progressionTarget)).ConfigureAwait(false);
+                    .ReplaceAsync(NewEnvelope(request, payloadHash, now, progressionTarget, GameplayTarget.None)).ConfigureAwait(false);
             }
             return payloadHash;
         }).ConfigureAwait(false);
@@ -6477,7 +6516,8 @@ public static class AetheriaHangarCommandJournal
         EveSurfaceCommandRequest request,
         string payloadHash,
         string now,
-        ProgressionTarget progressionTarget) =>
+        ProgressionTarget progressionTarget,
+        GameplayTarget gameplayTarget) =>
         new()
         {
             CommandId = request.CommandId,
@@ -6486,8 +6526,50 @@ public static class AetheriaHangarCommandJournal
             CreatedAtUtc = now ?? "",
             ProgressionVerseId = progressionTarget.VerseId,
             ProgressionSourceRevision = progressionTarget.SourceRevision,
-            ProgressionAuthorityRuntimeId = progressionTarget.AuthorityRuntimeId
+            ProgressionAuthorityRuntimeId = progressionTarget.AuthorityRuntimeId,
+            GameplaySessionId = gameplayTarget.SessionId,
+            GameplayRunId = gameplayTarget.RunId,
+            GameplayFrameId = gameplayTarget.FrameId,
+            GameplaySurfaceId = gameplayTarget.SurfaceId
         };
+
+    private static GameplayTarget ResolveGameplayTarget(
+        AetheriaStateNode node,
+        EveSurfaceCommandRequest request,
+        string hostRuntimeId)
+    {
+        if (!IsGameplayInvocation(request))
+            return GameplayTarget.None;
+        var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+            ?? throw new InvalidOperationException("Gameplay command requires an active game session.");
+        var frame = node.Cache.Get<AetheriaRuntimeDaemonFrameDocument>(
+            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest);
+        if (!AetheriaDaemonFrameProvenance.BelongsToSession(frame, session, hostRuntimeId) ||
+            !string.Equals(frame!.GameMode, session.Mode, StringComparison.Ordinal))
+            throw new InvalidOperationException("Gameplay command requires the active session's authoritative frame.");
+        return new GameplayTarget(session.SessionId, session.RunId, frame.FrameId, request.SurfaceId);
+    }
+
+    private static void ValidateGameplayTarget(
+        AetheriaStateNode node,
+        EveSurfaceCommandRequest request,
+        AetheriaHangarCommandEnvelopeDocument envelope,
+        string hostRuntimeId)
+    {
+        if (!IsGameplayInvocation(request))
+            return;
+        var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
+        var frame = node.Cache.Get<AetheriaRuntimeDaemonFrameDocument>(
+            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest);
+        if (session == null ||
+            !AetheriaDaemonFrameProvenance.BelongsToSession(frame, session, hostRuntimeId) ||
+            !string.Equals(frame!.GameMode, session.Mode, StringComparison.Ordinal) ||
+            !string.Equals(envelope.GameplaySessionId, session.SessionId, StringComparison.Ordinal) ||
+            !string.Equals(envelope.GameplayRunId, session.RunId, StringComparison.Ordinal) ||
+            envelope.GameplayFrameId != frame.FrameId ||
+            !string.Equals(envelope.GameplaySurfaceId, request.SurfaceId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Gameplay command targets a stale gameplay generation.");
+    }
 
     private static ProgressionTarget ResolveProgressionTarget(
         AetheriaStateNode node,
@@ -6569,6 +6651,10 @@ public static class AetheriaHangarCommandJournal
     private static bool IsHangarInvocation(EveSurfaceCommandRequest request) =>
         string.Equals(request.SurfaceId, AetheriaRuntimeHangarCommands.SurfaceId, StringComparison.Ordinal);
 
+    private static bool IsGameplayInvocation(EveSurfaceCommandRequest request) =>
+        !IsHangarInvocation(request) &&
+        !string.Equals(request.SurfaceId, AetheriaRuntimeArenaLobbyCommands.SurfaceId, StringComparison.Ordinal);
+
     private static string Payload(EveSurfaceCommandRequest request, string key) =>
         request.PayloadFields.TryGetValue(key, out var value)
             ? value ?? ""
@@ -6593,5 +6679,10 @@ public static class AetheriaHangarCommandJournal
     private readonly record struct ProgressionTarget(string VerseId, string AuthorityRuntimeId, long SourceRevision)
     {
         public static readonly ProgressionTarget None = new("", "", -1);
+    }
+
+    private readonly record struct GameplayTarget(string SessionId, string RunId, long FrameId, string SurfaceId)
+    {
+        public static readonly GameplayTarget None = new("", "", -1, "");
     }
 }

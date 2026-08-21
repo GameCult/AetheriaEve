@@ -65,6 +65,10 @@ namespace GameCult.Aetheria.State.Verse
         [Key(4)] public string ProgressionVerseId { get; set; } = "";
         [Key(5)] public long ProgressionSourceRevision { get; set; } = -1;
         [Key(6)] public string ProgressionAuthorityRuntimeId { get; set; } = "";
+        [Key(7)] public string GameplaySessionId { get; set; } = "";
+        [Key(8)] public string GameplayRunId { get; set; } = "";
+        [Key(9)] public long GameplayFrameId { get; set; } = -1;
+        [Key(10)] public string GameplaySurfaceId { get; set; } = "";
     }
 
     [CultDocument("gamecult.aetheria.progression_command_route", "gamecult.aetheria.progression_command_route.v1")]

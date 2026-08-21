@@ -1248,6 +1248,45 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         try
         {
             using var node = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
+            var ingressEntity = Entity(0, 0, "operation-ingress");
+            var ingressRun = new AetheriaRuntimeRunCheckpointCommit
+            {
+                RunId = "run:operation-ingress-terminus",
+                GameMode = AetheriaGameModes.Terminus,
+                CurrentZoneIndex = 0,
+                CurrentEntityKey = AetheriaRuntimeRunCheckpointCommit.EntityRecordKey(
+                    "run:operation-ingress-terminus", 0, 0),
+                Zones =
+                [
+                    new AetheriaRuntimeZoneSnapshotCommit
+                    {
+                        ZoneIndex = 0,
+                        Entities = [ingressEntity]
+                    }
+                ]
+            };
+            var ingressSession = new AetheriaGameSessionState
+            {
+                SessionId = "session:operation-ingress-terminus",
+                Mode = AetheriaGameModes.Terminus,
+                RunId = ingressRun.RunId,
+                RunRecordKey = "global:aetheria.run:operation-ingress-terminus",
+                ControlledEntityKey = ingressRun.CurrentEntityKey
+            };
+            var ingressFrame = AetheriaRuntimeDaemonFrameDocument.Create(
+                ingressRun,
+                daemonId,
+                ingressSession.SessionId,
+                7,
+                0,
+                0.02);
+            ingressFrame.GameMode = AetheriaGameModes.Terminus;
+            ingressFrame.RunRecordKey = ingressSession.RunRecordKey;
+            node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                .ReplaceAsync(ingressSession).GetAwaiter().GetResult();
+            node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(
+                    AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
+                .ReplaceAsync(ingressFrame).GetAwaiter().GetResult();
             var server = new OperationIngressTestServer();
             var peer = new OperationIngressTestPeer();
             using var sessionIdentity = new CultMeshSessionIdentityServer(
@@ -1269,8 +1308,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             CultNetOperationRequestMessage Request(
                 string commandId,
                 string assertedRuntimeId,
-                string surfaceId = AetheriaRuntimeHangarCommands.SurfaceId,
-                string command = AetheriaRuntimeHangarCommands.SelectTerminus)
+                string surfaceId = AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+                string command = "gamecult.aetheria.pilot.set_move_vector.v1")
             {
                 var intent = new AetheriaBrowserEveCommandIngress.BrowserEveCommandIntent
                 {
@@ -1283,6 +1322,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     ReceiptSchema = EveCommandReceiptDocument.SchemaId,
                     Payload = new Dictionary<string, object?>
                     {
+                        ["directionX"] = 1.0,
+                        ["directionY"] = 0.0,
                         ["mode"] = AetheriaGameModes.Terminus,
                         [AetheriaRuntimeArenaLobbyCommands.ExpectedSessionId] = "arena:operation-ingress",
                         [AetheriaRuntimeArenaLobbyCommands.ExpectedRunId] = "run:operation-ingress"
@@ -1339,6 +1380,49 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             var accepted = Queued("seat-valid");
             Require(peer.LastResponse?.Status == "queued" && accepted?.ClientId == seatA,
                 "operation ingress must journal the established runtime identity for a matching request");
+            var acceptedEnvelope = node.MutableDocument<AetheriaHangarCommandEnvelopeDocument>(
+                    AetheriaRuntimeVerseRecordKeys.HangarCommandEnvelope("seat-valid"))
+                .ReadAsync().GetAwaiter().GetResult();
+            Require(acceptedEnvelope?.GameplaySessionId == ingressSession.SessionId &&
+                    acceptedEnvelope.GameplayRunId == ingressSession.RunId &&
+                    acceptedEnvelope.GameplayFrameId == ingressFrame.FrameId &&
+                    acceptedEnvelope.GameplaySurfaceId == AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+                "gameplay ingress must pin the authoritative session, run, frame, and surface generation");
+
+            node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                .ReplaceAsync(new AetheriaGameSessionState
+                {
+                    SessionId = "session:operation-ingress-successor",
+                    Mode = AetheriaGameModes.Terminus,
+                    RunId = "run:operation-ingress-successor",
+                    RunRecordKey = "global:aetheria.run:operation-ingress-successor"
+                }).GetAwaiter().GetResult();
+            var staleExposure = AetheriaGameplayExposurePolicy.Resolve(node, ingressFrame, daemonId);
+            Require(staleExposure.Kind == AetheriaGameplayExposureKind.ActiveInvalid &&
+                    !AetheriaGameplayExposurePolicy.CanReadRecord(
+                        node,
+                        seatA,
+                        AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
+                        staleExposure,
+                        daemonId),
+                "a Terminus session must not expose a predecessor frame while its own frame is unavailable");
+            var staleRejected = false;
+            try
+            {
+                AetheriaHangarCommandJournal.ValidateAsync(
+                        node,
+                        accepted!,
+                        "2026-08-19T00:00:01Z",
+                        "verse:operation-ingress",
+                        daemonId)
+                    .GetAwaiter().GetResult();
+            }
+            catch (InvalidOperationException)
+            {
+                staleRejected = true;
+            }
+            Require(staleRejected,
+                "a queued gameplay command must not rebind from its admitted generation to a successor session");
 
             node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
                 .ReplaceAsync(new AetheriaGameSessionState
@@ -1997,10 +2081,14 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         var terminusModeSession = MessagePackSerializer.Deserialize<AetheriaGameSessionState>(
                             MessagePackSerializer.Serialize(session));
                         terminusModeSession.Mode = AetheriaGameModes.Terminus;
+                        var terminusModeFrame = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonFrameDocument>(
+                            MessagePackSerializer.Serialize(pilotFrame));
+                        terminusModeFrame.GameMode = AetheriaGameModes.Terminus;
+                        terminusModeFrame.Run.GameMode = AetheriaGameModes.Terminus;
                         reopened.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
                             .ReplaceAsync(terminusModeSession).GetAwaiter().GetResult();
                         var terminusModeExposure = AetheriaGameplayExposurePolicy.Resolve(
-                            reopened, pilotFrame, "daemon-smoke");
+                            reopened, terminusModeFrame, "daemon-smoke");
                         var unknownModeSession = MessagePackSerializer.Deserialize<AetheriaGameSessionState>(
                             MessagePackSerializer.Serialize(session));
                         unknownModeSession.Mode = "future-witness-mode";
@@ -2045,12 +2133,12 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         var pilotReceiptRecordKey = AetheriaRuntimeVerseRecordKeys
                             .EveReceiptForCommand(pilotReceipt.CommandId).ToString();
                         Require(gameplayExposure.Kind == AetheriaGameplayExposureKind.StarbridgeValid &&
-                                terminusModeExposure.Kind == AetheriaGameplayExposureKind.LocalOpen &&
+                                terminusModeExposure.Kind == AetheriaGameplayExposureKind.TerminusValid &&
                                 AetheriaGameModes.Classify(AetheriaGameModes.Terminus) ==
                                     AetheriaGameModeKind.Terminus &&
                                 unknownModeExposure.Kind == AetheriaGameplayExposureKind.ActiveInvalid &&
                                 AetheriaGameplayExposurePolicy.Generation(unknownModeExposure) !=
-                                    AetheriaGameplayExposurePolicy.Generation(AetheriaGameplayExposureContext.LocalOpen) &&
+                                    AetheriaGameplayExposurePolicy.Generation(AetheriaGameplayExposureContext.HangarOnly) &&
                                 AetheriaGameModes.Classify("") == AetheriaGameModeKind.Unsupported &&
                                 AetheriaGameModes.Classify("TERMINUS") == AetheriaGameModeKind.Unsupported &&
                                 AetheriaGameModes.Classify("future-witness-mode") == AetheriaGameModeKind.Unsupported &&

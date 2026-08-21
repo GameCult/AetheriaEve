@@ -72,18 +72,18 @@ internal static class AetheriaBrowserEveCommandIngress
                 options,
                 establishedRuntimeId,
                 commandRequest);
-            var alreadyReceipted = await node.CommitAsync(async () =>
+            var alreadyReceipted = node.Cache.Get<EveCommandReceiptDocument>(
+                AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(commandId)) != null;
+            if (!alreadyReceipted)
             {
-                var receipted = node.Cache.Get<EveCommandReceiptDocument>(
-                    AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(commandId)) != null;
-                if (!receipted && node.Cache.Get<EveSurfaceCommandRequest>(commandRecordKey) == null)
-                {
-                    await node.Database.PutAsync(
-                        commandRecordKey,
-                        commandRequest).ConfigureAwait(false);
-                }
-                return receipted;
-            }).ConfigureAwait(false);
+                await AetheriaHangarCommandJournal.AdmitAsync(
+                    node,
+                    commandRecordKey,
+                    commandRequest,
+                    DateTimeOffset.UtcNow.ToString("O"),
+                    options.VerseId,
+                    options.DaemonId).ConfigureAwait(false);
+            }
 
             peer.SendCultNet(Response(
                 request,

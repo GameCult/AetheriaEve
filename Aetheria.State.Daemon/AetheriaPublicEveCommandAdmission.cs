@@ -42,6 +42,11 @@ internal static class AetheriaPublicEveCommandAdmission
         {
             if (string.Equals(request.SurfaceId, AetheriaRuntimeArenaLobbyCommands.SurfaceId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Terminus does not expose the Arena lobby command boundary.");
+            var frame = node.Cache.Get<AetheriaRuntimeDaemonFrameDocument>(
+                AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest);
+            if (!AetheriaDaemonFrameProvenance.BelongsToSession(frame, activeSession, options.DaemonId) ||
+                !string.Equals(frame!.GameMode, AetheriaGameModes.Terminus, StringComparison.Ordinal))
+                throw new InvalidOperationException("Terminus gameplay commands require the active session's authoritative frame.");
             return;
         }
         if (mode == AetheriaGameModeKind.Starbridge)
