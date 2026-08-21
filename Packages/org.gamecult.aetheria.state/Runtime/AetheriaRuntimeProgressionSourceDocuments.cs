@@ -67,6 +67,7 @@ namespace GameCult.Aetheria.State.Verse
         [Key(6)] public string ProgressionAuthorityRuntimeId { get; set; } = "";
         [Key(7)] public string GameplaySessionId { get; set; } = "";
         [Key(8)] public string GameplayRunId { get; set; } = "";
+        // Admission lower bound and diagnostic only. The live dequeue frame owns execution.
         [Key(9)] public long GameplayFrameId { get; set; } = -1;
         [Key(10)] public string GameplaySurfaceId { get; set; } = "";
     }

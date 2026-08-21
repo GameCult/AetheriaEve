@@ -1248,6 +1248,25 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
         try
         {
             using var node = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
+            var noSessionExposure = AetheriaGameplayExposurePolicy.Resolve(node, null, daemonId);
+            Require(noSessionExposure.Kind == AetheriaGameplayExposureKind.HangarOnly &&
+                    !AetheriaGameplayExposurePolicy.CanReadRecord(
+                        node,
+                        seatA,
+                        AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
+                        noSessionExposure,
+                        seatA) &&
+                    !AetheriaGameplayExposurePolicy.CanSubscribe(
+                        node,
+                        seatA,
+                        new CultNetDatabaseSubscribeMessage
+                        {
+                            ConsumerRuntimeId = seatA,
+                            BodyIds = [AetheriaRuntimeDaemonSoaFramePublisher.BodyId]
+                        },
+                        noSessionExposure,
+                        seatA),
+                "a daemon without an active session must expose only the Hangar boundary, never gameplay state");
             var ingressEntity = Entity(0, 0, "operation-ingress");
             var ingressRun = new AetheriaRuntimeRunCheckpointCommit
             {
@@ -1303,14 +1322,17 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     DaemonId = daemonId,
                     HangarPrincipalRuntimeId = seatA
                 },
-                candidate => sessionIdentity.TryGetSourceRuntimeId(candidate, out var runtimeId) ? runtimeId : null);
+                candidate => sessionIdentity.TryGetSourceRuntimeId(candidate, out var runtimeId) ? runtimeId : null,
+                () => ingressFrame);
 
             CultNetOperationRequestMessage Request(
                 string commandId,
                 string assertedRuntimeId,
                 string surfaceId = AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
-                string command = "gamecult.aetheria.pilot.set_move_vector.v1")
+                string? command = null)
             {
+                command ??= AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(
+                    AetheriaRuntimeDaemonCommandKinds.SetMoveVector);
                 var intent = new AetheriaBrowserEveCommandIngress.BrowserEveCommandIntent
                 {
                     Type = "eve.command",
@@ -1388,6 +1410,42 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     acceptedEnvelope.GameplayFrameId == ingressFrame.FrameId &&
                     acceptedEnvelope.GameplaySurfaceId == AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
                 "gameplay ingress must pin the authoritative session, run, frame, and surface generation");
+            var advancedFrame = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonFrameDocument>(
+                MessagePackSerializer.Serialize(ingressFrame));
+            advancedFrame.FrameId++;
+            AetheriaHangarCommandJournal.ValidateAsync(
+                    node,
+                    accepted!,
+                    "2026-08-19T00:00:00.500Z",
+                    "verse:operation-ingress",
+                    daemonId,
+                    advancedFrame)
+                .GetAwaiter().GetResult();
+            Require(AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
+                        accepted!,
+                        advancedFrame,
+                        seatA,
+                        ingressSession.SessionId,
+                        out var advancedCommand) &&
+                    advancedCommand?.ObservedFrameId == advancedFrame.FrameId,
+                "normal live-frame advance must stamp gameplay input at dequeue instead of rejecting a cached-frame command");
+            var dequeueRejected = new List<string>();
+            var dequeued = AetheriaTerminusOperationAdmission.AuthorizedCommands(
+                [advancedCommand!],
+                ingressSession.SessionId,
+                advancedFrame.FrameId,
+                AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(
+                    "verse:operation-ingress", daemonId),
+                [],
+                daemonId,
+                dequeueRejected);
+            var dequeuedRun = MessagePackSerializer.Deserialize<AetheriaRuntimeRunCheckpointCommit>(
+                MessagePackSerializer.Serialize(ingressRun));
+            var dequeueResult = AetheriaRuntimeDaemonOperations.Execute(dequeuedRun, dequeued);
+            Require(dequeued.Count == 1 &&
+                    dequeueRejected.Count == 0 &&
+                    dequeueResult.AppliedCommandIds.SequenceEqual([advancedCommand!.CommandId]),
+                "the production Terminus dequeue gate must apply same-run input after normal live-frame advance");
 
             node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
                 .ReplaceAsync(new AetheriaGameSessionState
@@ -1414,7 +1472,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         accepted!,
                         "2026-08-19T00:00:01Z",
                         "verse:operation-ingress",
-                        daemonId)
+                        daemonId,
+                        advancedFrame)
                     .GetAwaiter().GetResult();
             }
             catch (InvalidOperationException)
@@ -2114,7 +2173,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                         AetheriaRuntimeDaemonCommandKinds.SetMoveVector)),
                                     CultMesh.OperationPayload(("directionX", "1"), ("directionY", "0")),
                                     DateTimeOffset.UtcNow,
-                                    "pilot-runtime"));
+                                    "pilot-runtime"),
+                                pilotFrame);
                         }
                         catch (InvalidOperationException)
                         {

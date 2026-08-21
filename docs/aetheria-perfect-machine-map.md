@@ -117,10 +117,14 @@ Date: 2026-06-13
 > daemon-sourced, with exact host, session, run-record, run-id, and mode
 > provenance. Seat publication consumes this same
 > resolved context rather than a separately cached roster.
-> Public gameplay ingress records the exact admitted session, run, frame, and
-> surface in the immutable command envelope. Consumption and Terminus tick
-> admission reject that command if any member of the generation has changed;
-> a queued operation can never rebind to a successor run or a stale frame.
+> Public gameplay ingress records the exact admitted session, run, and surface
+> in the immutable command envelope; the observed frame is a monotone lower
+> bound and diagnostic. The live tick/dequeue frame owns translation and
+> execution. It must belong to that session/run and may advance normally beyond
+> the admission frame. The periodically persisted `DaemonFrameLatest` is a
+> checkpoint/presentation projection and cannot reject or timestamp input. A
+> queued operation can never rebind to a successor run or regress to an older
+> frame.
 > Missing scoped-mode truth can never widen authority by masquerading as local play.
 > In Starbridge, the exact Commander seat receives strategic/canonical gameplay
 > records; each Pilot receives only its per-seat current-zone frame, Eve

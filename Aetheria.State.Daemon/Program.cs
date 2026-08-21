@@ -670,16 +670,10 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
                 policyRejectedCommandIds);
             break;
         case AetheriaGameModeKind.Terminus:
-            var terminusCommands = pendingObservedCommands
-                .Where(command => currentFrame != null &&
-                    string.Equals(command.SessionId, ingressState.SessionId, StringComparison.Ordinal) &&
-                    command.ObservedFrameId == currentFrame.FrameId)
-                .ToArray();
-            policyRejectedCommandIds.AddRange(pendingObservedCommands
-                .Where(command => !terminusCommands.Contains(command))
-                .Select(command => command.CommandId));
-            authorizedCommands = AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
-                terminusCommands,
+            authorizedCommands = AetheriaTerminusOperationAdmission.AuthorizedCommands(
+                pendingObservedCommands,
+                ingressState.SessionId,
+                currentFrame?.FrameId ?? -1,
                 authorityPolicy,
                 authorityLeases,
                 options.DaemonId,
@@ -1306,7 +1300,8 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
         server,
         node,
         options,
-        peer => sessionIdentity.TryGetSourceRuntimeId(peer, out var runtimeId) ? runtimeId : null);
+        peer => sessionIdentity.TryGetSourceRuntimeId(peer, out var runtimeId) ? runtimeId : null,
+        latestFrame);
     server.OnCultNet<CultNetSnapshotRequestMessage>(async (request, peer) =>
     {
         try
@@ -1760,7 +1755,9 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
             if (!string.Equals(request.ClientId, sourceRuntimeId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Eve command client identity does not match the established CultMesh session.");
 
-            AetheriaPublicEveCommandAdmission.RequireAuthorized(node, options, sourceRuntimeId, request);
+            var admissionFrame = latestFrame();
+            AetheriaPublicEveCommandAdmission.RequireAuthorized(
+                node, options, sourceRuntimeId, request, admissionFrame);
 
             await AetheriaHangarCommandJournal.AdmitAsync(
                 node,
@@ -1768,7 +1765,8 @@ static async Task<AetheriaClientCultMeshHost> StartClientCultMeshHostAsync(
                 request,
                 DateTimeOffset.UtcNow.ToString("O"),
                 options.VerseId,
-                options.DaemonId).ConfigureAwait(false);
+                options.DaemonId,
+                admissionFrame).ConfigureAwait(false);
         }
         catch (Exception error)
         {
@@ -3723,7 +3721,8 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
                 request,
                 DateTimeOffset.UtcNow.ToString("O"),
                 options.VerseId,
-                options.DaemonId).ConfigureAwait(false);
+                options.DaemonId,
+                currentFrame).ConfigureAwait(false);
         }
         catch (InvalidOperationException error)
         {
@@ -3779,13 +3778,11 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
             return activatedSession;
         }
 
-        var admittedFrame = node.Cache.Get<AetheriaRuntimeDaemonFrameDocument>(
-            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest);
         if (AetheriaRuntimeDaemonOperationsClient.TryCreateSurfaceCommandDocument(
                 request,
-                admittedFrame,
+                currentFrame,
                 request.ClientId,
-                admittedFrame?.SessionId ?? options.SessionId,
+                currentFrame?.SessionId ?? options.SessionId,
                 out var command) && command != null)
         {
             command.CommandId = request.CommandId;
@@ -3799,8 +3796,8 @@ static async Task<bool> AcceptCoreEveInvocationAsync(
                         new CultRecordKey(AetheriaRuntimeArenaRosterDocument.RecordKey(activeSession!.SessionId)))
                     .ReadAsync().ConfigureAwait(false);
                 var activeRun = AetheriaDaemonFrameProvenance.BelongsToSession(
-                        admittedFrame, activeSession, options.DaemonId)
-                    ? admittedFrame!.Run
+                        currentFrame, activeSession, options.DaemonId)
+                    ? currentFrame!.Run
                     : await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, activeSession.RunRecordKey)
                         .ConfigureAwait(false);
                 var binding = AetheriaRuntimeArenaOperationAdmission.BindAuthenticatedSurfaceActor(
@@ -6447,7 +6444,8 @@ public static class AetheriaHangarCommandJournal
         EveSurfaceCommandRequest request,
         string now,
         string localVerseId,
-        string localAuthorityRuntimeId)
+        string localAuthorityRuntimeId,
+        AetheriaRuntimeDaemonFrameDocument? liveFrame = null)
     {
         return await node.CommitAsync(async () =>
         {
@@ -6460,7 +6458,7 @@ public static class AetheriaHangarCommandJournal
                 ? ResolveProgressionTarget(node, request, localVerseId, localAuthorityRuntimeId)
                 : ProgressionTarget.None;
             var gameplayTarget = envelope == null
-                ? ResolveGameplayTarget(node, request, localAuthorityRuntimeId)
+                ? ResolveGameplayTarget(node, request, localAuthorityRuntimeId, liveFrame)
                 : GameplayTarget.None;
 
             var pending = await node.MutableDocument<EveSurfaceCommandRequest>(requestRecordKey)
@@ -6484,7 +6482,8 @@ public static class AetheriaHangarCommandJournal
         EveSurfaceCommandRequest request,
         string now,
         string localVerseId,
-        string localAuthorityRuntimeId)
+        string localAuthorityRuntimeId,
+        AetheriaRuntimeDaemonFrameDocument? liveFrame = null)
     {
         return await node.CommitAsync(async () =>
         {
@@ -6496,7 +6495,7 @@ public static class AetheriaHangarCommandJournal
             if (envelope == null && IsGameplayInvocation(request))
                 throw new InvalidOperationException("Gameplay command has no immutable admission generation.");
             if (envelope != null)
-                ValidateGameplayTarget(node, request, envelope, localAuthorityRuntimeId);
+                ValidateGameplayTarget(node, request, envelope, localAuthorityRuntimeId, liveFrame);
             var progressionTarget = envelope == null
                 ? ResolveProgressionTarget(node, request, localVerseId, localAuthorityRuntimeId)
                 : ProgressionTarget.None;
@@ -6536,37 +6535,36 @@ public static class AetheriaHangarCommandJournal
     private static GameplayTarget ResolveGameplayTarget(
         AetheriaStateNode node,
         EveSurfaceCommandRequest request,
-        string hostRuntimeId)
+        string hostRuntimeId,
+        AetheriaRuntimeDaemonFrameDocument? liveFrame)
     {
         if (!IsGameplayInvocation(request))
             return GameplayTarget.None;
         var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
             ?? throw new InvalidOperationException("Gameplay command requires an active game session.");
-        var frame = node.Cache.Get<AetheriaRuntimeDaemonFrameDocument>(
-            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest);
-        if (!AetheriaDaemonFrameProvenance.BelongsToSession(frame, session, hostRuntimeId) ||
-            !string.Equals(frame!.GameMode, session.Mode, StringComparison.Ordinal))
+        if (!AetheriaDaemonFrameProvenance.BelongsToSession(liveFrame, session, hostRuntimeId) ||
+            !string.Equals(liveFrame!.GameMode, session.Mode, StringComparison.Ordinal))
             throw new InvalidOperationException("Gameplay command requires the active session's authoritative frame.");
-        return new GameplayTarget(session.SessionId, session.RunId, frame.FrameId, request.SurfaceId);
+        return new GameplayTarget(session.SessionId, session.RunId, liveFrame.FrameId, request.SurfaceId);
     }
 
     private static void ValidateGameplayTarget(
         AetheriaStateNode node,
         EveSurfaceCommandRequest request,
         AetheriaHangarCommandEnvelopeDocument envelope,
-        string hostRuntimeId)
+        string hostRuntimeId,
+        AetheriaRuntimeDaemonFrameDocument? liveFrame)
     {
         if (!IsGameplayInvocation(request))
             return;
         var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
-        var frame = node.Cache.Get<AetheriaRuntimeDaemonFrameDocument>(
-            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest);
         if (session == null ||
-            !AetheriaDaemonFrameProvenance.BelongsToSession(frame, session, hostRuntimeId) ||
-            !string.Equals(frame!.GameMode, session.Mode, StringComparison.Ordinal) ||
+            !AetheriaDaemonFrameProvenance.BelongsToSession(liveFrame, session, hostRuntimeId) ||
+            !string.Equals(liveFrame!.GameMode, session.Mode, StringComparison.Ordinal) ||
             !string.Equals(envelope.GameplaySessionId, session.SessionId, StringComparison.Ordinal) ||
             !string.Equals(envelope.GameplayRunId, session.RunId, StringComparison.Ordinal) ||
-            envelope.GameplayFrameId != frame.FrameId ||
+            envelope.GameplayFrameId < 0 ||
+            liveFrame.FrameId < envelope.GameplayFrameId ||
             !string.Equals(envelope.GameplaySurfaceId, request.SurfaceId, StringComparison.Ordinal))
             throw new InvalidOperationException("Gameplay command targets a stale gameplay generation.");
     }

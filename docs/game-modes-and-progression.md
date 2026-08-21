@@ -178,11 +178,13 @@ The authority policy differs without changing the document model:
   until the QUIC path can identify and filter each receiving controller; local
   headless and rendered clients consume the same authenticated document/body
   boundary meanwhile.
-  The public gameplay journal pins the admitted session, run, authoritative
-  frame, and surface in one immutable envelope. Consumption and Terminus tick
-  admission require that exact generation; a queued operation targeting an old
-  surface or predecessor frame receives a stale-generation denial instead of
-  being rebound to the current run.
+  The public gameplay journal pins the admitted session, run, and surface in
+  one immutable envelope. Its admitted frame is a lower bound and diagnostic,
+  not an equality lock: the live tick/dequeue frame owns command translation
+  and may advance normally within that session/run. The periodically persisted
+  frame is presentation/checkpoint state and never decides input finality. A
+  queued operation targeting a predecessor session/run, another surface, or a
+  regressed frame receives a stale-generation denial instead of being rebound.
   At projection and ingress the daemon resolves that stable identity against
   the canonical run to obtain the entity's current zone/index key. Movement,
   zone transfer, compaction, and restart therefore cannot transfer a seat when

@@ -23,14 +23,16 @@ internal static class AetheriaBrowserEveCommandIngress
         ICultNetSchemaServer server,
         AetheriaStateNode node,
         AetheriaDaemonHostOptions options,
-        Func<ICultNetSchemaServerPeer, string?> resolveEstablishedRuntimeId)
+        Func<ICultNetSchemaServerPeer, string?> resolveEstablishedRuntimeId,
+        Func<AetheriaRuntimeDaemonFrameDocument?> liveFrame)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(resolveEstablishedRuntimeId);
+        ArgumentNullException.ThrowIfNull(liveFrame);
         server.OnCultNet<CultNetOperationRequestMessage>((request, peer) =>
-            HandleAsync(request, peer, node, options, resolveEstablishedRuntimeId));
+            HandleAsync(request, peer, node, options, resolveEstablishedRuntimeId, liveFrame));
     }
 
     private static async Task HandleAsync(
@@ -38,7 +40,8 @@ internal static class AetheriaBrowserEveCommandIngress
         ICultNetSchemaServerPeer peer,
         AetheriaStateNode node,
         AetheriaDaemonHostOptions options,
-        Func<ICultNetSchemaServerPeer, string?> resolveEstablishedRuntimeId)
+        Func<ICultNetSchemaServerPeer, string?> resolveEstablishedRuntimeId,
+        Func<AetheriaRuntimeDaemonFrameDocument?> liveFrame)
     {
         try
         {
@@ -67,11 +70,13 @@ internal static class AetheriaBrowserEveCommandIngress
             var commandRecordKey = new CultRecordKey(
                 $"eve:command-invocations:{AetheriaRuntimeVerseRecordKeys.StableToken(commandId)}");
             var commandRequest = ToCommandRequest(request, intent, commandId, establishedRuntimeId);
+            var admissionFrame = liveFrame();
             AetheriaPublicEveCommandAdmission.RequireAuthorized(
                 node,
                 options,
                 establishedRuntimeId,
-                commandRequest);
+                commandRequest,
+                admissionFrame);
             var alreadyReceipted = node.Cache.Get<EveCommandReceiptDocument>(
                 AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(commandId)) != null;
             if (!alreadyReceipted)
@@ -82,7 +87,8 @@ internal static class AetheriaBrowserEveCommandIngress
                     commandRequest,
                     DateTimeOffset.UtcNow.ToString("O"),
                     options.VerseId,
-                    options.DaemonId).ConfigureAwait(false);
+                    options.DaemonId,
+                    admissionFrame).ConfigureAwait(false);
             }
 
             peer.SendCultNet(Response(
