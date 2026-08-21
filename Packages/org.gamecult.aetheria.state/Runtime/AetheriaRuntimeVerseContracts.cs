@@ -35,6 +35,16 @@ namespace GameCult.Aetheria.State.Verse
         public static CultRecordKey StarbridgeSessionLatest { get; } = new("starbridge:aetheria.session.latest.v1");
         public static CultRecordKey StarbridgeSessionSummary { get; } = new("daemon:aetheria.starbridge.session.latest.v1");
         public static CultRecordKey StarbridgePlayerSeat(string seatId) => new(AetheriaRuntimeStarbridgePlayerSeatDocument.RecordKey(seatId));
+        public static string StarbridgePilotSurfaceId(string runtimeId) =>
+            $"aetheria.starbridge.pilot.{StableIdentityToken(runtimeId)}";
+        public static CultRecordKey StarbridgePilotSurface(string runtimeId) =>
+            new($"eve:surface:{StarbridgePilotSurfaceId(runtimeId)}");
+        public static CultRecordKey StarbridgePilotFrame(string runtimeId) =>
+            new($"daemon:aetheria.frame.starbridge.{StableIdentityToken(runtimeId)}.v1");
+        public static CultRecordKey StarbridgePilotZoneRender(string runtimeId) =>
+            new($"daemon:aetheria.zone_render.starbridge.{StableIdentityToken(runtimeId)}.v1");
+        public static CultRecordKey StarbridgePilotInputCapability(string runtimeId) =>
+            new($"eve:input:aetheria.starbridge.{StableIdentityToken(runtimeId)}");
         public static CultRecordKey DaemonGameSurface { get; } = new("eve:surface:aetheria.daemon.game");
         public static string ArenaPilotSurfaceId(string controllerRuntimeId) =>
             $"aetheria.arena.pilot.{StableIdentityToken(controllerRuntimeId)}";
@@ -146,6 +156,13 @@ namespace GameCult.Aetheria.State.Verse
             AetheriaRuntimeVerseRecordKeys.ArenaPilotBodyId(controllerRuntimeId),
             AetheriaRuntimeVerseRecordKeys.ArenaPilotZoneRender(controllerRuntimeId).ToString(),
             AetheriaRuntimeVerseRecordKeys.ArenaPilotInputCapability(controllerRuntimeId).ToString());
+
+        public static AetheriaRuntimePilotObservationRefs Starbridge(string runtimeId) => new(
+            AetheriaRuntimeVerseRecordKeys.StarbridgePilotFrame(runtimeId).ToString(),
+            AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString(),
+            AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
+            AetheriaRuntimeVerseRecordKeys.StarbridgePilotZoneRender(runtimeId).ToString(),
+            AetheriaRuntimeVerseRecordKeys.StarbridgePilotInputCapability(runtimeId).ToString());
     }
 
     public static class AetheriaRuntimeVerseContractRegistry

@@ -27,6 +27,35 @@ namespace GameCult.Aetheria.State.Verse
     /// </summary>
     public static class AetheriaRuntimeStarbridgeOperationAdmission
     {
+        public static bool TryResolvePilotSeat(
+            IEnumerable<AetheriaRuntimeStarbridgePlayerSeatDocument>? seats,
+            string sessionId,
+            string runId,
+            string runtimeId,
+            AetheriaRuntimeRunCheckpointCommit? run,
+            out AetheriaRuntimeStarbridgePlayerSeatDocument seat,
+            out string controlledEntityKey)
+        {
+            seat = null!;
+            controlledEntityKey = "";
+            if (run == null)
+                return false;
+            var matches = (seats ?? Enumerable.Empty<AetheriaRuntimeStarbridgePlayerSeatDocument>())
+                .Where(value => value != null &&
+                    string.Equals(value.SessionId, sessionId ?? "", StringComparison.Ordinal) &&
+                    string.Equals(value.RunId, runId ?? "", StringComparison.Ordinal) &&
+                    string.Equals(value.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Pilot, StringComparison.Ordinal) &&
+                    string.Equals(value.RuntimeId, runtimeId ?? "", StringComparison.Ordinal) &&
+                    string.Equals(value.ConnectionState, AetheriaRuntimeStarbridgePlayerSeatConnectionStates.Connected, StringComparison.Ordinal) &&
+                    !string.IsNullOrWhiteSpace(value.ControlledEntityId) &&
+                    run.TryResolveEntityId(value.ControlledEntityId, out _))
+                .ToArray();
+            if (matches.Length != 1 || !run.TryResolveEntityId(matches[0].ControlledEntityId, out controlledEntityKey))
+                return false;
+            seat = matches[0];
+            return true;
+        }
+
         public static bool IsPilotInputActive(
             string gameMode,
             string modePolicyId,
@@ -56,6 +85,7 @@ namespace GameCult.Aetheria.State.Verse
             long currentFrameId,
             AetheriaRuntimeVerseAuthorityPolicyDocument? policy,
             IEnumerable<AetheriaRuntimeStarbridgePlayerSeatDocument>? seats,
+            AetheriaRuntimeRunCheckpointCommit? run,
             string hostRuntimeId)
         {
             var ordered = (operations ?? Enumerable.Empty<AetheriaRuntimeDaemonCommandDocument>())
@@ -106,14 +136,10 @@ namespace GameCult.Aetheria.State.Verse
                     continue;
                 }
 
-                var pilotSeats = activeSeats.Where(value =>
-                        string.Equals(value.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Pilot, StringComparison.Ordinal) &&
-                        string.Equals(value.RuntimeId, proposer, StringComparison.Ordinal) &&
-                        string.Equals(value.ControlledEntityKey, command.ActorEntityKey ?? "", StringComparison.Ordinal) &&
-                        (value.ClaimKinds ?? Array.Empty<string>()).Contains(
-                            AetheriaRuntimeClaimKinds.Movement, StringComparer.Ordinal))
-                    .ToArray();
-                if (pilotSeats.Length != 1 ||
+                if (!TryResolvePilotSeat(activeSeats, sessionId, runId, proposer, run, out var pilotSeat, out var controlledEntityKey) ||
+                    !string.Equals(controlledEntityKey, command.ActorEntityKey ?? "", StringComparison.Ordinal) ||
+                    !(pilotSeat.ClaimKinds ?? Array.Empty<string>()).Contains(
+                        AetheriaRuntimeClaimKinds.Movement, StringComparer.Ordinal) ||
                     command.Kind != AetheriaRuntimeDaemonCommandKinds.SetMoveVector ||
                     !string.Equals(claim, AetheriaRuntimeClaimKinds.Movement, StringComparison.Ordinal))
                 {

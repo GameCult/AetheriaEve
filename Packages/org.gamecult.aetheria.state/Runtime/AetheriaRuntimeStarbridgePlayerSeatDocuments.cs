@@ -51,6 +51,8 @@ namespace GameCult.Aetheria.State.Verse
         [Key(20)] public string DisconnectedAtUtc { get; set; } = "";
         [Key(21)] public string ResumeTokenHash { get; set; } = "";
         [Key(22)] public string UpdatedAtUtc { get; set; } = "";
+        [Key(23)] public string ControlledEntityId { get; set; } = "";
+        [Key(24)] public string ShipEntityId { get; set; } = "";
 
         public static string RecordKey(string seatId)
         {

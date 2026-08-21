@@ -32,6 +32,24 @@ internal static class AetheriaPublicEveCommandAdmission
             return;
         }
 
+        var activeSession = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
+        if (string.Equals(activeSession?.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
+        {
+            var seats = node.Documents<AetheriaRuntimeStarbridgePlayerSeatDocument>()
+                .Where(value => value != null &&
+                    string.Equals(value.SessionId, activeSession!.SessionId, StringComparison.Ordinal) &&
+                    string.Equals(value.RunId, activeSession.RunId, StringComparison.Ordinal))
+                .ToArray();
+            var expectedSurface = AetheriaStarbridgeRoleNavigation.ResolveSurfaceId(
+                activeSession!.SessionId,
+                activeSession.RunId,
+                establishedRuntimeId,
+                seats);
+            if (!string.Equals(request.SurfaceId, expectedSurface, StringComparison.Ordinal))
+                throw new InvalidOperationException("The Starbridge command surface does not belong to the established runtime's active role seat.");
+            return;
+        }
+
         if (!string.Equals(request.SurfaceId, AetheriaRuntimeArenaLobbyCommands.SurfaceId, StringComparison.Ordinal))
             return;
         if (!string.Equals(request.Command, AetheriaRuntimeArenaLobbyCommands.Join, StringComparison.Ordinal))

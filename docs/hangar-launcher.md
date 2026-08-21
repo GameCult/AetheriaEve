@@ -5,7 +5,11 @@ minimal Terminus, Starbridge, and Arena launch/continue paths exist. Arena
 installs its host-authoritative policy with session activation. Starbridge now
 installs `aetheria.mode.starbridge.commander-pilot-input.v1`, persists one
 Commander seat and an optional bound Pilot seat, and fails closed around the
-first bounded Pilot movement-input slice. Independent Pilot prediction,
+first bounded Pilot movement-input slice. The durable seat now also owns
+post-launch/continue navigation: a Pilot receives a seat-scoped Eve cockpit,
+while the Commander receives the strategic surface. The seat stores a stable
+ship identity; its positional entity key is derived from the current run.
+Independent Pilot prediction,
 mismatch correction, and Commander replay remain unimplemented.
 The state assembly and viewport queries compile against CultMath `0.1.2`, whose
 canonical `rect` stores normalized `min`/`max` bounds.
@@ -143,6 +147,11 @@ policy from an active Arena session. Starbridge launch and continue atomically
 select `aetheria.mode.starbridge.commander-pilot-input.v1`; startup likewise
 normalizes session and policy together. Generic New Game must not return as a
 gameplay-state writer.
+
+Starbridge role navigation follows the same durable seat used by operation
+admission. A mode label is insufficient to select a surface. Launch and
+Continue resolve exactly one connected caller seat, publish the Pilot cockpit
+when appropriate, and reject stale or ambiguous role ownership.
 
 ## Verification
 

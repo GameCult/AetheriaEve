@@ -1030,7 +1030,8 @@ finality, replay, and negative authority invariants.
   gameplay truth.
 - Inputs: the active Starbridge session and
   `aetheria.mode.starbridge.commander-pilot-input.v1` policy, durable Commander
-  and Pilot seats, the current frame id, and typed movement operations.
+  and Pilot seats, the current frame id, the stable Pilot ship identity resolved
+  against the current run, and typed movement operations.
   Odin publication remains optional discovery/indexing through
   `--odin-cultmesh-uri`; it does not decide gameplay finality.
 - Outputs: typed state/surface snapshots, operation receipts, provider-owned
@@ -1040,14 +1041,20 @@ finality, replay, and negative authority invariants.
 - Derived state: discovery catalogs, external provider indexes, Pilot caches,
   future candidate evidence, and rendered projections are not canonical
   gameplay. An admitted Pilot operation is only daemon input; the resulting
-  operation fact is daemon-authored and preserves proposer provenance.
+  operation fact is daemon-authored and preserves proposer provenance. The
+  seat's `ControlledEntityKey` is no longer authority; it is a launch-time cache
+  derived from `ControlledEntityId` and current canonical run placement.
 - Forbidden writers: Odin, Eve lowerers, Unity, Pilot peers, imported facts,
   caches, and replicas cannot mutate the Commander log. The retired
   `--peer-cultmesh-endpoint` option is rejected rather than restoring peer fact
   import.
-- Shared paths: rendered input and headless policy input are intended to enter
-  the same pending command -> Starbridge operation admission -> tick -> daemon
-  fact path. The present smoke proves that composition directly, not a public
+- Shared paths: Launch, Continue, periodic projection, and movement admission
+  resolve the same durable role seat. Pilot navigation publishes a seat-scoped
+  Eve cockpit and input capability; Commander navigation publishes the
+  strategic surface. Rendered input and headless policy input are intended to
+  enter the same pending command -> Starbridge operation admission -> tick -> daemon
+  fact path. The present smoke proves the seat navigation/projection and
+  admission composition directly, not a public
   transport chronology. Replay, reconnect, and future Pilot fact candidates
   must enter a real shared pre-finality boundary. Finalized state facts
   alone may affect gameplay checkpoints, score, Hangar settlement, or external
@@ -1055,15 +1062,19 @@ finality, replay, and negative authority invariants.
 - Cut line: `AetheriaRuntimeCommittedFactImporter`, its frame counters, direct
   peer routes, and the two-writer convergence smokes are deleted. Generic
   `TrustedCoop`/`AnyTrustedRuntime` no longer decides Starbridge operation
-  admission. The operation selector is explicitly not called finality. The next
+  admission. Mode-only Starbridge navigation and positional-key seat ownership
+  are deleted. The operation selector is explicitly not called finality. The next
   transport cut is independently simulated pre-finality candidate evidence,
   not another replica writer.
 - Verification layer: the managed Hangar smoke proves Starbridge policy/session
   durability across reopen, one Commander and one Pilot seat, seat-bound
   movement-operation arbitration, wrong-subject/stale/ambiguous input rejection,
-  daemon-authored outcome provenance, and execution of only the admitted
-  movement. It calls the admission/tick primitives directly. Missing proof: a
-  public seat-scoped Eve path, real Pilot-daemon state-candidate transport,
+  seat-scoped Eve cockpit projection, stable identity resolution after a
+  positional move, daemon-authored outcome provenance, and execution of only
+  the admitted movement. It calls the role/projection/admission/tick primitives
+  directly. Missing proof: the complete public transport chronology from
+  navigation receipt through lowered input and durable restart, real
+  Pilot-daemon state-candidate transport,
   targeting/combat/environment and engagement jurisdictions, deterministic
   Commander correction/replay, and one durable end-to-end canonical log across
   process restart.

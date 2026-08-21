@@ -1133,6 +1133,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         "continue-arena-without-rebinding",
                         "aetheria.local",
                         "daemon-smoke",
+                        "pilot-runtime",
                         "2026-08-08T00:00:05Z")
                     .GetAwaiter().GetResult();
                 var rosterAfterContinue = node.Documents<AetheriaRuntimeArenaRosterDocument>().Single();
@@ -1149,6 +1150,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     .GetAwaiter().GetResult();
                 var resumed = AetheriaDaemonHangarCoordinator.ContinueAsync(
                         node, deploymentId, "smoke-session", "continue-configured", "aetheria.local", "daemon-smoke",
+                        "pilot-runtime",
                         "2026-08-08T00:00:06Z")
                     .GetAwaiter().GetResult();
                 settings = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
@@ -1870,6 +1872,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         var runtimeEntities = Enumerable.Range(0, pilotEntityIndex + 1)
                             .Select(index => Entity(index, index, index == pilotEntityIndex ? "starbridge-pilot" : "starbridge-fixture"))
                             .ToArray();
+                        runtimeEntities[pilotEntityIndex].EntityId = pilotSeat.ControlledEntityId;
                         var runtimeRun = new AetheriaRuntimeRunCheckpointCommit
                         {
                             RunId = session.RunId,
@@ -1879,6 +1882,26 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             CurrentEntityKey = pilotSeat.ControlledEntityKey,
                             Zones = [new AetheriaRuntimeZoneSnapshotCommit { ZoneIndex = pilotZoneIndex, Entities = runtimeEntities }]
                         };
+                        var pilotSurfaceId = AetheriaStarbridgeRoleNavigation.ResolveSurfaceId(
+                            session.SessionId, session.RunId, "pilot-runtime", seats);
+                        var pilotFrame = AetheriaRuntimeDaemonFrameDocument.Create(
+                            runtimeRun, "daemon-smoke", session.SessionId, observedFrameId, 0, 0.02);
+                        pilotFrame.GameMode = AetheriaGameModes.Starbridge;
+                        var pilotView = AetheriaRuntimeStarbridgeSeatViewProjector.Project(
+                            pilotFrame,
+                            pilotSeat,
+                            seats,
+                            new AetheriaRuntimeDaemonHealthDocument(),
+                            AetheriaRuntimeDaemonCommandBoundaryDocument.Create("daemon-smoke"),
+                            runtimeCatalog);
+                        var pilotWorld = Flatten(pilotView.Surface.Surface.Root)
+                            .Single(component => component.Kind == "world.scene3d");
+                        Require(pilotSurfaceId == AetheriaRuntimeVerseRecordKeys.StarbridgePilotSurfaceId("pilot-runtime") &&
+                                pilotView.Surface.Surface.Id == pilotSurfaceId &&
+                                pilotWorld.Props["playerEntityId"] == pilotSeat.ControlledEntityKey &&
+                                pilotWorld.Props["movementCommand"] == AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(
+                                    AetheriaRuntimeDaemonCommandKinds.SetMoveVector),
+                            "Starbridge Pilot seat must own a navigable Eve cockpit bound to its ship and movement operation");
                         var selected = AetheriaRuntimeStarbridgeOperationAdmission.Admit(
                             [commander, pilot, forged],
                             session.Mode,
@@ -1888,6 +1911,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             observedFrameId,
                             policy,
                             seats,
+                            runtimeRun,
                             "daemon-smoke");
                         var applied = AetheriaRuntimeDaemonOperations.Execute(runtimeRun, selected.Selected);
                         var frame = AetheriaRuntimeDaemonFrameDocument.Create(
@@ -1901,13 +1925,40 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         late.ObservedFrameId = observedFrameId - 1;
                         var lateSelection = AetheriaRuntimeStarbridgeOperationAdmission.Admit(
                             [late], session.Mode, session.ModePolicyId, session.SessionId, session.RunId,
-                            observedFrameId, policy, seats, "daemon-smoke");
+                            observedFrameId, policy, seats, runtimeRun, "daemon-smoke");
                         var duplicatePilot = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
                             MessagePackSerializer.Serialize(pilot));
                         duplicatePilot.CommandId = "starbridge-ambiguous-pilot";
                         var ambiguousSelection = AetheriaRuntimeStarbridgeOperationAdmission.Admit(
                             [pilot, duplicatePilot], session.Mode, session.ModePolicyId, session.SessionId, session.RunId,
-                            observedFrameId, policy, seats, "daemon-smoke");
+                            observedFrameId, policy, seats, runtimeRun, "daemon-smoke");
+                        var movedEntity = MessagePackSerializer.Deserialize<AetheriaRuntimeEntitySnapshotCommit>(
+                            MessagePackSerializer.Serialize(runtimeEntities[pilotEntityIndex]));
+                        movedEntity.EntityIndex = 0;
+                        var movedRun = MessagePackSerializer.Deserialize<AetheriaRuntimeRunCheckpointCommit>(
+                            MessagePackSerializer.Serialize(runtimeRun));
+                        movedRun.CurrentZoneIndex = pilotZoneIndex + 1;
+                        movedRun.Zones = [new AetheriaRuntimeZoneSnapshotCommit
+                        {
+                            ZoneIndex = pilotZoneIndex + 1,
+                            Entities = [movedEntity]
+                        }];
+                        Require(movedRun.TryResolveEntityId(pilotSeat.ControlledEntityId, out var movedEntityKey) &&
+                                movedEntityKey != pilotSeat.ControlledEntityKey,
+                            "Starbridge stable Pilot identity proof requires a changed positional entity key");
+                        var movedPilot = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
+                            MessagePackSerializer.Serialize(pilot));
+                        movedPilot.CommandId = "starbridge-pilot-after-transfer";
+                        movedPilot.ActorEntityKey = movedEntityKey;
+                        var movedSelection = AetheriaRuntimeStarbridgeOperationAdmission.Admit(
+                            [movedPilot], session.Mode, session.ModePolicyId, session.SessionId, session.RunId,
+                            observedFrameId, policy, seats, movedRun, "daemon-smoke");
+                        var stalePilot = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonCommandDocument>(
+                            MessagePackSerializer.Serialize(pilot));
+                        stalePilot.CommandId = "starbridge-stale-position";
+                        var stalePositionSelection = AetheriaRuntimeStarbridgeOperationAdmission.Admit(
+                            [stalePilot], session.Mode, session.ModePolicyId, session.SessionId, session.RunId,
+                            observedFrameId, policy, seats, movedRun, "daemon-smoke");
                         Require(session.ModePolicyId == AetheriaModePolicies.StarbridgeCommanderPilotInput &&
                                 policy.PolicyId == session.ModePolicyId &&
                                 policy.DefaultMode == AetheriaRuntimeAuthorityModes.HostAuthoritative &&
@@ -1935,6 +1986,10 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                 ambiguousSelection.RejectedCommandIds.Contains(pilot.CommandId) &&
                                 ambiguousSelection.RejectedCommandIds.Contains(duplicatePilot.CommandId),
                             "Starbridge must reject an ambiguous pair of Pilot operations instead of selecting by client-controlled time or id");
+                        Require(movedSelection.Selected.Single().CommandId == movedPilot.CommandId &&
+                                stalePositionSelection.Selected.Count == 0 &&
+                                stalePositionSelection.RejectedCommandIds.Contains(stalePilot.CommandId),
+                            "Starbridge Pilot authority must follow stable ship identity after transfer and reject its stale positional key");
                     }
                     else if (string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
                     {

@@ -403,7 +403,12 @@ not Continue or a client-supplied actor id, owns controller assignment.
 Starbridge deployments now carry
 `aetheria.mode.starbridge.commander-pilot-input.v1`. Launch installs that policy,
 one durable Commander seat, and an optional Pilot seat bound to the deployed
-ship. The implemented slice is operation admission, not mixed-authority
+ship by stable entity identity. Launch and Continue navigate from that seat,
+not from the Starbridge mode label: a Pilot receives a seat-scoped Eve cockpit
+whose movement command and controlled actor are derived from the same seat used
+by admission. Positional record keys are caches, not seat authority, so a zone
+transfer or entity reindex cannot silently transfer or destroy the Pilot's
+jurisdiction. The implemented slice is operation admission, not mixed-authority
 correction: for the exact current frame, a bound Pilot may submit
 `SetMoveVector` for that ship. Unbound, wrong-subject, late, and ambiguous
 operations fail closed; if Commander and Pilot operations occupy the same input
@@ -428,7 +433,8 @@ Starbridge does not yet independently simulate or transport movement,
 targeting, combat, nearest-environment, or engagement facts, nor prove
 mismatch correction or rollback/replay across a networked Pilot daemon. The
 movement slice proves policy/session durability, seat-bound operation
-admission, daemon-only fact authorship, and stale/forged input rejection; it is
+admission, seat-scoped Eve projection, stable ship resolution across positional
+reindex, daemon-only fact authorship, and stale/forged input rejection; it is
 not a mixed-authority finality proof.
 
 The next state-architecture cut is exactly-once Settlement plus the remaining

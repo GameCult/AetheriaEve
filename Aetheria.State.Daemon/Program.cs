@@ -633,6 +633,7 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
             ? AdmitStarbridgeOperations(
                 pendingObservedCommands,
                 ingressState,
+                run,
                 currentFrame?.FrameId ?? -1,
                 options.DaemonId,
                 policyRejectedCommandIds)
@@ -907,6 +908,7 @@ static async Task RefreshGameSessionInputsAsync(
 static IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> AdmitStarbridgeOperations(
     IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> operations,
     AetheriaDaemonIngressState ingressState,
+    AetheriaRuntimeRunCheckpointCommit run,
     long currentFrameId,
     string hostRuntimeId,
     ICollection<string> rejectedCommandIds)
@@ -920,6 +922,7 @@ static IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> AdmitStarbridgeOperat
         currentFrameId,
         ingressState.AuthorityPolicy,
         ingressState.StarbridgePlayerSeats,
+        run,
         hostRuntimeId);
     foreach (var rejected in selection.RejectedCommandIds)
         rejectedCommandIds.Add(rejected);
@@ -2555,9 +2558,21 @@ static async Task PublishClientGameplayDocumentsAsync(
         ? node.Documents<AetheriaRuntimeArenaRosterDocument>().SingleOrDefault(value =>
             value != null && value.IsActiveFor(gameSession.SessionId, gameSession.RunId))
         : null;
+    var starbridgeSeats = gameSession != null && string.Equals(gameSession.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
+        ? node.Documents<AetheriaRuntimeStarbridgePlayerSeatDocument>()
+            .Where(value => value != null &&
+                string.Equals(value.SessionId, gameSession.SessionId, StringComparison.Ordinal) &&
+                string.Equals(value.RunId, gameSession.RunId, StringComparison.Ordinal))
+            .ToArray()
+        : Array.Empty<AetheriaRuntimeStarbridgePlayerSeatDocument>();
     if (publishTopology)
         await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement)
-            .ReplaceAsync(BuildCoreProviderAdvertisement(options, result.Frame.PublishedAtUtc, arenaRoster, result.Frame.Run))
+            .ReplaceAsync(BuildCoreProviderAdvertisement(
+                options,
+                result.Frame.PublishedAtUtc,
+                arenaRoster,
+                result.Frame.Run,
+                starbridgeSeats: starbridgeSeats))
             .ConfigureAwait(false);
     TraceClientDocumentPhase("provider-advertisements");
     if (publishTopology && result.AssetManifest != null)
@@ -2644,6 +2659,28 @@ static async Task PublishClientGameplayDocumentsAsync(
                 .ReplaceAsync(view.Surface).ConfigureAwait(false);
         }
     }
+    foreach (var seat in starbridgeSeats.Where(value =>
+                 string.Equals(value.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Pilot, StringComparison.Ordinal) &&
+                 string.Equals(value.ConnectionState, AetheriaRuntimeStarbridgePlayerSeatConnectionStates.Connected, StringComparison.Ordinal)))
+    {
+        AetheriaRuntimeStarbridgeSeatViewProjection view;
+        try
+        {
+            view = AetheriaRuntimeStarbridgeSeatViewProjector.Project(
+                result.Frame,
+                seat,
+                starbridgeSeats,
+                result.Health ?? new AetheriaRuntimeDaemonHealthDocument(),
+                result.CommandBoundary ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId),
+                inputCatalog,
+                activeMainMenuSurfaceId);
+        }
+        catch (InvalidOperationException)
+        {
+            continue;
+        }
+        await WriteStarbridgeSeatViewAsync(node, seat.RuntimeId, view).ConfigureAwait(false);
+    }
     TraceClientDocumentPhase("game-topology");
 }
 
@@ -2702,7 +2739,8 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
     string updatedAtUtc,
     AetheriaRuntimeArenaRosterDocument? arenaRoster = null,
     AetheriaRuntimeRunCheckpointCommit? arenaRun = null,
-    string controllerRuntimeId = "")
+    string controllerRuntimeId = "",
+    IReadOnlyList<AetheriaRuntimeStarbridgePlayerSeatDocument>? starbridgeSeats = null)
 {
     var interaction = new EveWorldInteractionAdvertisement(
         "provider-authored-world-surface",
@@ -2791,6 +2829,20 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
             AetheriaRuntimeVerseRecordKeys.ArenaPilotSurfaceId(seat.ControllerRuntimeId),
             EveSurfaceDocument.SchemaId,
             AetheriaRuntimeVerseRecordKeys.ArenaPilotSurface(seat.ControllerRuntimeId).ToString(),
+            "cultmesh-record",
+            "active",
+            "interactive-world",
+            interaction)));
+    surfaces.AddRange((starbridgeSeats ?? Array.Empty<AetheriaRuntimeStarbridgePlayerSeatDocument>())
+        .Where(seat => seat != null &&
+            string.Equals(seat.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Pilot, StringComparison.Ordinal) &&
+            string.Equals(seat.ConnectionState, AetheriaRuntimeStarbridgePlayerSeatConnectionStates.Connected, StringComparison.Ordinal) &&
+            (string.IsNullOrWhiteSpace(controllerRuntimeId) ||
+             string.Equals(seat.RuntimeId, controllerRuntimeId, StringComparison.Ordinal)))
+        .Select(seat => new EveAdvertisedSurface(
+            AetheriaRuntimeVerseRecordKeys.StarbridgePilotSurfaceId(seat.RuntimeId),
+            EveSurfaceDocument.SchemaId,
+            AetheriaRuntimeVerseRecordKeys.StarbridgePilotSurface(seat.RuntimeId).ToString(),
             "cultmesh-record",
             "active",
             "interactive-world",
@@ -3777,12 +3829,17 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                 if (accepted)
                 {
                     activatesSession = true;
-                    var surfaceId = SurfaceForMode(receipt.Mode);
+                    var surfaceId = AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId;
                     if (string.Equals(receipt.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
                     {
                         var seat = FindArenaSeat(node, options.SessionId, request.ClientId);
                         if (seat != null)
                             surfaceId = await PublishArenaSeatSurfaceAsync(node, options, seat, now).ConfigureAwait(false);
+                    }
+                    else if (string.Equals(receipt.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
+                    {
+                        surfaceId = await PublishStarbridgeRoleSurfaceAsync(
+                            node, options, request.ClientId, now).ConfigureAwait(false);
                     }
                     navigation = new EveSurfaceNavigationTarget(
                         options.VerseId,
@@ -3802,18 +3859,24 @@ static async Task<bool> AcceptHangarInvocationCoreAsync(
                     request.CommandId,
                     options.VerseId,
                     options.DaemonId,
+                    request.ClientId,
                     now).ConfigureAwait(false);
                 accepted = deployment != null;
                 diagnostic = accepted ? "" : "No resumable deployment exists for the selected ship and mode.";
                 if (deployment != null)
                 {
                     activatesSession = true;
-                    var surfaceId = SurfaceForMode(deployment.Mode);
+                    var surfaceId = AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId;
                     if (string.Equals(deployment.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
                     {
                         var seat = FindArenaSeat(node, options.SessionId, request.ClientId);
                         if (seat != null)
                             surfaceId = await PublishArenaSeatSurfaceAsync(node, options, seat, now).ConfigureAwait(false);
+                    }
+                    else if (string.Equals(deployment.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
+                    {
+                        surfaceId = await PublishStarbridgeRoleSurfaceAsync(
+                            node, options, request.ClientId, now).ConfigureAwait(false);
                     }
                     navigation = new EveSurfaceNavigationTarget(
                         options.VerseId,
@@ -3927,11 +3990,6 @@ static Task<bool> AcceptArenaLobbyInvocationAsync(
         return accepted;
     });
 
-static string SurfaceForMode(string mode) =>
-    string.Equals(mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
-        ? AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId
-        : AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId;
-
 static AetheriaRuntimeArenaSeat? FindArenaSeat(
     AetheriaStateNode node,
     string sessionId,
@@ -3947,6 +4005,80 @@ static AetheriaRuntimeArenaSeat? FindArenaSeat(
     return roster?.Seats?.SingleOrDefault(seat => seat != null &&
         string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
         string.Equals(seat.ControllerRuntimeId, controllerRuntimeId, StringComparison.Ordinal));
+}
+
+static async Task<string> PublishStarbridgeRoleSurfaceAsync(
+    AetheriaStateNode node,
+    AetheriaDaemonHostOptions options,
+    string runtimeId,
+    string updatedAtUtc)
+{
+    var session = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+        .ReadAsync().ConfigureAwait(false)
+        ?? throw new InvalidOperationException("Starbridge role projection requires the active game session.");
+    if (!string.Equals(session.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
+        throw new InvalidOperationException("Starbridge role projection requires an active Starbridge session.");
+    var seats = node.Documents<AetheriaRuntimeStarbridgePlayerSeatDocument>()
+        .Where(value => value != null &&
+            string.Equals(value.SessionId, session.SessionId, StringComparison.Ordinal) &&
+            string.Equals(value.RunId, session.RunId, StringComparison.Ordinal))
+        .ToArray();
+    var surfaceId = AetheriaStarbridgeRoleNavigation.ResolveSurfaceId(
+        session.SessionId, session.RunId, runtimeId, seats);
+    if (string.Equals(surfaceId, AetheriaRuntimeDaemonGameSurfaceBuilder.CommanderSurfaceId, StringComparison.Ordinal))
+        return surfaceId;
+
+    var run = await ReadRuntimeRunCheckpointAsync(node, options.RenderSettings, session.RunRecordKey).ConfigureAwait(false)
+        ?? throw new InvalidOperationException("Starbridge Pilot projection requires the canonical run checkpoint.");
+    var latestFrame = await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(
+            AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest)
+        .ReadAsync().ConfigureAwait(false);
+    var frame = AetheriaDaemonFrameProvenance.BelongsToSession(latestFrame, session, options.DaemonId)
+        ? latestFrame!
+        : AetheriaRuntimeDaemonFrameDocument.Create(
+            run,
+            options.DaemonId,
+            session.SessionId,
+            0,
+            0,
+            options.FixedDeltaSeconds,
+            renderSettings: options.RenderSettings);
+    frame.GameMode = session.Mode;
+    frame.RunRecordKey = session.RunRecordKey;
+    frame.PublishedAtUtc = updatedAtUtc ?? DateTimeOffset.UtcNow.ToString("O");
+    var seat = seats.Single(value =>
+        string.Equals(value.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Pilot, StringComparison.Ordinal) &&
+        string.Equals(value.RuntimeId, runtimeId, StringComparison.Ordinal) &&
+        string.Equals(value.ConnectionState, AetheriaRuntimeStarbridgePlayerSeatConnectionStates.Connected, StringComparison.Ordinal));
+    var health = await node.MutableDocument<AetheriaRuntimeDaemonHealthDocument>(AetheriaRuntimeVerseRecordKeys.DaemonHealth)
+        .ReadAsync().ConfigureAwait(false) ?? new AetheriaRuntimeDaemonHealthDocument();
+    var boundary = await node.MutableDocument<AetheriaRuntimeDaemonCommandBoundaryDocument>(AetheriaRuntimeVerseRecordKeys.DaemonCommandBoundary)
+        .ReadAsync().ConfigureAwait(false) ?? AetheriaRuntimeDaemonCommandBoundaryDocument.Create(options.DaemonId);
+    var view = AetheriaRuntimeStarbridgeSeatViewProjector.Project(
+        frame, seat, seats, health, boundary, node.RuntimeCatalog().Latest());
+    await WriteStarbridgeSeatViewAsync(node, runtimeId, view).ConfigureAwait(false);
+    await node.MutableDocument<EveProviderAdvertisementDocument>(AetheriaRuntimeVerseRecordKeys.EveProviderAdvertisement)
+        .ReplaceAsync(BuildCoreProviderAdvertisement(
+            options,
+            frame.PublishedAtUtc,
+            arenaRun: frame.Run,
+            starbridgeSeats: seats)).ConfigureAwait(false);
+    return surfaceId;
+}
+
+static async Task WriteStarbridgeSeatViewAsync(
+    AetheriaStateNode node,
+    string runtimeId,
+    AetheriaRuntimeStarbridgeSeatViewProjection view)
+{
+    await node.MutableDocument<AetheriaRuntimeZoneRenderDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgePilotZoneRender(runtimeId))
+        .ReplaceAsync(view.ZoneRender).ConfigureAwait(false);
+    await node.MutableDocument<AetheriaRuntimeDaemonFrameDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgePilotFrame(runtimeId))
+        .ReplaceAsync(view.Frame).ConfigureAwait(false);
+    await node.MutableDocument<EveInputCapabilityDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgePilotInputCapability(runtimeId))
+        .ReplaceAsync(view.InputCapability).ConfigureAwait(false);
+    await node.MutableDocument<EveSurfaceDocument>(AetheriaRuntimeVerseRecordKeys.StarbridgePilotSurface(runtimeId))
+        .ReplaceAsync(view.Surface).ConfigureAwait(false);
 }
 
 static async Task<string> PublishArenaSeatSurfaceAsync(

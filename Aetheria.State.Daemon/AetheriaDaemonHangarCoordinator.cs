@@ -242,6 +242,7 @@ public static class AetheriaDaemonHangarCoordinator
         string commandId,
         string verseId,
         string hostRuntimeId,
+        string controllerRuntimeId,
         string now)
     {
         return await node.CommitAsync(async () =>
@@ -259,7 +260,7 @@ public static class AetheriaDaemonHangarCoordinator
                 commandId,
                 verseId,
                 hostRuntimeId,
-                controllerRuntimeId: "",
+                controllerRuntimeId,
                 createModeBindings: false,
                 now).ConfigureAwait(false);
             return deployment;
@@ -357,6 +358,13 @@ public static class AetheriaDaemonHangarCoordinator
                         string.Equals(value.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Commander, StringComparison.Ordinal) &&
                         string.Equals(value.RuntimeId, hostRuntimeId, StringComparison.Ordinal)))
                     throw new InvalidOperationException("Continued Starbridge deployment has no matching Commander seat.");
+                if (!string.Equals(controllerRuntimeId, hostRuntimeId, StringComparison.Ordinal) &&
+                    matchingSeats.Count(value =>
+                        string.Equals(value.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Pilot, StringComparison.Ordinal) &&
+                        string.Equals(value.RuntimeId, controllerRuntimeId, StringComparison.Ordinal) &&
+                        string.Equals(value.ConnectionState, AetheriaRuntimeStarbridgePlayerSeatConnectionStates.Connected, StringComparison.Ordinal) &&
+                        !string.IsNullOrWhiteSpace(value.ControlledEntityId)) != 1)
+                    throw new InvalidOperationException("Continued Starbridge deployment has no unique connected Pilot seat for its caller.");
             }
         }
     }
@@ -398,6 +406,8 @@ public static class AetheriaDaemonHangarCoordinator
             stamp);
         pilot.ControlledEntityKey = run.CurrentEntityKey;
         pilot.ShipEntityKey = run.CurrentEntityKey;
+        pilot.ControlledEntityId = run.CurrentEntityKey;
+        pilot.ShipEntityId = run.CurrentEntityKey;
         pilot.ClaimKinds = [AetheriaRuntimeClaimKinds.Movement];
         pilot.AuthorityLeaseId = $"starbridge:{sessionId}:pilot:0:movement";
         await node.MutableDocument<AetheriaRuntimeStarbridgePlayerSeatDocument>(
