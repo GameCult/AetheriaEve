@@ -226,19 +226,25 @@ internal sealed class AetheriaGameplayExposureContext
     private AetheriaGameplayExposureContext(
         AetheriaGameplayExposureKind kind,
         AetheriaArenaExposureContext? arena,
-        AetheriaStarbridgeExposureContext? starbridge)
+        AetheriaStarbridgeExposureContext? starbridge,
+        string mode)
     {
         Kind = kind;
         Arena = arena;
         Starbridge = starbridge;
+        Mode = mode ?? "";
     }
 
     public AetheriaGameplayExposureKind Kind { get; }
     public AetheriaArenaExposureContext? Arena { get; }
     public AetheriaStarbridgeExposureContext? Starbridge { get; }
+    public string Mode { get; }
 
     public static AetheriaGameplayExposureContext LocalOpen { get; } =
-        new(AetheriaGameplayExposureKind.LocalOpen, null, null);
+        new(AetheriaGameplayExposureKind.LocalOpen, null, null, AetheriaGameModes.Terminus);
+
+    public static AetheriaGameplayExposureContext Unsupported(string? mode) =>
+        new(AetheriaGameplayExposureKind.ActiveInvalid, null, null, mode ?? "");
 
     public static AetheriaGameplayExposureContext FromArena(AetheriaArenaExposureContext context) =>
         new(
@@ -246,12 +252,17 @@ internal sealed class AetheriaGameplayExposureContext
                 ? AetheriaGameplayExposureKind.ArenaValid
                 : AetheriaGameplayExposureKind.ActiveInvalid,
             context,
-            null);
+            null,
+            context.Session?.Mode ?? AetheriaGameModes.Arena);
 
     public static AetheriaGameplayExposureContext FromStarbridge(
         AetheriaStarbridgeExposureContext context,
         bool valid) =>
-        new(valid ? AetheriaGameplayExposureKind.StarbridgeValid : AetheriaGameplayExposureKind.ActiveInvalid, null, context);
+        new(
+            valid ? AetheriaGameplayExposureKind.StarbridgeValid : AetheriaGameplayExposureKind.ActiveInvalid,
+            null,
+            context,
+            context.Session.Mode);
 }
 
 /// <summary>
@@ -268,11 +279,14 @@ internal static class AetheriaGameplayExposurePolicy
         var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
         if (session == null)
             return AetheriaGameplayExposureContext.LocalOpen;
-        if (string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
+        var mode = AetheriaGameModes.Classify(session.Mode);
+        if (mode == AetheriaGameModeKind.Terminus)
+            return AetheriaGameplayExposureContext.LocalOpen;
+        if (mode == AetheriaGameModeKind.Arena)
             return AetheriaGameplayExposureContext.FromArena(
                 AetheriaArenaExposurePolicy.Resolve(node, frame, hostRuntimeId));
-        if (!string.Equals(session.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
-            return AetheriaGameplayExposureContext.LocalOpen;
+        if (mode != AetheriaGameModeKind.Starbridge)
+            return AetheriaGameplayExposureContext.Unsupported(session.Mode);
 
         var policy = node.Cache.Get<AetheriaRuntimeVerseAuthorityPolicyDocument>(
             AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy);
@@ -312,7 +326,7 @@ internal static class AetheriaGameplayExposurePolicy
             AetheriaGameplayExposureKind.StarbridgeValid => StarbridgeGeneration("starbridge", context.Starbridge!),
             _ when context.Arena != null => "invalid-arena\u001f" + AetheriaArenaExposurePolicy.Generation(context.Arena),
             _ when context.Starbridge != null => StarbridgeGeneration("invalid-starbridge", context.Starbridge),
-            _ => "active-invalid"
+            _ => "active-invalid\u001f" + context.Mode
         };
 
     public static bool CanReadRecord(

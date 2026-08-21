@@ -154,7 +154,9 @@ The authority policy differs without changing the document model:
   and reconnect. Those paths consume one mode-aware resolved exposure context:
   `LocalOpen`, `ArenaValid`, `StarbridgeValid`, or `ActiveInvalid`. Missing or
   stale seat/roster/frame state, or a missing/mismatched scoped-mode authority policy, is
-  `ActiveInvalid` and exports nothing. A valid frame must be authoritative,
+  `ActiveInvalid` and exports nothing. `LocalOpen` applies only when no session
+  exists or the active mode is exactly Terminus; corrupt, unknown, and future
+  active modes fail closed until they earn an exposure policy. A valid frame must be authoritative,
   daemon-sourced, and match the active host, session, run record, run id, and
   mode; it is never
   treated as ordinary local-open play. The daemon reconciles live subscriptions

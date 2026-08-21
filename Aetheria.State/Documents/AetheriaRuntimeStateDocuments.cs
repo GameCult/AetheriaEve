@@ -255,7 +255,7 @@ public sealed class AetheriaRunState
     public AetheriaAgentTaskState[] AgentTasks { get; set; } = [];
 
     [Key(17)]
-    public string GameMode { get; set; } = AetheriaGameSessionState.AetheriaMode;
+    public string GameMode { get; set; } = AetheriaGameSessionState.TerminusMode;
 
     [Key(18)]
     public AetheriaFactionZoneState[] HomeZones { get; set; } = [];

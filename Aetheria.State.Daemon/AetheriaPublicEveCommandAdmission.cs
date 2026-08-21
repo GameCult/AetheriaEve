@@ -33,7 +33,18 @@ internal static class AetheriaPublicEveCommandAdmission
         }
 
         var activeSession = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
-        if (string.Equals(activeSession?.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
+        if (activeSession == null)
+            throw new InvalidOperationException("No active game session accepts gameplay commands.");
+        var mode = AetheriaGameModes.Classify(activeSession.Mode);
+        if (mode == AetheriaGameModeKind.Unsupported)
+            throw new InvalidOperationException("The active game mode has no installed gameplay command policy.");
+        if (mode == AetheriaGameModeKind.Terminus)
+        {
+            if (string.Equals(request.SurfaceId, AetheriaRuntimeArenaLobbyCommands.SurfaceId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Terminus does not expose the Arena lobby command boundary.");
+            return;
+        }
+        if (mode == AetheriaGameModeKind.Starbridge)
         {
             var seats = node.Documents<AetheriaRuntimeStarbridgePlayerSeatDocument>()
                 .Where(value => value != null &&
@@ -55,9 +66,8 @@ internal static class AetheriaPublicEveCommandAdmission
         if (!string.Equals(request.Command, AetheriaRuntimeArenaLobbyCommands.Join, StringComparison.Ordinal))
             throw new InvalidOperationException("The Arena lobby accepts only its advertised join operation.");
 
-        var session = node.Cache.Get<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey);
-        if (session == null ||
-            !string.Equals(session.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal) ||
+        var session = activeSession;
+        if (mode != AetheriaGameModeKind.Arena ||
             !string.Equals(
                 Payload(request, AetheriaRuntimeArenaLobbyCommands.ExpectedSessionId),
                 session.SessionId,

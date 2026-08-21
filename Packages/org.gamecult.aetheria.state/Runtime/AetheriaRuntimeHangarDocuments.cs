@@ -7,16 +7,29 @@ using MessagePack;
 
 namespace GameCult.Aetheria.State.Verse
 {
+    public enum AetheriaGameModeKind
+    {
+        Terminus,
+        Starbridge,
+        Arena,
+        Unsupported
+    }
+
     public static class AetheriaGameModes
     {
         public const string Terminus = "terminus";
         public const string Starbridge = "starbridge";
         public const string Arena = "arena";
 
-        public static bool IsKnown(string? mode) =>
-            string.Equals(mode, Terminus, StringComparison.Ordinal) ||
-            string.Equals(mode, Starbridge, StringComparison.Ordinal) ||
-            string.Equals(mode, Arena, StringComparison.Ordinal);
+        public static AetheriaGameModeKind Classify(string? mode) => mode switch
+        {
+            Terminus => AetheriaGameModeKind.Terminus,
+            Starbridge => AetheriaGameModeKind.Starbridge,
+            Arena => AetheriaGameModeKind.Arena,
+            _ => AetheriaGameModeKind.Unsupported
+        };
+
+        public static bool IsKnown(string? mode) => Classify(mode) != AetheriaGameModeKind.Unsupported;
     }
 
     public static class AetheriaModePolicies

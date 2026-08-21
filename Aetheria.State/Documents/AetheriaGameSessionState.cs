@@ -12,8 +12,6 @@ public sealed class AetheriaGameSessionState
     public const string TerminusMode = AetheriaGameModes.Terminus;
     public const string StarbridgeMode = AetheriaGameModes.Starbridge;
     public const string ArenaMode = AetheriaGameModes.Arena;
-    public const string AetheriaMode = "aetheria";
-
     [Key(0)] public string Mode { get; set; } = TerminusMode;
     [Key(1)] public string SessionId { get; set; } = "";
     [Key(2)] public string RunId { get; set; } = "";

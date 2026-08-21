@@ -230,7 +230,7 @@ namespace GameCult.Aetheria.State.Verse
         public long TerminalFrameId { get; set; } = -1;
 
         [Key(20)]
-        public string GameMode { get; set; } = "aetheria";
+        public string GameMode { get; set; } = AetheriaGameModes.Terminus;
 
         [Key(21)]
         public IReadOnlyList<AetheriaRuntimeFactionZoneCommit> HomeZones { get; set; } =

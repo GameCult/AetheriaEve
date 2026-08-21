@@ -415,8 +415,7 @@ while (!stopped.Task.IsCompleted)
     await PublishHotEntityStateAsync(
         node, soaPublisher, hotState, latestFrame!, ingressState.Catalog, cultMeshClientHost,
         AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest,
-        allowRealtime: !string.Equals(latestFrame!.GameMode, AetheriaGameModes.Arena, StringComparison.Ordinal) &&
-            !string.Equals(latestFrame.GameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
+        allowRealtime: AetheriaGameModes.Classify(latestFrame!.GameMode) == AetheriaGameModeKind.Terminus)
         .ConfigureAwait(false);
     await PublishArenaSeatObservationsAsync(
         node, arenaSeatObservations, currentGameplayExposure.Arena,
@@ -475,8 +474,7 @@ while (!stopped.Task.IsCompleted)
         await PublishHotEntityStateAsync(
             node, soaPublisher, hotState, tick.Frame, ingressState.Catalog, cultMeshClientHost,
             AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest,
-            allowRealtime: !string.Equals(tick.Frame.GameMode, AetheriaGameModes.Arena, StringComparison.Ordinal) &&
-                !string.Equals(tick.Frame.GameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal))
+            allowRealtime: AetheriaGameModes.Classify(tick.Frame.GameMode) == AetheriaGameModeKind.Terminus)
             .ConfigureAwait(false);
         await PublishArenaSeatObservationsAsync(
             node, arenaSeatObservations, currentGameplayExposure.Arena,
@@ -642,33 +640,46 @@ static async Task<AetheriaRuntimeDaemonTickResult> TickAsync(
     var starbridgeScenario = ingressState.StarbridgeScenario;
     var starbridgeSession = ingressState.StarbridgeSession;
     var authorityLeases = ingressState.AuthorityLeases;
-    var authorizedCommands = string.Equals(ingressState.GameMode, AetheriaGameModes.Arena, StringComparison.Ordinal)
-        ? AetheriaRuntimeArenaOperationAdmission.AuthorizedCommands(
-            pendingObservedCommands,
-            ingressState.GameMode,
-            ingressState.SessionId,
-            ingressState.RunId,
-            ingressState.ModePolicyId,
-            authorityPolicy,
-            run,
-            ingressState.ArenaRoster,
-            options.DaemonId,
-            policyRejectedCommandIds)
-        : string.Equals(ingressState.GameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
-            ? AdmitStarbridgeOperations(
+    var modeKind = AetheriaGameModes.Classify(ingressState.GameMode);
+    IReadOnlyList<AetheriaRuntimeDaemonCommandDocument> authorizedCommands;
+    switch (modeKind)
+    {
+        case AetheriaGameModeKind.Arena:
+            authorizedCommands = AetheriaRuntimeArenaOperationAdmission.AuthorizedCommands(
+                pendingObservedCommands,
+                ingressState.GameMode,
+                ingressState.SessionId,
+                ingressState.RunId,
+                ingressState.ModePolicyId,
+                authorityPolicy,
+                run,
+                ingressState.ArenaRoster,
+                options.DaemonId,
+                policyRejectedCommandIds);
+            break;
+        case AetheriaGameModeKind.Starbridge:
+            authorizedCommands = AdmitStarbridgeOperations(
                 pendingObservedCommands,
                 ingressState,
                 run,
                 currentFrame?.FrameId ?? -1,
                 options.DaemonId,
-                policyRejectedCommandIds)
-        : AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
-            pendingObservedCommands,
-            authorityPolicy,
-            authorityLeases,
-            options.DaemonId,
-            policyRejectedCommandIds);
-    var terminus = string.Equals(ingressState.GameMode, AetheriaGameSessionState.TerminusMode, StringComparison.Ordinal);
+                policyRejectedCommandIds);
+            break;
+        case AetheriaGameModeKind.Terminus:
+            authorizedCommands = AetheriaRuntimeAuthorityRouter.AuthorizedCommands(
+                pendingObservedCommands,
+                authorityPolicy,
+                authorityLeases,
+                options.DaemonId,
+                policyRejectedCommandIds);
+            break;
+        default:
+            policyRejectedCommandIds.AddRange(pendingObservedCommands.Select(command => command.CommandId));
+            authorizedCommands = Array.Empty<AetheriaRuntimeDaemonCommandDocument>();
+            break;
+    }
+    var terminus = modeKind == AetheriaGameModeKind.Terminus;
     var simulationClockCommands = authorizedCommands
         .Where(command => command.Kind == AetheriaRuntimeDaemonCommandKinds.SetSimulationRate ||
             command.Kind == AetheriaRuntimeDaemonCommandKinds.AdvanceSimulationStep)
@@ -2848,10 +2859,11 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
         new[] { "unity-scene", "web-reference", "electron-shell" },
         "provider-owns-topology-discovery-landmarks-influence-and-assets");
     var surfaces = new List<EveAdvertisedSurface>();
-    var arenaActive = arenaRoster != null || string.Equals(gameMode, AetheriaGameModes.Arena, StringComparison.Ordinal);
-    var starbridgeActive = string.Equals(gameMode, AetheriaGameModes.Starbridge, StringComparison.Ordinal);
+    var modeKind = AetheriaGameModes.Classify(gameMode);
+    var arenaActive = modeKind == AetheriaGameModeKind.Arena;
+    var starbridgeActive = modeKind == AetheriaGameModeKind.Starbridge;
     var scopedModeActive = arenaActive || starbridgeActive;
-    if (!scopedModeActive)
+    if (modeKind == AetheriaGameModeKind.Terminus)
     {
         surfaces.AddRange(new[]
         {
@@ -2881,7 +2893,9 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
                 mapInteraction)
         });
     }
-    if (!scopedModeActive || string.Equals(
+    if (modeKind == AetheriaGameModeKind.Terminus ||
+        modeKind == AetheriaGameModeKind.Unsupported ||
+        string.Equals(
             controllerRuntimeId,
             options.HangarPrincipalRuntimeId,
             StringComparison.Ordinal))
@@ -2909,7 +2923,7 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
                 interaction));
     }
     surfaces.AddRange((arenaRoster?.Seats ?? Array.Empty<AetheriaRuntimeArenaSeat>())
-        .Where(seat => seat != null &&
+        .Where(seat => arenaActive && seat != null &&
             string.Equals(seat.Status, AetheriaRuntimeArenaSeatStatuses.Active, StringComparison.Ordinal) &&
             string.Equals(seat.ControllerRuntimeId, controllerRuntimeId, StringComparison.Ordinal) &&
             arenaRun?.TryResolveEntityId(seat.ControlledEntityId, out _) == true)
@@ -2922,7 +2936,7 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
             "interactive-world",
             interaction)));
     surfaces.AddRange((starbridgeSeats ?? Array.Empty<AetheriaRuntimeStarbridgePlayerSeatDocument>())
-        .Where(seat => seat != null &&
+        .Where(seat => starbridgeActive && seat != null &&
             string.Equals(seat.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Pilot, StringComparison.Ordinal) &&
             string.Equals(seat.ConnectionState, AetheriaRuntimeStarbridgePlayerSeatConnectionStates.Connected, StringComparison.Ordinal) &&
             string.Equals(seat.RuntimeId, controllerRuntimeId, StringComparison.Ordinal))
@@ -2935,7 +2949,7 @@ static EveProviderAdvertisementDocument BuildCoreProviderAdvertisement(
             "interactive-world",
             interaction)));
     var commanderSeat = (starbridgeSeats ?? Array.Empty<AetheriaRuntimeStarbridgePlayerSeatDocument>())
-        .SingleOrDefault(seat => seat != null &&
+        .SingleOrDefault(seat => starbridgeActive && seat != null &&
             string.Equals(seat.Role, AetheriaRuntimeStarbridgePlayerSeatRoles.Commander, StringComparison.Ordinal) &&
             string.Equals(seat.ConnectionState, AetheriaRuntimeStarbridgePlayerSeatConnectionStates.Connected, StringComparison.Ordinal) &&
             string.Equals(seat.RuntimeId, controllerRuntimeId, StringComparison.Ordinal));
@@ -5057,7 +5071,7 @@ static async Task EnsureGameSessionCoreAsync(
     if (run == null)
         throw new InvalidDataException("Aetheria game session requires a canonical active run.");
     var expectedMode = string.IsNullOrWhiteSpace(run.GameMode)
-        ? run.IsTutorial ? AetheriaGameSessionState.AetheriaMode : AetheriaGameSessionState.TerminusMode
+        ? AetheriaGameSessionState.TerminusMode
         : run.GameMode;
     var expectedModePolicyId = AetheriaModePolicies.ForMode(expectedMode);
     var initialSimulationRate = options.UseTerminusFixture ? 0 : 1;
@@ -5095,11 +5109,31 @@ static async Task EnsureVerseAuthorityPolicyAsync(
     var existing = await node.MutableDocument<AetheriaRuntimeVerseAuthorityPolicyDocument>(AetheriaRuntimeVerseRecordKeys.VerseAuthorityPolicy).ReadAsync().ConfigureAwait(false);
     var session = await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
         .ReadAsync().ConfigureAwait(false);
-    var policy = string.Equals(session?.Mode, AetheriaGameModes.Arena, StringComparison.Ordinal)
-        ? AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(options.VerseId, options.DaemonId)
-        : string.Equals(session?.Mode, AetheriaGameModes.Starbridge, StringComparison.Ordinal)
-            ? AetheriaRuntimeVerseAuthorityPolicyDocument.StarbridgeCommanderPilotInput(options.VerseId, options.DaemonId)
-            : AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(options.VerseId, options.DaemonId);
+    var modeKind = session == null
+        ? AetheriaGameModeKind.Terminus
+        : AetheriaGameModes.Classify(session.Mode);
+    if (modeKind == AetheriaGameModeKind.Unsupported)
+    {
+        if (!string.IsNullOrWhiteSpace(session!.ModePolicyId))
+        {
+            await node.CommitAsync(async () =>
+            {
+                session.ModePolicyId = "";
+                session.UpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O");
+                await node.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                    .ReplaceAsync(session).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+        }
+        return;
+    }
+    var policy = modeKind switch
+    {
+        AetheriaGameModeKind.Arena =>
+            AetheriaRuntimeVerseAuthorityPolicyDocument.ArenaServerAuthoritative(options.VerseId, options.DaemonId),
+        AetheriaGameModeKind.Starbridge =>
+            AetheriaRuntimeVerseAuthorityPolicyDocument.StarbridgeCommanderPilotInput(options.VerseId, options.DaemonId),
+        _ => AetheriaRuntimeVerseAuthorityPolicyDocument.TrustedCoop(options.VerseId, options.DaemonId)
+    };
     var expectedModePolicyId = AetheriaModePolicies.ForMode(session?.Mode);
     if (existing != null &&
         string.Equals(existing.Schema, AetheriaRuntimeVerseAuthoritySchemas.Policy, StringComparison.Ordinal) &&
@@ -5160,7 +5194,7 @@ static async Task<AetheriaRuntimeRunCheckpointCommit?> ReadRuntimeRunCheckpointA
         RunId = run.RunId ?? "",
         IsTutorial = run.IsTutorial,
         GameMode = string.IsNullOrWhiteSpace(run.GameMode)
-            ? run.IsTutorial ? AetheriaGameSessionState.AetheriaMode : AetheriaGameSessionState.TerminusMode
+            ? AetheriaGameSessionState.TerminusMode
             : run.GameMode,
         EntranceZoneIndex = run.EntranceZoneIndex,
         ExitZoneIndex = run.ExitZoneIndex,

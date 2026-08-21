@@ -1994,6 +1994,46 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
 
                         var gameplayExposure = AetheriaGameplayExposurePolicy.Resolve(
                             reopened, pilotFrame, "daemon-smoke");
+                        var terminusModeSession = MessagePackSerializer.Deserialize<AetheriaGameSessionState>(
+                            MessagePackSerializer.Serialize(session));
+                        terminusModeSession.Mode = AetheriaGameModes.Terminus;
+                        reopened.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                            .ReplaceAsync(terminusModeSession).GetAwaiter().GetResult();
+                        var terminusModeExposure = AetheriaGameplayExposurePolicy.Resolve(
+                            reopened, pilotFrame, "daemon-smoke");
+                        var unknownModeSession = MessagePackSerializer.Deserialize<AetheriaGameSessionState>(
+                            MessagePackSerializer.Serialize(session));
+                        unknownModeSession.Mode = "future-witness-mode";
+                        reopened.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                            .ReplaceAsync(unknownModeSession).GetAwaiter().GetResult();
+                        var unknownModeExposure = AetheriaGameplayExposurePolicy.Resolve(
+                            reopened, pilotFrame, "daemon-smoke");
+                        var unknownModeAdmissionRejected = false;
+                        try
+                        {
+                            AetheriaPublicEveCommandAdmission.RequireAuthorized(
+                                reopened,
+                                new AetheriaDaemonHostOptions
+                                {
+                                    DaemonId = "daemon-smoke",
+                                    HangarPrincipalRuntimeId = "daemon-smoke"
+                                },
+                                "pilot-runtime",
+                                new EveSurfaceCommandRequest(
+                                    AetheriaRuntimeProviderIdentity.ProviderId,
+                                    AetheriaRuntimeDaemonGameSurfaceBuilder.PilotSurfaceId,
+                                    CultMesh.OperationInvocation(AetheriaRuntimeDaemonSurfaceCommandCatalog.CommandName(
+                                        AetheriaRuntimeDaemonCommandKinds.SetMoveVector)),
+                                    CultMesh.OperationPayload(("directionX", "1"), ("directionY", "0")),
+                                    DateTimeOffset.UtcNow,
+                                    "pilot-runtime"));
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            unknownModeAdmissionRejected = true;
+                        }
+                        reopened.MutableDocument<AetheriaGameSessionState>(AetheriaStateNode.GameSessionStateKey)
+                            .ReplaceAsync(session).GetAwaiter().GetResult();
                         var pilotRefs = AetheriaRuntimePilotObservationRefs.Starbridge("pilot-runtime");
                         var pilotReceipt = AetheriaRuntimeDaemonReceiptProjector.Project(
                             fact,
@@ -2005,6 +2045,32 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         var pilotReceiptRecordKey = AetheriaRuntimeVerseRecordKeys
                             .EveReceiptForCommand(pilotReceipt.CommandId).ToString();
                         Require(gameplayExposure.Kind == AetheriaGameplayExposureKind.StarbridgeValid &&
+                                terminusModeExposure.Kind == AetheriaGameplayExposureKind.LocalOpen &&
+                                AetheriaGameModes.Classify(AetheriaGameModes.Terminus) ==
+                                    AetheriaGameModeKind.Terminus &&
+                                unknownModeExposure.Kind == AetheriaGameplayExposureKind.ActiveInvalid &&
+                                AetheriaGameplayExposurePolicy.Generation(unknownModeExposure) !=
+                                    AetheriaGameplayExposurePolicy.Generation(AetheriaGameplayExposureContext.LocalOpen) &&
+                                AetheriaGameModes.Classify("") == AetheriaGameModeKind.Unsupported &&
+                                AetheriaGameModes.Classify("TERMINUS") == AetheriaGameModeKind.Unsupported &&
+                                AetheriaGameModes.Classify("future-witness-mode") == AetheriaGameModeKind.Unsupported &&
+                                unknownModeAdmissionRejected &&
+                                !AetheriaGameplayExposurePolicy.CanReadRecord(
+                                    reopened,
+                                    "pilot-runtime",
+                                    AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
+                                    unknownModeExposure,
+                                    "pilot-runtime") &&
+                                !AetheriaGameplayExposurePolicy.CanSubscribe(
+                                    reopened,
+                                    "pilot-runtime",
+                                    new CultNetDatabaseSubscribeMessage
+                                    {
+                                        ConsumerRuntimeId = "pilot-runtime",
+                                        BodyIds = [AetheriaRuntimeDaemonSoaFramePublisher.BodyId]
+                                    },
+                                    unknownModeExposure,
+                                    "pilot-runtime") &&
                                 AetheriaGameplayExposurePolicy.CanReadRecord(
                                     reopened,
                                     "pilot-runtime",
@@ -2435,13 +2501,13 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 var settings = node.MutableDocument<AetheriaPlayerSettings>(AetheriaStateNode.PlayerSettingsKey)
                     .ReadAsync().GetAwaiter().GetResult();
                 Require(run != null && !run.IsTutorial &&
-                        run.GameMode == AetheriaGameSessionState.AetheriaMode &&
+                        run.GameMode == AetheriaGameSessionState.TerminusMode &&
                         run.ZoneKeys.Length == 24 && run.ExitZoneIndex >= 0 &&
                         run.CurrentZoneIndex == run.EntranceZoneIndex,
-                    "regular writer must persist an Aetheria-mode sector rather than a Terminus scenario");
+                    "regular writer must persist the generated sector as a Terminus run recipe");
                 RequireEqual(AetheriaDaemonRunFactory.StableSeed("regular-run-command"), run!.GenerationSeed,
                     "accepted New Game identity must deterministically own regular-sector generation");
-                Require(written.SessionMode == AetheriaGameSessionState.AetheriaMode &&
+                Require(written.SessionMode == AetheriaGameSessionState.TerminusMode &&
                         settings?.ActiveRunKey == runKey && settings.TutorialPassed,
                     "regular writer must select the new sector without erasing tutorial completion");
                 Require(run!.AgentTasks.Length > 0 && run.AgentTasks.All(task =>
@@ -2472,7 +2538,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
             using var reopened = AetheriaStateNode.OpenAsync(statePath).GetAwaiter().GetResult();
             var restored = reopened.MutableDocument<AetheriaRunState>(new CultRecordKey(runKey))
                 .ReadAsync().GetAwaiter().GetResult();
-            Require(restored != null && restored.GameMode == AetheriaGameSessionState.AetheriaMode &&
+            Require(restored != null && restored.GameMode == AetheriaGameSessionState.TerminusMode &&
                     restored.ZoneKeys.Length == 24 && !string.IsNullOrWhiteSpace(restored.CurrentEntityKey) &&
                     restored.HomeZones.Length == 6 && restored.BossZones.Length == 2,
                 "regular sector selection, controlled identity, and map landmarks must survive a hard CultCache reopen");

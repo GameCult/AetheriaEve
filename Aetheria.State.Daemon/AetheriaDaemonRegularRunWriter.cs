@@ -80,7 +80,7 @@ public static class AetheriaDaemonRegularRunWriter
         {
             RunId = runId,
             IsTutorial = false,
-            GameMode = AetheriaGameSessionState.AetheriaMode,
+            GameMode = AetheriaGameSessionState.TerminusMode,
             EntranceZoneIndex = materialized.Topology.EntranceZoneIndex,
             ExitZoneIndex = materialized.Topology.ExitZoneIndex,
             CurrentZoneIndex = materialized.PlayerZoneIndex,
@@ -130,7 +130,7 @@ public static class AetheriaDaemonRegularRunWriter
             .ReplaceAsync(settings).ConfigureAwait(false);
         return new AetheriaDaemonWrittenRun(runId, runKey, playerEntityKey, false)
         {
-            SessionMode = AetheriaGameSessionState.AetheriaMode
+            SessionMode = AetheriaGameSessionState.TerminusMode
         };
     }
 

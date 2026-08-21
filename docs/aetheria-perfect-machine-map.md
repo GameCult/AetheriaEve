@@ -105,7 +105,9 @@ Date: 2026-06-13
 > record/body admission. `LocalOpen` is ordinary local Terminus play;
 > `ArenaValid` and `StarbridgeValid` require exact
 > session/authority-policy/seat-or-roster/frame generations; `ActiveInvalid`
-> exports nothing. The installed policy must match
+> exports nothing. No session and exact Terminus are the only `LocalOpen`
+> states; an unknown, corrupt, or future active mode fails closed until it owns
+> an explicit exposure policy. The installed policy must match
 > `aetheria.mode.arena.server.v1`, host-authoritative default, and the daemon
 > host identity used by command admission. The frame must be authoritative and
 > daemon-sourced, with exact host, session, run-record, run-id, and mode
@@ -1499,7 +1501,7 @@ settlement path.
   exact seeded repeatability, connected symmetric links, twelve homes, three
   boss zones, exit isolation, entrance distance, discovery, names, and home
   presence. A persisted-run smoke uses the shared factory and proves explicit
-  Aetheria mode, command-stable seed, generated starter/loadout, regular record
+  Terminus mode, command-stable seed, generated starter/loadout, regular record
   identities, autonomous patrols, selection, and hard CultCache reopen.
 
 ### Daemon Generated Zone Body Ownership

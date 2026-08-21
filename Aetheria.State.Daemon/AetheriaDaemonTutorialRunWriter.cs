@@ -9,7 +9,7 @@ public sealed record AetheriaDaemonWrittenRun(
     string CurrentEntityKey,
     bool IsTutorial)
 {
-    public string SessionMode { get; init; } = AetheriaGameSessionState.AetheriaMode;
+    public string SessionMode { get; init; } = AetheriaGameSessionState.TerminusMode;
 }
 
 public static class AetheriaDaemonTutorialRunWriter
@@ -113,7 +113,7 @@ public static class AetheriaDaemonTutorialRunWriter
             CurrentEntityKey = playerEntityKey,
             LifecyclePhase = AetheriaRuntimeRunLifecycle.Active,
             TerminalFrameId = -1,
-            GameMode = AetheriaGameSessionState.AetheriaMode,
+            GameMode = AetheriaGameSessionState.TerminusMode,
             AgentTasks = materialized.Zones.Values
                 .OrderBy(zone => zone.Topology.ZoneIndex)
                 .SelectMany(zone => zone.AgentTasks)
