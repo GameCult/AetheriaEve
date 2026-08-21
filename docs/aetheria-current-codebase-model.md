@@ -352,6 +352,16 @@ publishes acceptance status. Daemon-published game/editor surfaces should keep
 moving toward command templates that point at typed daemon command documents or
 typed state refs, not generic payload maps.
 
+Browser command ingress now consumes the canonical
+`gamecult.eve.command_invocation.v1` shape directly. The renderer leases the
+provider advertisement, obtains the command and receipt boundaries from that
+advertisement, and sends `operation.operationId`, payload schema, idempotency
+key, and source-version route hint. `AetheriaBrowserEveCommandIngress` binds the
+Eve client id to the CultNet caller and rejects a mismatched operation,
+boundary, missing receipt contract, missing payload schema, or missing
+idempotency key before materializing the existing typed daemon command. There
+is no browser-only `type/command` intent dialect.
+
 ## Observation And Render Flow
 
 Unity observes daemon state through `AetheriaDaemonObserver`:

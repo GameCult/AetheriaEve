@@ -114,13 +114,19 @@ internal static class AetheriaBrowserEveCommandIngress
         string establishedRuntimeId)
     {
         if (!string.Equals(intent.Schema, EveSurfaceCommandRequest.SchemaId, StringComparison.Ordinal) ||
-            !string.Equals(intent.Command, request.Operation, StringComparison.Ordinal))
+            !string.Equals(intent.Operation?.OperationId, request.Operation, StringComparison.Ordinal))
             throw new InvalidOperationException("Aetheria Eve command envelope disagrees with its operation request.");
         if (string.IsNullOrWhiteSpace(intent.SurfaceId) || string.IsNullOrWhiteSpace(intent.ProviderId))
             throw new InvalidOperationException("Aetheria Eve command requires provider and surface identity.");
         if (!string.Equals(request.SourceRuntimeId, establishedRuntimeId, StringComparison.Ordinal) ||
             !string.Equals(intent.ClientId, establishedRuntimeId, StringComparison.Ordinal))
             throw new InvalidOperationException("Aetheria Eve command client identity is not bound to its CultNet caller.");
+        if (!string.Equals(intent.CommandBoundary, request.ServiceId, StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(intent.ReceiptSchema))
+            throw new InvalidOperationException("Aetheria Eve command is not bound to its advertised command and receipt boundary.");
+        if (string.IsNullOrWhiteSpace(intent.Operation?.SchemaId) ||
+            string.IsNullOrWhiteSpace(intent.Operation?.IdempotencyKey))
+            throw new InvalidOperationException("Aetheria Eve operation requires a payload schema and idempotency key.");
     }
 
     private static EveSurfaceCommandRequest ToCommandRequest(
@@ -145,10 +151,12 @@ internal static class AetheriaBrowserEveCommandIngress
             intent.ProviderId,
             intent.SurfaceId,
             new CultMeshOperationInvocationDescriptor(
-                intent.Command,
-                request.PayloadSchema,
-                CultMeshRouteHint.Automatic,
-                commandId),
+                intent.Operation.OperationId,
+                intent.Operation.SchemaId,
+                new CultMeshRouteHint(
+                    CultMeshLocalityKind.Network,
+                    $"browser source-version {intent.Operation.RouteHint?.SourceVersion ?? 0}"),
+                intent.Operation.IdempotencyKey),
             payload,
             issuedAt,
             establishedRuntimeId,
@@ -195,15 +203,29 @@ internal static class AetheriaBrowserEveCommandIngress
     [MessagePackObject(AllowPrivate = true)]
     internal sealed class BrowserEveCommandIntent
     {
-        [Key("type")] public string Type { get; set; } = "";
         [Key("schema")] public string Schema { get; set; } = "";
         [Key("providerId")] public string ProviderId { get; set; } = "";
         [Key("surfaceId")] public string SurfaceId { get; set; } = "";
-        [Key("command")] public string Command { get; set; } = "";
+        [Key("operation")] public BrowserEveOperationIntent Operation { get; set; } = new();
         [Key("commandBoundary")] public string CommandBoundary { get; set; } = "";
         [Key("receiptSchema")] public string ReceiptSchema { get; set; } = "";
         [Key("payload")] public Dictionary<string, object?> Payload { get; set; } = new(StringComparer.Ordinal);
         [Key("issuedAt")] public string IssuedAt { get; set; } = "";
         [Key("clientId")] public string ClientId { get; set; } = "";
+    }
+
+    [MessagePackObject(AllowPrivate = true)]
+    internal sealed class BrowserEveOperationIntent
+    {
+        [Key("operationId")] public string OperationId { get; set; } = "";
+        [Key("schemaId")] public string SchemaId { get; set; } = "";
+        [Key("idempotencyKey")] public string IdempotencyKey { get; set; } = "";
+        [Key("routeHint")] public BrowserEveRouteHint RouteHint { get; set; } = new();
+    }
+
+    [MessagePackObject(AllowPrivate = true)]
+    internal sealed class BrowserEveRouteHint
+    {
+        [Key("sourceVersion")] public long SourceVersion { get; set; }
     }
 }

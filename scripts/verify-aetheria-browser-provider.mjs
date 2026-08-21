@@ -28,6 +28,12 @@ let httpServer;
 let browser;
 
 try {
+  const witnessSource = await readFile(join(repoRoot, "scripts", "aetheria-browser-provider-witness.ts"), "utf8");
+  const ingressSource = await readFile(join(repoRoot, "Aetheria.State.Daemon", "AetheriaBrowserEveCommandIngress.cs"), "utf8");
+  assert.doesNotMatch(witnessSource, /intent\.command\b/u, "Browser witness restored the removed command-string dialect.");
+  assert.doesNotMatch(ingressSource, /Key\("command"\)/u, "Daemon ingress restored the removed command-string dialect.");
+  assert.match(witnessSource, /intent\.operation\.operationId/u);
+  assert.match(ingressSource, /Operation\.OperationId/u);
   const { build } = await import(pathToFileURL(join(cultLibRoot, "node_modules", "esbuild", "lib", "main.js")).href);
   const { chromium } = await import(pathToFileURL(join(cultLibRoot, "node_modules", "playwright-core", "index.mjs")).href);
   await build({

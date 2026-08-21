@@ -1,4 +1,4 @@
-import { parseEveCommandReceipt, parseEveSurfaceDocument } from "@gamecult/eve-contracts";
+import { parseEveCommandReceipt, parseEveProviderAdvertisement, parseEveSurfaceDocument } from "@gamecult/eve-contracts";
 import { renderEveSurface } from "@gamecult/eve-browser-lowering";
 import {
   CultMeshBrowserClient,
@@ -53,6 +53,13 @@ try {
   });
   if (!lease.current) throw new Error("The Aetheria daemon returned no Hangar surface.");
   const surface = parseEveSurfaceDocument(decodeCultNetPayload(lease.current));
+  const providerLease = await mesh.leaseRawDocument({
+    schemaId: "gamecult.eve.provider_advertisement.v1",
+    recordKey: "eve:provider:aetheria",
+    subscriptionId: "aetheria-browser-provider-advertisement",
+  });
+  if (!providerLease.current) throw new Error("The Aetheria daemon returned no provider advertisement.");
+  const provider = parseEveProviderAdvertisement(decodeCultNetPayload(providerLease.current));
   let commandProof: Promise<CommandProof> | undefined;
   let submittedIntent: import("@gamecult/eve-browser-lowering").EveCommandIntent | undefined;
   renderEveSurface(surface, host, {
@@ -60,10 +67,12 @@ try {
     clientId: "aetheria.browser-witness",
     stateBindingResolver: async () => undefined,
     documentResolver: async () => undefined,
+    provider,
     commandSink: intent => {
       submittedIntent = intent;
-      commandProof = submitAndObserveReceipt(mesh, intent);
-      return commandProof.then(() => undefined);
+      const submission = submitAndObserveReceipt(mesh, intent);
+      commandProof = submission.then(result => result.proof);
+      return submission.then(result => result.commandResult);
     },
   });
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -101,10 +110,11 @@ async function verifyForgedClientDenied(
   intent: import("@gamecult/eve-browser-lowering").EveCommandIntent,
 ): Promise<string> {
   const response = await mesh.invoke({
-    serviceId: intent.commandBoundary || "aetheria.daemon.commands",
-    operation: intent.command,
+    serviceId: intent.commandBoundary,
+    operation: intent.operation.operationId,
     payloadSchema: intent.schema,
     payload: { ...intent, clientId: "aetheria.forged-browser" },
+    idempotencyKey: intent.operation.idempotencyKey,
   });
   if (response.status !== "denied" ||
       !response.diagnostics?.some(diagnostic => diagnostic.includes("identity"))) {
@@ -116,12 +126,16 @@ async function verifyForgedClientDenied(
 async function submitAndObserveReceipt(
   mesh: CultMeshBrowserClient,
   intent: import("@gamecult/eve-browser-lowering").EveCommandIntent,
-): Promise<CommandProof> {
+): Promise<{
+  proof: CommandProof;
+  commandResult: import("@gamecult/eve-contracts").EveCommandResult;
+}> {
   const response = await mesh.invoke({
-    serviceId: intent.commandBoundary || "aetheria.daemon.commands",
-    operation: intent.command,
+    serviceId: intent.commandBoundary,
+    operation: intent.operation.operationId,
     payloadSchema: intent.schema,
     payload: intent,
+    idempotencyKey: intent.operation.idempotencyKey,
   });
   if (response.status !== "queued" && response.status !== "accepted") {
     throw new Error(`Aetheria daemon denied browser command: ${response.diagnostics?.join("; ") || response.status}`);
@@ -155,12 +169,18 @@ async function submitAndObserveReceipt(
       throw new Error(`Aetheria receipt '${parsed.receiptId}' answered the wrong command '${parsed.commandId}'.`);
     }
     return {
-      commandId: response.messageId,
-      commandStatus: response.status,
-      receiptSchema: receipt.schemaVersion || receipt.schemaId,
-      receiptState: parsed.state,
-      receiptProviderId: parsed.providerId,
-      receiptSurfaceId: parsed.surfaceId,
+      proof: {
+        commandId: response.messageId,
+        commandStatus: response.status,
+        receiptSchema: receipt.schemaVersion || receipt.schemaId,
+        receiptState: parsed.state,
+        receiptProviderId: parsed.providerId,
+        receiptSurfaceId: parsed.surfaceId,
+      },
+      commandResult: {
+        schema: "gamecult.eve.command_result.v1",
+        receipt: parsed,
+      },
     };
   } finally {
     receiptLease.dispose();
