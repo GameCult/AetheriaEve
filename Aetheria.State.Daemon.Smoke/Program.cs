@@ -1887,6 +1887,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         var pilotFrame = AetheriaRuntimeDaemonFrameDocument.Create(
                             runtimeRun, "daemon-smoke", session.SessionId, observedFrameId, 0, 0.02);
                         pilotFrame.GameMode = AetheriaGameModes.Starbridge;
+                        pilotFrame.RunRecordKey = session.RunRecordKey;
                         var pilotView = AetheriaRuntimeStarbridgeSeatViewProjector.Project(
                             pilotFrame,
                             pilotSeat,
@@ -1990,6 +1991,116 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                 stalePositionSelection.Selected.Count == 0 &&
                                 stalePositionSelection.RejectedCommandIds.Contains(stalePilot.CommandId),
                             "Starbridge Pilot authority must follow stable ship identity after transfer and reject its stale positional key");
+
+                        var gameplayExposure = AetheriaGameplayExposurePolicy.Resolve(
+                            reopened, pilotFrame, "daemon-smoke");
+                        var pilotRefs = AetheriaRuntimePilotObservationRefs.Starbridge("pilot-runtime");
+                        var pilotReceipt = AetheriaRuntimeDaemonReceiptProjector.Project(
+                            fact,
+                            AetheriaGameplayReceiptSurface.Resolve(reopened, fact));
+                        reopened.Database.PutAsync(
+                                AetheriaRuntimeVerseRecordKeys.EveReceiptForCommand(pilotReceipt.CommandId),
+                                pilotReceipt)
+                            .GetAwaiter().GetResult();
+                        var pilotReceiptRecordKey = AetheriaRuntimeVerseRecordKeys
+                            .EveReceiptForCommand(pilotReceipt.CommandId).ToString();
+                        Require(gameplayExposure.Kind == AetheriaGameplayExposureKind.StarbridgeValid &&
+                                AetheriaGameplayExposurePolicy.CanReadRecord(
+                                    reopened,
+                                    "pilot-runtime",
+                                    pilotRefs.StatePointerId,
+                                    gameplayExposure,
+                                    "pilot-runtime") &&
+                                !AetheriaGameplayExposurePolicy.CanReadRecord(
+                                    reopened,
+                                    "pilot-runtime",
+                                    AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
+                                    gameplayExposure,
+                                    "pilot-runtime") &&
+                                !AetheriaGameplayExposurePolicy.CanReadRecord(
+                                    reopened,
+                                    "pilot-runtime",
+                                    AetheriaRuntimeVerseRecordKeys.StarbridgeCommanderSurface.ToString(),
+                                    gameplayExposure,
+                                    "pilot-runtime") &&
+                                AetheriaRuntimeStarbridgeObservationAdmission.CanReadBody(
+                                    "pilot-runtime",
+                                    pilotRefs.EntityBodyId,
+                                    session.SessionId,
+                                    session.RunId,
+                                    seats,
+                                    runtimeRun) &&
+                                !AetheriaRuntimeStarbridgeObservationAdmission.CanReadBody(
+                                    "pilot-runtime",
+                                    AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
+                                    session.SessionId,
+                                    session.RunId,
+                                    seats,
+                                    runtimeRun) &&
+                                AetheriaRuntimeStarbridgeObservationAdmission.CanReadRecord(
+                                    "daemon-smoke",
+                                    AetheriaRuntimeVerseRecordKeys.DaemonFrameLatest.ToString(),
+                                    session.SessionId,
+                                    session.RunId,
+                                    seats,
+                                    runtimeRun) &&
+                                AetheriaRuntimeStarbridgeObservationAdmission.CanReadBody(
+                                    "daemon-smoke",
+                                    AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
+                                    session.SessionId,
+                                    session.RunId,
+                                    seats,
+                                    runtimeRun) &&
+                                !AetheriaRuntimeStarbridgeObservationAdmission.CanReadRecord(
+                                    "unseated-runtime",
+                                    pilotRefs.StatePointerId,
+                                    session.SessionId,
+                                    session.RunId,
+                                    seats,
+                                    runtimeRun),
+                            "Starbridge gameplay exposure must give each Pilot only its seat records/body, keep canonical state Commander-only, and fail private reads for non-seats");
+                        Require(pilotReceipt.SurfaceId == pilotSurfaceId &&
+                                AetheriaGameplayExposurePolicy.CanReadRecord(
+                                    reopened,
+                                    "pilot-runtime",
+                                    pilotReceiptRecordKey,
+                                    gameplayExposure,
+                                    "pilot-runtime") &&
+                                !AetheriaGameplayExposurePolicy.CanReadRecord(
+                                    reopened,
+                                    "daemon-smoke",
+                                    pilotReceiptRecordKey,
+                                    gameplayExposure,
+                                    "pilot-runtime"),
+                            "Starbridge gameplay receipts must remain bound to the originating Pilot surface instead of leaking through a generic surface");
+
+                        var scopedRun = MessagePackSerializer.Deserialize<AetheriaRuntimeRunCheckpointCommit>(
+                            MessagePackSerializer.Serialize(runtimeRun));
+                        scopedRun.Zones = scopedRun.Zones.Concat(new[]
+                        {
+                            new AetheriaRuntimeZoneSnapshotCommit
+                            {
+                                ZoneIndex = pilotZoneIndex + 1,
+                                Entities = [Entity(0, 0, "hidden-starbridge-entity")]
+                            }
+                        }).ToArray();
+                        scopedRun.GameEvents = [new AetheriaRuntimeGameEventCommit()];
+                        scopedRun.ShotReceipts = [new AetheriaRuntimeShotReceiptCommit()];
+                        scopedRun.PickupContactReceipts = [new AetheriaRuntimePickupContactReceiptCommit()];
+                        var scopedFrame = AetheriaRuntimeDaemonFrameDocument.Create(
+                            scopedRun, "daemon-smoke", session.SessionId, observedFrameId, 0, 0.02);
+                        scopedFrame.GameMode = AetheriaGameModes.Starbridge;
+                        scopedFrame.RunRecordKey = session.RunRecordKey;
+                        var scopedProjection = AetheriaRuntimeDaemonFrameProjection.ForControlledEntity(
+                            scopedFrame, pilotSeat.ControlledEntityKey);
+                        Require(scopedProjection.Run.Zones.Count == 1 &&
+                                scopedProjection.Run.Zones[0].ZoneIndex == pilotZoneIndex &&
+                                scopedProjection.Run.GameEvents.Count == 0 &&
+                                scopedProjection.Run.ShotReceipts.Count == 0 &&
+                                scopedProjection.Run.PickupContactReceipts.Count == 0 &&
+                                pilotRefs.EntityViewPointerId != AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString() &&
+                                pilotRefs.EntityBodyId != AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
+                            "Starbridge Pilot observation must exclude non-current zones and canonical event/receipt history and must not alias the global SoA body");
                     }
                     else if (string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
                     {

@@ -107,6 +107,15 @@ The authority policy differs without changing the document model:
   persistence. Pilot daemons have prediction authority plus mismatch priority
   inside typed jurisdictions; the Commander daemon reconciles to a validated
   differing pilot result rather than correcting the pilot to its own result.
+  The current operation-admission slice now also has a real observation
+  boundary: the active mode-aware exposure context resolves the installed
+  policy, canonical frame, Commander seat, and Pilot seats as one generation.
+  The Commander may read the strategic/canonical gameplay projection. Each
+  Pilot may read only public presentation records and its own seat surface,
+  current-zone frame, entity view/body, zone render, input capability, and
+  surface-bound receipts. An unseated runtime gets no role-private record or
+  body. The global frame/body and other Pilots' exact keys fail closed, and
+  Starbridge does not use the unscoped realtime broadcast.
 - **Arena:** the authoritative server decides all gameplay state; humans and
   AIs submit operations and consume observations. The current minimal Arena
   bootstrap installs `aetheria.mode.arena.server.v1` atomically with deployment
@@ -137,13 +146,13 @@ The authority policy differs without changing the document model:
   CultMesh boundary. The Hangar surface crosses that boundary only for its
   configured principal. One authenticated per-peer projector owns provider
   advertisements for direct snapshots, subscription snapshots, live updates,
-  and reconnect. Those paths consume one resolved exposure context:
-  `Inactive`, `ActiveValid`, or `ActiveInvalid`. Missing or stale roster/frame
-  state, or a missing/mismatched Arena server-authority policy, is
+  and reconnect. Those paths consume one mode-aware resolved exposure context:
+  `LocalOpen`, `ArenaValid`, `StarbridgeValid`, or `ActiveInvalid`. Missing or
+  stale seat/roster/frame state, or a missing/mismatched scoped-mode authority policy, is
   `ActiveInvalid` and exports nothing. A valid frame must be authoritative,
   daemon-sourced, and match the active host, session, run record, run id, and
   mode; it is never
-  treated as ordinary non-Arena play. The daemon reconciles live subscriptions
+  treated as ordinary local-open play. The daemon reconciles live subscriptions
   when that authority generation changes. CultMesh diffs each peer's delivered
   projection, sends removals for state that is no longer visible, and withdraws
   its hot-body demand. Withdrawal or any exact consumer-set change also retires
@@ -433,8 +442,9 @@ Starbridge does not yet independently simulate or transport movement,
 targeting, combat, nearest-environment, or engagement facts, nor prove
 mismatch correction or rollback/replay across a networked Pilot daemon. The
 movement slice proves policy/session durability, seat-bound operation
-admission, seat-scoped Eve projection, stable ship resolution across positional
-reindex, daemon-only fact authorship, and stale/forged input rejection; it is
+admission, seat-scoped Eve projection and CultMesh observation admission,
+per-seat hot bodies, stable ship resolution across positional reindex,
+daemon-only fact authorship, and stale/forged input rejection; it is
 not a mixed-authority finality proof.
 
 The next state-architecture cut is exactly-once Settlement plus the remaining

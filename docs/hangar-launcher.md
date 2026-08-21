@@ -148,10 +148,15 @@ select `aetheria.mode.starbridge.commander-pilot-input.v1`; startup likewise
 normalizes session and policy together. Generic New Game must not return as a
 gameplay-state writer.
 
-Starbridge role navigation follows the same durable seat used by operation
-admission. A mode label is insufficient to select a surface. Launch and
-Continue resolve exactly one connected caller seat, publish the Pilot cockpit
-when appropriate, and reject stale or ambiguous role ownership.
+Starbridge role navigation and observation follow the same durable seat used by
+operation admission. A mode label is insufficient to select a surface. Launch
+and Continue resolve exactly one connected caller seat, publish the Pilot
+cockpit when appropriate, and reject stale or ambiguous role ownership. Each
+Pilot cockpit names a per-seat frame, entity view, body, zone-render record, and
+input capability. Its projected frame contains the controlled ship's current
+zone and excludes canonical task, event, receipt, home-zone, and boss-zone
+history. The Commander alone receives the strategic surface and canonical
+gameplay frame/body.
 
 ## Verification
 
@@ -194,16 +199,20 @@ when appropriate, and reject stale or ambiguous role ownership.
   absent from a privacy list. The
   provider advertises only the requesting controller's seat. Explicit snapshots,
   subscription snapshots, live subscription updates, and reconnect all use the
-  same authenticated per-peer advertisement projector. One tri-state exposure
-  resolver distinguishes non-Arena play, a complete active Arena generation,
-  and an active Arena whose session, installed server-authority policy, roster,
-  or frame disagree. The active form requires the same policy id, host identity,
+  same authenticated per-peer advertisement projector. One mode-aware gameplay
+  exposure resolver distinguishes local-open play, a complete active Arena or
+  Starbridge generation, and an active scoped mode whose session, installed
+  authority policy, seats/roster, or frame disagree. The active form requires
+  the same policy id, host identity,
   and host-authoritative default as command admission. Its frame must also be
   daemon-authored and authoritative, with the exact active session and host
   identities as well as the run identity. That invalid state
   fails closed for records, subscriptions, bodies, and provider projection; it
-  can never inherit the non-Arena export boundary. The subscription server owns
-  a delivered-record ledger for each peer. An Arena exposure-generation change
+  can never inherit the local-open export boundary. In Starbridge the exact
+  Commander seat receives the strategic/canonical gameplay records, each Pilot
+  receives only public presentation records plus its own seat records/body, and
+  an unseated runtime receives no role-private observation. The subscription server owns
+  a delivered-record ledger for each peer. A scoped gameplay exposure-generation change
   reconciles that ledger, emits tombstones for records that lost visibility,
   updates changed per-peer projections, and withdraws body demand before the
   next hot-body publication. The mapped-body publisher is retired before that

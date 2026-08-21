@@ -41,6 +41,10 @@ namespace GameCult.Aetheria.State.Verse
             new($"eve:surface:{StarbridgePilotSurfaceId(runtimeId)}");
         public static CultRecordKey StarbridgePilotFrame(string runtimeId) =>
             new($"daemon:aetheria.frame.starbridge.{StableIdentityToken(runtimeId)}.v1");
+        public static string StarbridgePilotBodyId(string runtimeId) =>
+            $"eve:entity-soa:aetheria.daemon.starbridge.{StableIdentityToken(runtimeId)}";
+        public static CultRecordKey StarbridgePilotEntitySoaView(string runtimeId) =>
+            new($"eve:entity-view:aetheria.daemon.starbridge.{StableIdentityToken(runtimeId)}");
         public static CultRecordKey StarbridgePilotZoneRender(string runtimeId) =>
             new($"daemon:aetheria.zone_render.starbridge.{StableIdentityToken(runtimeId)}.v1");
         public static CultRecordKey StarbridgePilotInputCapability(string runtimeId) =>
@@ -159,8 +163,8 @@ namespace GameCult.Aetheria.State.Verse
 
         public static AetheriaRuntimePilotObservationRefs Starbridge(string runtimeId) => new(
             AetheriaRuntimeVerseRecordKeys.StarbridgePilotFrame(runtimeId).ToString(),
-            AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString(),
-            AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
+            AetheriaRuntimeVerseRecordKeys.StarbridgePilotEntitySoaView(runtimeId).ToString(),
+            AetheriaRuntimeVerseRecordKeys.StarbridgePilotBodyId(runtimeId),
             AetheriaRuntimeVerseRecordKeys.StarbridgePilotZoneRender(runtimeId).ToString(),
             AetheriaRuntimeVerseRecordKeys.StarbridgePilotInputCapability(runtimeId).ToString());
     }

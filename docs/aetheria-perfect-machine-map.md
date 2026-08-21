@@ -101,22 +101,28 @@ Date: 2026-06-13
 > Hangar disappears from their advertisement and read boundary.
 > Direct snapshots and subscriptions share one authenticated per-peer provider
 > advertisement projection; the stored anonymous advertisement is not client truth.
-> One tri-state Arena exposure context owns provider projection and record/body
-> admission. `Inactive` is ordinary non-Arena play, `ActiveValid` requires an
-> exact session/server-authority-policy/roster/frame generation, and
-> `ActiveInvalid` exports nothing. The installed policy must match
+> One mode-aware gameplay exposure context owns provider projection and
+> record/body admission. `LocalOpen` is ordinary local Terminus play;
+> `ArenaValid` and `StarbridgeValid` require exact
+> session/authority-policy/seat-or-roster/frame generations; `ActiveInvalid`
+> exports nothing. The installed policy must match
 > `aetheria.mode.arena.server.v1`, host-authoritative default, and the daemon
 > host identity used by command admission. The frame must be authoritative and
 > daemon-sourced, with exact host, session, run-record, run-id, and mode
 > provenance. Seat publication consumes this same
 > resolved context rather than a separately cached roster.
-> Missing Arena truth can never widen authority by masquerading as inactivity.
+> Missing scoped-mode truth can never widen authority by masquerading as local play.
+> In Starbridge, the exact Commander seat receives strategic/canonical gameplay
+> records; each Pilot receives only its per-seat current-zone frame, Eve
+> surface, entity view/body, zone-render record, input capability, and its own
+> surface-bound receipts. Global and other-seat gameplay records/bodies fail
+> closed, and unseated runtimes receive no role-private projection.
 > CultMesh keeps a per-subscription delivered-record ledger. An exposure-generation
 > change reconciles that ledger, emits peer-specific removals and projection
 > updates, and withdraws body demand before the next hot-body publication.
 > Hot-body mappings are capability generations, not stable caches. Any exact
 > consumer-set change fences commits immediately and rotates before later
-> publication; an Arena exposure-generation change also retires the publisher
+> publication; a scoped gameplay exposure-generation change also retires the publisher
 > before record reconciliation. Regrant resumes on a fresh mapping token and producer epoch.
 > A cursor that survived revocation can inspect only its frozen generation.
 > Synchronous frame commit is guarded by the exact demand generation; a frame
@@ -1034,7 +1040,8 @@ finality, replay, and negative authority invariants.
   against the current run, and typed movement operations.
   Odin publication remains optional discovery/indexing through
   `--odin-cultmesh-uri`; it does not decide gameplay finality.
-- Outputs: typed state/surface snapshots, operation receipts, provider-owned
+- Outputs: typed state/surface snapshots, per-role provider advertisements,
+  per-seat Pilot frame/view/body projections, operation receipts, provider-owned
   assets, and daemon-authored operation outcome facts. Candidate/selection
   receipts and one replayable Commander-finalized state-fact log remain target
   work.
@@ -1048,10 +1055,12 @@ finality, replay, and negative authority invariants.
   caches, and replicas cannot mutate the Commander log. The retired
   `--peer-cultmesh-endpoint` option is rejected rather than restoring peer fact
   import.
-- Shared paths: Launch, Continue, periodic projection, and movement admission
+- Shared paths: Launch, Continue, periodic projection, provider advertisement,
+  snapshot/subscription/body admission, and movement admission
   resolve the same durable role seat. Pilot navigation publishes a seat-scoped
-  Eve cockpit and input capability; Commander navigation publishes the
-  strategic surface. Rendered input and headless policy input are intended to
+  Eve cockpit, current-zone frame, input capability, and independent hot body;
+  Commander navigation publishes the strategic surface and retains canonical
+  gameplay observation. Rendered input and headless policy input are intended to
   enter the same pending command -> Starbridge operation admission -> tick -> daemon
   fact path. The present smoke proves the seat navigation/projection and
   admission composition directly, not a public
@@ -1069,8 +1078,10 @@ finality, replay, and negative authority invariants.
 - Verification layer: the managed Hangar smoke proves Starbridge policy/session
   durability across reopen, one Commander and one Pilot seat, seat-bound
   movement-operation arbitration, wrong-subject/stale/ambiguous input rejection,
-  seat-scoped Eve cockpit projection, stable identity resolution after a
-  positional move, daemon-authored outcome provenance, and execution of only
+  seat-scoped Eve cockpit projection, per-seat record/body admission, denial of
+  global/Commander observation to a Pilot, current-zone projection without
+  global receipts/events, stable identity resolution after a positional move,
+  daemon-authored outcome provenance, and execution of only
   the admitted movement. It calls the role/projection/admission/tick primitives
   directly. Missing proof: the complete public transport chronology from
   navigation receipt through lowered input and durable restart, real

@@ -611,23 +611,25 @@ namespace GameCult.Aetheria.State.Verse
                 EntranceZoneIndex = source.EntranceZoneIndex,
                 ExitZoneIndex = source.ExitZoneIndex,
                 CurrentZoneIndex = zoneIndex,
-                DiscoveredZoneIndices = source.DiscoveredZoneIndices,
-                Zones = source.Zones,
+                DiscoveredZoneIndices = new[] { zoneIndex },
+                Zones = (source.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
+                    .Where(zone => zone != null && zone.ZoneIndex == zoneIndex)
+                    .ToArray(),
                 FactionRelationships = source.FactionRelationships,
                 GenerationSeed = source.GenerationSeed,
                 CurrentEntityKey = controlledEntityKey,
                 Credits = source.Credits,
-                AgentTasks = source.AgentTasks,
-                CorporationSurveys = source.CorporationSurveys,
-                GameEvents = source.GameEvents,
-                ShotReceipts = source.ShotReceipts,
-                PickupContactReceipts = source.PickupContactReceipts,
+                AgentTasks = Array.Empty<AetheriaRuntimeAgentTaskCommit>(),
+                CorporationSurveys = Array.Empty<AetheriaRuntimeCorporationSurveyCommit>(),
+                GameEvents = Array.Empty<AetheriaRuntimeGameEventCommit>(),
+                ShotReceipts = Array.Empty<AetheriaRuntimeShotReceiptCommit>(),
+                PickupContactReceipts = Array.Empty<AetheriaRuntimePickupContactReceiptCommit>(),
                 LifecyclePhase = source.LifecyclePhase,
                 TerminalReason = source.TerminalReason,
                 TerminalFrameId = source.TerminalFrameId,
                 GameMode = source.GameMode,
-                HomeZones = source.HomeZones,
-                BossZones = source.BossZones
+                HomeZones = Array.Empty<AetheriaRuntimeFactionZoneCommit>(),
+                BossZones = Array.Empty<AetheriaRuntimeFactionZoneCommit>()
             };
             return new AetheriaRuntimeDaemonFrameDocument
             {
