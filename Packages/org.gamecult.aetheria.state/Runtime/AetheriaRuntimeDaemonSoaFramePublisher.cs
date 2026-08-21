@@ -129,7 +129,20 @@ namespace GameCult.Aetheria.State.Verse
         public AetheriaRuntimeDaemonSoaFrame? BuildCurrentZoneEntities(
             AetheriaRuntimeDaemonFrameDocument frame,
             AetheriaRuntimeCatalogSnapshot? catalog = null,
-            bool realtimeDemand = false)
+            bool realtimeDemand = false) =>
+            BuildCurrentZoneEntitiesCore(frame, catalog, realtimeDemand, projectedEntitySetOwnsVisibility: false);
+
+        internal AetheriaRuntimeDaemonSoaFrame? BuildProjectedCurrentZoneEntities(
+            AetheriaRuntimeDaemonFrameDocument frame,
+            AetheriaRuntimeCatalogSnapshot? catalog = null,
+            bool realtimeDemand = false) =>
+            BuildCurrentZoneEntitiesCore(frame, catalog, realtimeDemand, projectedEntitySetOwnsVisibility: true);
+
+        private AetheriaRuntimeDaemonSoaFrame? BuildCurrentZoneEntitiesCore(
+            AetheriaRuntimeDaemonFrameDocument frame,
+            AetheriaRuntimeCatalogSnapshot? catalog,
+            bool realtimeDemand,
+            bool projectedEntitySetOwnsVisibility)
         {
             if (frame == null)
                 throw new ArgumentNullException(nameof(frame));
@@ -155,18 +168,25 @@ namespace GameCult.Aetheria.State.Verse
             var dockParent = (zone?.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
                 .FirstOrDefault(entity => entity != null && controlled != null &&
                     (entity.DockingBayAssignments ?? Array.Empty<int>()).Contains(controlled.EntityIndex));
-            var visibleEntityIndices = AetheriaRuntimeDaemonRenderQueries
-                .QueryEffectiveContacts(zone, controlled?.EntityIndex ?? -1)
-                .Where(contact => contact.Contact.Visible)
-                .Select(contact => contact.Contact.TargetEntityIndex)
-                .Append(controlled?.EntityIndex ?? -1)
-                .ToHashSet();
-            if (dockParent != null)
+            var visibleEntityIndices = projectedEntitySetOwnsVisibility
+                ? (zone?.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
+                    .Where(entity => entity != null)
+                    .Select(entity => entity.EntityIndex)
+                    .ToHashSet()
+                : AetheriaRuntimeDaemonRenderQueries
+                    .QueryEffectiveContacts(zone, controlled?.EntityIndex ?? -1)
+                    .Where(contact => contact.Contact.Visible)
+                    .Select(contact => contact.Contact.TargetEntityIndex)
+                    .Append(controlled?.EntityIndex ?? -1)
+                    .ToHashSet();
+            if (!projectedEntitySetOwnsVisibility && dockParent != null)
                 visibleEntityIndices.Add(dockParent.EntityIndex);
-            var fieldContributorIndices = (zone?.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
-                .Where(AetheriaRuntimeGameDocuments.HasActiveFogFieldEmitter)
-                .Select(entity => entity.EntityIndex)
-                .ToHashSet();
+            var fieldContributorIndices = projectedEntitySetOwnsVisibility
+                ? new HashSet<int>()
+                : (zone?.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
+                    .Where(AetheriaRuntimeGameDocuments.HasActiveFogFieldEmitter)
+                    .Select(entity => entity.EntityIndex)
+                    .ToHashSet();
             var entities = (zone?.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
                 .Where(entity => entity != null &&
                     (visibleEntityIndices.Contains(entity.EntityIndex) ||

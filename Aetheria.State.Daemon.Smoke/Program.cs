@@ -2147,7 +2147,8 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                 pilotSeat.ControlledEntityKey, out _, out var scopedPilotEntityIndex),
                             "Starbridge Pilot observation proof requires a canonical controlled entity key");
                         var scopedPilot = scopedZone.Entities.Single(entity => entity.EntityIndex == scopedPilotEntityIndex);
-                        var visibleEntityIndex = scopedZone.Entities.Max(entity => entity.EntityIndex) + 1;
+                        var dockParentEntityIndex = scopedZone.Entities.Max(entity => entity.EntityIndex) + 1;
+                        var visibleEntityIndex = dockParentEntityIndex + 1;
                         var hiddenEntityIndex = visibleEntityIndex + 1;
                         scopedPilot.Equipment =
                         [
@@ -2160,7 +2161,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         [
                             new AetheriaRuntimeEntityContactCommit
                             {
-                                TargetEntityIndex = visibleEntityIndex,
+                                TargetEntityIndex = dockParentEntityIndex,
                                 InfoGathered = 1,
                                 Visible = true,
                                 Hostile = true
@@ -2170,6 +2171,18 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                 TargetEntityIndex = hiddenEntityIndex,
                                 InfoGathered = 0,
                                 Visible = false,
+                                Hostile = true
+                            }
+                        ];
+                        var dockParent = Entity(dockParentEntityIndex, scopedPilot.PositionX + 5, "dock-parent");
+                        dockParent.DockingBayAssignments = [scopedPilotEntityIndex];
+                        dockParent.Contacts =
+                        [
+                            new AetheriaRuntimeEntityContactCommit
+                            {
+                                TargetEntityIndex = visibleEntityIndex,
+                                InfoGathered = 1,
+                                Visible = true,
                                 Hostile = true
                             }
                         ];
@@ -2189,7 +2202,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         hiddenEnemy.CargoContents = visibleEnemy.CargoContents;
                         hiddenEnemy.WeaponStates = visibleEnemy.WeaponStates;
                         hiddenEnemy.BehaviorStates = visibleEnemy.BehaviorStates;
-                        scopedZone.Entities = scopedZone.Entities.Concat(new[] { visibleEnemy, hiddenEnemy }).ToArray();
+                        scopedZone.Entities = scopedZone.Entities.Concat(new[] { dockParent, visibleEnemy, hiddenEnemy }).ToArray();
                         scopedRun.Zones = scopedRun.Zones.Concat(new[]
                         {
                             new AetheriaRuntimeZoneSnapshotCommit
@@ -2224,7 +2237,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         var projectedVisibleEnemy = projectedZone.Entities.Single(entity => entity.EntityIndex == visibleEntityIndex);
                         var zoneRender = AetheriaRuntimeGameDocuments.ZoneRender(scopedProjection);
                         using var scopedSoaPublisher = new AetheriaRuntimeDaemonSoaFramePublisher(1);
-                        using var scopedSoaFrame = scopedSoaPublisher.BuildCurrentZoneEntities(scopedProjection);
+                        using var scopedSoaFrame = scopedSoaPublisher.BuildProjectedCurrentZoneEntities(scopedProjection);
                         var projectedEntityIndices = projectedZone.Entities.Select(entity => entity.EntityIndex).OrderBy(value => value).ToArray();
                         var zoneRenderEntityIndices = zoneRender.EntitySnapshots.Select(entity => entity.EntityIndex).OrderBy(value => value).ToArray();
                         var soaEntityIndices = (scopedSoaFrame?.View.Identities ?? Array.Empty<AetheriaRuntimeDaemonSoaIdentityDocument>())
@@ -2234,7 +2247,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                             .ToArray();
                         Require(scopedProjection.Run.Zones.Count == 1 &&
                                 scopedProjection.Run.Zones[0].ZoneIndex == pilotZoneIndex &&
-                                projectedZone.Entities.Count == 2 &&
+                                projectedZone.Entities.Count == 3 &&
                                 projectedZone.Entities.All(entity => entity.EntityIndex != hiddenEntityIndex) &&
                                 projectedPilot.Equipment.Count == 1 &&
                                 projectedVisibleEnemy.Equipment.Count == 0 &&
@@ -2258,7 +2271,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                                     (entity.EntityIndex == scopedPilotEntityIndex || entity.Equipment.Count == 0)) &&
                                 pilotRefs.EntityViewPointerId != AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString() &&
                                 pilotRefs.EntityBodyId != AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
-                            "one Pilot observation owner must hide invisible entities, redact visible non-controlled state, retain controlled state, clear global chronology, and drive matching frame, ZoneRender, and SoA entity sets");
+                            "one Pilot observation owner must hide invisible entities, retain dock-parent-only contacts, redact visible non-controlled state, retain controlled state, clear global chronology, and drive matching frame, ZoneRender, and SoA entity sets");
                     }
                     else if (string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
                     {

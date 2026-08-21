@@ -122,7 +122,9 @@ Date: 2026-06-13
 > Pilot-observation projector owns Arena and Starbridge visibility: controlled
 > state remains complete, visible non-controlled entities are redacted, hidden
 > entities and global command/gameplay chronology disappear, and frame, zone
-> render, Eve surface, and SoA derive from that same entity set.
+> render, Eve surface, and SoA derive from that same entity set. Seat hot-body
+> publication consumes that projected set exactly; it cannot recompute
+> visibility from redacted sensor state and silently drop an authorized contact.
 > CultMesh keeps a per-subscription delivered-record ledger. An exposure-generation
 > change reconciles that ledger, emits peer-specific removals and projection
 > updates, and withdraws body demand before the next hot-body publication.

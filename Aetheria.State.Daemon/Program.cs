@@ -2442,13 +2442,19 @@ static async Task PublishHotEntityStateAsync(
     AetheriaRuntimeCatalogSnapshot? catalog,
     AetheriaClientCultMeshHost clientHost,
     CultRecordKey viewRecordKey,
-    bool allowRealtime = true)
+    bool allowRealtime = true,
+    bool projectedEntitySetOwnsVisibility = false)
 {
     var hasRealtimeConsumers = allowRealtime && clientHost.Realtime.ConnectionCount > 0;
-    using var hotFrame = publisher.BuildCurrentZoneEntities(
-        frame,
-        catalog,
-        realtimeDemand: hasRealtimeConsumers);
+    using var hotFrame = projectedEntitySetOwnsVisibility
+        ? publisher.BuildProjectedCurrentZoneEntities(
+            frame,
+            catalog,
+            realtimeDemand: hasRealtimeConsumers)
+        : publisher.BuildCurrentZoneEntities(
+            frame,
+            catalog,
+            realtimeDemand: hasRealtimeConsumers);
     if (hotFrame == null)
         return;
 
@@ -2534,7 +2540,8 @@ static async Task PublishArenaSeatObservationsAsync(
             catalog,
             clientHost,
             AetheriaRuntimeVerseRecordKeys.ArenaPilotEntitySoaView(seat.ControllerRuntimeId),
-            allowRealtime: false)
+            allowRealtime: false,
+            projectedEntitySetOwnsVisibility: true)
             .ConfigureAwait(false);
     }
 }
@@ -2592,7 +2599,8 @@ static async Task PublishStarbridgeSeatObservationsAsync(
             catalog,
             clientHost,
             AetheriaRuntimeVerseRecordKeys.StarbridgePilotEntitySoaView(seat.RuntimeId),
-            allowRealtime: false)
+            allowRealtime: false,
+            projectedEntitySetOwnsVisibility: true)
             .ConfigureAwait(false);
     }
 }
