@@ -60,7 +60,7 @@ namespace GameCult.Aetheria.State.Verse
                 !string.Equals(resolvedSeat.SeatId, seat.SeatId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Starbridge Pilot view cannot resolve its durable seat and stable controlled entity.");
 
-            var projected = AetheriaRuntimeDaemonFrameProjection.ForControlledEntity(frame, controlledEntityKey);
+            var projected = AetheriaRuntimeDaemonFrameProjection.ForPilotObservation(frame, controlledEntityKey);
             var refs = AetheriaRuntimePilotObservationRefs.Starbridge(seat.RuntimeId);
             var surface = AetheriaRuntimeDaemonGameSurfaceBuilder.Build(
                 projected,

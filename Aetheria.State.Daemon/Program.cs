@@ -2565,7 +2565,7 @@ static async Task PublishStarbridgeSeatObservationsAsync(
                 out var controlledEntityKey) ||
                 !string.Equals(resolvedSeat.SeatId, seat.SeatId, StringComparison.Ordinal))
                 continue;
-            projected = AetheriaRuntimeDaemonFrameProjection.ForControlledEntity(
+            projected = AetheriaRuntimeDaemonFrameProjection.ForPilotObservation(
                 context.Frame, controlledEntityKey);
         }
         catch (InvalidOperationException)

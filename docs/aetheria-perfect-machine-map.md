@@ -116,7 +116,11 @@ Date: 2026-06-13
 > records; each Pilot receives only its per-seat current-zone frame, Eve
 > surface, entity view/body, zone-render record, input capability, and its own
 > surface-bound receipts. Global and other-seat gameplay records/bodies fail
-> closed, and unseated runtimes receive no role-private projection.
+> closed, and unseated runtimes receive no role-private projection. One shared
+> Pilot-observation projector owns Arena and Starbridge visibility: controlled
+> state remains complete, visible non-controlled entities are redacted, hidden
+> entities and global command/gameplay chronology disappear, and frame, zone
+> render, Eve surface, and SoA derive from that same entity set.
 > CultMesh keeps a per-subscription delivered-record ledger. An exposure-generation
 > change reconciles that ledger, emits peer-specific removals and projection
 > updates, and withdraws body demand before the next hot-body publication.
@@ -1079,8 +1083,11 @@ finality, replay, and negative authority invariants.
   durability across reopen, one Commander and one Pilot seat, seat-bound
   movement-operation arbitration, wrong-subject/stale/ambiguous input rejection,
   seat-scoped Eve cockpit projection, per-seat record/body admission, denial of
-  global/Commander observation to a Pilot, current-zone projection without
-  global receipts/events, stable identity resolution after a positional move,
+  global/Commander observation to a Pilot, current-zone projection that hides
+  invisible entities, redacts visible non-controlled private state, preserves
+  controlled private state, clears global command/receipt/event chronology, and
+  produces matching frame/zone-render/SoA entity sets, stable identity
+  resolution after a positional move,
   daemon-authored outcome provenance, and execution of only
   the admitted movement. It calls the role/projection/admission/tick primitives
   directly. Missing proof: the complete public transport chronology from

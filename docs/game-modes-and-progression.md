@@ -115,7 +115,12 @@ The authority policy differs without changing the document model:
   current-zone frame, entity view/body, zone render, input capability, and
   surface-bound receipts. An unseated runtime gets no role-private record or
   body. The global frame/body and other Pilots' exact keys fail closed, and
-  Starbridge does not use the unscoped realtime broadcast.
+  Starbridge does not use the unscoped realtime broadcast. The Pilot frame is
+  the observation owner for every downstream projection: it keeps full state
+  only for the controlled ship, includes visible non-controlled entities only
+  after private loadout/cargo/weapon/behavior state is removed, hides invisible
+  entities, and clears global command and gameplay chronology. Zone render and
+  SoA identities must contain the same observed entity set.
 - **Arena:** the authoritative server decides all gameplay state; humans and
   AIs submit operations and consume observations. The current minimal Arena
   bootstrap installs `aetheria.mode.arena.server.v1` atomically with deployment

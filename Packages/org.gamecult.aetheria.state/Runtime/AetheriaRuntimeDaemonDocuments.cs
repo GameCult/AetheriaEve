@@ -590,19 +590,60 @@ namespace GameCult.Aetheria.State.Verse
 
     public static class AetheriaRuntimeDaemonFrameProjection
     {
-        public static AetheriaRuntimeDaemonFrameDocument ForControlledEntity(
+        public static AetheriaRuntimeDaemonFrameDocument ForPilotObservation(
             AetheriaRuntimeDaemonFrameDocument frame,
             string controlledEntityKey)
         {
             if (frame == null) throw new ArgumentNullException(nameof(frame));
-            var source = frame.Run ?? throw new InvalidOperationException("A controlled frame projection requires a run.");
+            var source = frame.Run ?? throw new InvalidOperationException("A Pilot observation requires a run.");
             if (!AetheriaRuntimeRunCheckpointCommit.TryParseEntityKey(
                     controlledEntityKey, out var zoneIndex, out var entityIndex) ||
-                !(source.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
-                    .Any(zone => zone != null && zone.ZoneIndex == zoneIndex &&
-                        (zone.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
-                            .Any(entity => entity != null && entity.IsActive && entity.EntityIndex == entityIndex)))
-                throw new InvalidOperationException("A controlled frame projection requires one active canonical entity.");
+                (source.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
+                    .SingleOrDefault(zone => zone != null && zone.ZoneIndex == zoneIndex) is not { } sourceZone ||
+                (sourceZone.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
+                    .SingleOrDefault(entity => entity != null && entity.IsActive && entity.EntityIndex == entityIndex) is not { } controlled)
+                throw new InvalidOperationException("A Pilot observation requires one active canonical controlled entity.");
+
+            var visible = AetheriaRuntimeDaemonRenderQueries.QueryEffectiveContacts(sourceZone, entityIndex)
+                .Where(contact => contact.Contact.Visible)
+                .Select(contact => contact.Contact.TargetEntityIndex)
+                .Append(entityIndex)
+                .ToHashSet();
+            var dockParent = (sourceZone.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
+                .FirstOrDefault(entity => entity != null &&
+                    (entity.DockingBayAssignments ?? Array.Empty<int>()).Contains(entityIndex));
+            if (dockParent != null)
+                visible.Add(dockParent.EntityIndex);
+            var observedEntities = (sourceZone.Entities ?? Array.Empty<AetheriaRuntimeEntitySnapshotCommit>())
+                .Where(entity => entity != null && visible.Contains(entity.EntityIndex))
+                .Select(entity => ProjectObservedEntity(entity, entity.EntityIndex == controlled.EntityIndex, visible))
+                .OrderBy(entity => entity.EntityIndex)
+                .ToArray();
+            var observedZone = new AetheriaRuntimeZoneSnapshotCommit
+            {
+                ZoneIndex = sourceZone.ZoneIndex,
+                Name = sourceZone.Name,
+                PositionX = sourceZone.PositionX,
+                PositionY = sourceZone.PositionY,
+                AdjacentZoneIndices = Array.Empty<int>(),
+                FactionIndices = sourceZone.FactionIndices,
+                OwnerFactionIndex = sourceZone.OwnerFactionIndex,
+                Entities = observedEntities,
+                Orbits = sourceZone.Orbits,
+                Bodies = sourceZone.Bodies,
+                DroppedPickups = sourceZone.DroppedPickups,
+                GravityTerrainRadius = sourceZone.GravityTerrainRadius,
+                GravityTerrainDepth = sourceZone.GravityTerrainDepth,
+                GravityTerrainDepthExponent = sourceZone.GravityTerrainDepthExponent,
+                GravityTerrainBoundaryFog = sourceZone.GravityTerrainBoundaryFog,
+                GravityTerrainWaveFrequency = sourceZone.GravityTerrainWaveFrequency,
+                SimulationTimeSeconds = sourceZone.SimulationTimeSeconds,
+                PhysicalPayloads = (sourceZone.PhysicalPayloads ?? Array.Empty<AetheriaRuntimePhysicalPayloadCommit>())
+                    .Where(payload => payload != null &&
+                        (visible.Contains(payload.SourceEntityIndex) || visible.Contains(payload.TargetEntityIndex)))
+                    .ToArray(),
+                NextPickupIndex = sourceZone.NextPickupIndex
+            };
 
             var run = new AetheriaRuntimeRunCheckpointCommit
             {
@@ -612,10 +653,8 @@ namespace GameCult.Aetheria.State.Verse
                 ExitZoneIndex = source.ExitZoneIndex,
                 CurrentZoneIndex = zoneIndex,
                 DiscoveredZoneIndices = new[] { zoneIndex },
-                Zones = (source.Zones ?? Array.Empty<AetheriaRuntimeZoneSnapshotCommit>())
-                    .Where(zone => zone != null && zone.ZoneIndex == zoneIndex)
-                    .ToArray(),
-                FactionRelationships = source.FactionRelationships,
+                Zones = new[] { observedZone },
+                FactionRelationships = Array.Empty<AetheriaRuntimeFactionRelationshipCommit>(),
                 GenerationSeed = source.GenerationSeed,
                 CurrentEntityKey = controlledEntityKey,
                 Credits = source.Credits,
@@ -644,14 +683,14 @@ namespace GameCult.Aetheria.State.Verse
                 StateSource = frame.StateSource,
                 Run = run,
                 Capabilities = frame.Capabilities,
-                AppliedCommandIds = frame.AppliedCommandIds,
-                RejectedCommandIds = frame.RejectedCommandIds,
-                AccountedCommandIds = frame.AccountedCommandIds,
-                CumulativeAppliedCommandIds = frame.CumulativeAppliedCommandIds,
-                CumulativeRejectedCommandIds = frame.CumulativeRejectedCommandIds,
+                AppliedCommandIds = Array.Empty<string>(),
+                RejectedCommandIds = Array.Empty<string>(),
+                AccountedCommandIds = Array.Empty<string>(),
+                CumulativeAppliedCommandIds = Array.Empty<string>(),
+                CumulativeRejectedCommandIds = Array.Empty<string>(),
                 RenderSettings = frame.RenderSettings,
                 SimulationSettings = frame.SimulationSettings,
-                RejectedCommandReasons = frame.RejectedCommandReasons,
+                RejectedCommandReasons = new Dictionary<string, string>(),
                 GameMode = frame.GameMode,
                 RequestedSimulationRate = frame.RequestedSimulationRate,
                 EffectiveSimulationRate = frame.EffectiveSimulationRate,
@@ -659,6 +698,60 @@ namespace GameCult.Aetheria.State.Verse
                 AttentionCauseKind = frame.AttentionCauseKind,
                 RunRecordKey = frame.RunRecordKey
             };
+        }
+
+        private static AetheriaRuntimeEntitySnapshotCommit ProjectObservedEntity(
+            AetheriaRuntimeEntitySnapshotCommit source,
+            bool controlled,
+            ISet<int> visible)
+        {
+            var entity = MessagePackSerializer.Deserialize<AetheriaRuntimeEntitySnapshotCommit>(
+                MessagePackSerializer.Serialize(source));
+            entity.Contacts = (entity.Contacts ?? Array.Empty<AetheriaRuntimeEntityContactCommit>())
+                .Where(contact => contact != null && contact.Visible && visible.Contains(contact.TargetEntityIndex))
+                .ToArray();
+            if (!visible.Contains(entity.TargetEntityIndex))
+                entity.TargetEntityIndex = -1;
+            entity.ChildEntityIndices = (entity.ChildEntityIndices ?? Array.Empty<int>()).Where(visible.Contains).ToArray();
+            entity.DockingBayAssignments = (entity.DockingBayAssignments ?? Array.Empty<int>()).Where(visible.Contains).ToArray();
+            if (controlled)
+                return entity;
+
+            entity.Equipment = Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>();
+            entity.CargoBays = Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>();
+            entity.DockingBays = Array.Empty<AetheriaRuntimeLoadoutItemSlotCommit>();
+            entity.ChildEntityIndices = Array.Empty<int>();
+            entity.WeaponGroups = Array.Empty<IReadOnlyList<int>>();
+            entity.StatGrids = Array.Empty<AetheriaRuntimeEntityStatGridCommit>();
+            entity.HeatsinksEnabled = false;
+            entity.OverrideShutdown = false;
+            entity.TractorPower = 0;
+            entity.Heatstroke = 0;
+            entity.Hypothermia = 0;
+            entity.ActiveConsumables = Array.Empty<AetheriaRuntimeActiveConsumableCommit>();
+            entity.BehaviorProgress = Array.Empty<AetheriaRuntimeBehaviorProgressCommit>();
+            entity.WeaponStates = Array.Empty<AetheriaRuntimeWeaponStateCommit>();
+            entity.BehaviorStates = Array.Empty<AetheriaRuntimeBehaviorStateCommit>();
+            entity.CargoContents = Array.Empty<AetheriaRuntimeCargoBayLoadoutCommit>();
+            entity.DockingBayContents = Array.Empty<AetheriaRuntimeCargoBayLoadoutCommit>();
+            entity.DockingBayAssignments = Array.Empty<int>();
+            entity.VisibilitySourceCount = 0;
+            entity.Contacts = Array.Empty<AetheriaRuntimeEntityContactCommit>();
+            entity.ShutdownPerformance = 0;
+            entity.AgentTaskCapabilities = Array.Empty<string>();
+            entity.AssignedAgentTaskId = "";
+            entity.TractorTargetPower = 0;
+            entity.HomeEntityId = "";
+            entity.LoadoutGeneration = null;
+            entity.EquipmentStates = Array.Empty<AetheriaRuntimeEquipmentStateCommit>();
+            entity.HelmStrafe = 0;
+            entity.HelmForward = 0;
+            entity.WormholeTransition = null;
+            entity.ActiveWeaponGroups = Array.Empty<bool>();
+            entity.SecurityLevel = 0;
+            entity.SecurityRadius = 0;
+            entity.FogFieldEmitters = Array.Empty<AetheriaRuntimeFogFieldEmitterCommit>();
+            return entity;
         }
     }
 

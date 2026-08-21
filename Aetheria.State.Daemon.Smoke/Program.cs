@@ -2076,6 +2076,54 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
 
                         var scopedRun = MessagePackSerializer.Deserialize<AetheriaRuntimeRunCheckpointCommit>(
                             MessagePackSerializer.Serialize(runtimeRun));
+                        var scopedZone = scopedRun.Zones.Single(zone => zone.ZoneIndex == pilotZoneIndex);
+                        Require(AetheriaRuntimeRunCheckpointCommit.TryParseEntityKey(
+                                pilotSeat.ControlledEntityKey, out _, out var scopedPilotEntityIndex),
+                            "Starbridge Pilot observation proof requires a canonical controlled entity key");
+                        var scopedPilot = scopedZone.Entities.Single(entity => entity.EntityIndex == scopedPilotEntityIndex);
+                        var visibleEntityIndex = scopedZone.Entities.Max(entity => entity.EntityIndex) + 1;
+                        var hiddenEntityIndex = visibleEntityIndex + 1;
+                        scopedPilot.Equipment =
+                        [
+                            new AetheriaRuntimeLoadoutItemSlotCommit
+                            {
+                                Item = new AetheriaRuntimeLoadoutItemCommit { ItemKey = "pilot-private-equipment" }
+                            }
+                        ];
+                        scopedPilot.Contacts =
+                        [
+                            new AetheriaRuntimeEntityContactCommit
+                            {
+                                TargetEntityIndex = visibleEntityIndex,
+                                InfoGathered = 1,
+                                Visible = true,
+                                Hostile = true
+                            },
+                            new AetheriaRuntimeEntityContactCommit
+                            {
+                                TargetEntityIndex = hiddenEntityIndex,
+                                InfoGathered = 0,
+                                Visible = false,
+                                Hostile = true
+                            }
+                        ];
+                        var visibleEnemy = Entity(visibleEntityIndex, scopedPilot.PositionX + 10, "visible-enemy");
+                        visibleEnemy.Equipment =
+                        [
+                            new AetheriaRuntimeLoadoutItemSlotCommit
+                            {
+                                Item = new AetheriaRuntimeLoadoutItemCommit { ItemKey = "enemy-secret-equipment" }
+                            }
+                        ];
+                        visibleEnemy.CargoContents = [new AetheriaRuntimeCargoBayLoadoutCommit()];
+                        visibleEnemy.WeaponStates = [new AetheriaRuntimeWeaponStateCommit()];
+                        visibleEnemy.BehaviorStates = [new AetheriaRuntimeBehaviorStateCommit()];
+                        var hiddenEnemy = Entity(hiddenEntityIndex, scopedPilot.PositionX + 20, "hidden-enemy");
+                        hiddenEnemy.Equipment = visibleEnemy.Equipment;
+                        hiddenEnemy.CargoContents = visibleEnemy.CargoContents;
+                        hiddenEnemy.WeaponStates = visibleEnemy.WeaponStates;
+                        hiddenEnemy.BehaviorStates = visibleEnemy.BehaviorStates;
+                        scopedZone.Entities = scopedZone.Entities.Concat(new[] { visibleEnemy, hiddenEnemy }).ToArray();
                         scopedRun.Zones = scopedRun.Zones.Concat(new[]
                         {
                             new AetheriaRuntimeZoneSnapshotCommit
@@ -2087,20 +2135,64 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                         scopedRun.GameEvents = [new AetheriaRuntimeGameEventCommit()];
                         scopedRun.ShotReceipts = [new AetheriaRuntimeShotReceiptCommit()];
                         scopedRun.PickupContactReceipts = [new AetheriaRuntimePickupContactReceiptCommit()];
+                        scopedRun.FactionRelationships = [new AetheriaRuntimeFactionRelationshipCommit()];
                         var scopedFrame = AetheriaRuntimeDaemonFrameDocument.Create(
                             scopedRun, "daemon-smoke", session.SessionId, observedFrameId, 0, 0.02);
                         scopedFrame.GameMode = AetheriaGameModes.Starbridge;
                         scopedFrame.RunRecordKey = session.RunRecordKey;
-                        var scopedProjection = AetheriaRuntimeDaemonFrameProjection.ForControlledEntity(
+                        scopedFrame.AppliedCommandIds = ["other-seat-applied"];
+                        scopedFrame.RejectedCommandIds = ["other-seat-rejected"];
+                        scopedFrame.AccountedCommandIds = ["other-seat-accounted"];
+                        scopedFrame.CumulativeAppliedCommandIds = ["other-seat-cumulative-applied"];
+                        scopedFrame.CumulativeRejectedCommandIds = ["other-seat-cumulative-rejected"];
+                        scopedFrame.RejectedCommandReasons = new Dictionary<string, string>
+                        {
+                            ["other-seat-rejected"] = "private-authority-diagnostic"
+                        };
+                        var scopedProjection = AetheriaRuntimeDaemonFrameProjection.ForPilotObservation(
                             scopedFrame, pilotSeat.ControlledEntityKey);
+                        var reopenedScopedProjection = MessagePackSerializer.Deserialize<AetheriaRuntimeDaemonFrameDocument>(
+                            MessagePackSerializer.Serialize(scopedProjection));
+                        var projectedZone = scopedProjection.Run.Zones.Single();
+                        var projectedPilot = projectedZone.Entities.Single(entity => entity.EntityIndex == scopedPilotEntityIndex);
+                        var projectedVisibleEnemy = projectedZone.Entities.Single(entity => entity.EntityIndex == visibleEntityIndex);
+                        var zoneRender = AetheriaRuntimeGameDocuments.ZoneRender(scopedProjection);
+                        using var scopedSoaPublisher = new AetheriaRuntimeDaemonSoaFramePublisher(1);
+                        using var scopedSoaFrame = scopedSoaPublisher.BuildCurrentZoneEntities(scopedProjection);
+                        var projectedEntityIndices = projectedZone.Entities.Select(entity => entity.EntityIndex).OrderBy(value => value).ToArray();
+                        var zoneRenderEntityIndices = zoneRender.EntitySnapshots.Select(entity => entity.EntityIndex).OrderBy(value => value).ToArray();
+                        var soaEntityIndices = (scopedSoaFrame?.View.Identities ?? Array.Empty<AetheriaRuntimeDaemonSoaIdentityDocument>())
+                            .Where(identity => identity.EntityIndex >= 0)
+                            .Select(identity => identity.EntityIndex)
+                            .OrderBy(value => value)
+                            .ToArray();
                         Require(scopedProjection.Run.Zones.Count == 1 &&
                                 scopedProjection.Run.Zones[0].ZoneIndex == pilotZoneIndex &&
+                                projectedZone.Entities.Count == 2 &&
+                                projectedZone.Entities.All(entity => entity.EntityIndex != hiddenEntityIndex) &&
+                                projectedPilot.Equipment.Count == 1 &&
+                                projectedVisibleEnemy.Equipment.Count == 0 &&
+                                projectedVisibleEnemy.CargoContents.Count == 0 &&
+                                projectedVisibleEnemy.WeaponStates.Count == 0 &&
+                                projectedVisibleEnemy.BehaviorStates.Count == 0 &&
                                 scopedProjection.Run.GameEvents.Count == 0 &&
                                 scopedProjection.Run.ShotReceipts.Count == 0 &&
                                 scopedProjection.Run.PickupContactReceipts.Count == 0 &&
+                                scopedProjection.Run.FactionRelationships.Count == 0 &&
+                                scopedProjection.AppliedCommandIds.Count == 0 &&
+                                scopedProjection.RejectedCommandIds.Count == 0 &&
+                                scopedProjection.AccountedCommandIds.Count == 0 &&
+                                scopedProjection.CumulativeAppliedCommandIds.Count == 0 &&
+                                scopedProjection.CumulativeRejectedCommandIds.Count == 0 &&
+                                scopedProjection.RejectedCommandReasons.Count == 0 &&
+                                projectedEntityIndices.SequenceEqual(zoneRenderEntityIndices) &&
+                                projectedEntityIndices.SequenceEqual(soaEntityIndices) &&
+                                reopenedScopedProjection.Run.Zones.Single().Entities.All(entity =>
+                                    entity.EntityIndex != hiddenEntityIndex &&
+                                    (entity.EntityIndex == scopedPilotEntityIndex || entity.Equipment.Count == 0)) &&
                                 pilotRefs.EntityViewPointerId != AetheriaRuntimeVerseRecordKeys.EveEntitySoaViewLatest.ToString() &&
                                 pilotRefs.EntityBodyId != AetheriaRuntimeDaemonSoaFramePublisher.BodyId,
-                            "Starbridge Pilot observation must exclude non-current zones and canonical event/receipt history and must not alias the global SoA body");
+                            "one Pilot observation owner must hide invisible entities, redact visible non-controlled state, retain controlled state, clear global chronology, and drive matching frame, ZoneRender, and SoA entity sets");
                     }
                     else if (string.Equals(mode, AetheriaGameModes.Arena, StringComparison.Ordinal))
                     {

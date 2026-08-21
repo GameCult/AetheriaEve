@@ -153,10 +153,14 @@ operation admission. A mode label is insufficient to select a surface. Launch
 and Continue resolve exactly one connected caller seat, publish the Pilot
 cockpit when appropriate, and reject stale or ambiguous role ownership. Each
 Pilot cockpit names a per-seat frame, entity view, body, zone-render record, and
-input capability. Its projected frame contains the controlled ship's current
-zone and excludes canonical task, event, receipt, home-zone, and boss-zone
-history. The Commander alone receives the strategic surface and canonical
-gameplay frame/body.
+input capability. One Pilot-observation projector owns all of those outputs:
+it retains the controlled ship's full current-zone state, includes only visible
+non-controlled entities with private loadout, cargo, weapon, behavior, task,
+and thermal state removed, and excludes hidden entities plus global command,
+task, event, receipt, home-zone, boss-zone, and faction-relationship history.
+The frame, zone render, Eve surface, and hot body cannot form separate opinions
+about the visible entity set. The Commander alone receives the strategic
+surface and canonical gameplay frame/body.
 
 ## Verification
 
