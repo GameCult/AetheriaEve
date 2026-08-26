@@ -23,3 +23,6 @@ Alternate release, feature, NuGet, PackageCache, or sibling worktrees cannot
 satisfy source builds merely because their APIs or versions appear compatible.
 To admit another CultLib revision, update the commit, Unity subtree witness,
 both Unity package graphs, and the verification scripts in one reviewed change.
+
+Eve and EveUnity admission is recorded separately in
+[`eve-dependency-authority.md`](eve-dependency-authority.md).

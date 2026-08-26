@@ -17,14 +17,14 @@ $expected = @{
         "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#334e60f1928b4212a29dd8b0d19b2c099fe6365e",
         "334e60f1928b4212a29dd8b0d19b2c099fe6365e")
     "org.gamecult.eve.surface" = @(
-        "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#f7c79ee784aae57b090b8093967ad2d8f22fc19c",
-        "f7c79ee784aae57b090b8093967ad2d8f22fc19c")
+        "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#bfdaff2d68249491e73f514bf4fa664393a25f39",
+        "bfdaff2d68249491e73f514bf4fa664393a25f39")
     "org.gamecult.eve.unity-scene" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#959641c3a564407eb3253b7e3c16aee18f600e8e",
-        "959641c3a564407eb3253b7e3c16aee18f600e8e")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#f0afa7681bddf439615d8c76d4808c63dde51acf",
+        "f0afa7681bddf439615d8c76d4808c63dde51acf")
     "org.gamecult.eve.unity-uitoolkit" = @(
-        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#44923edc2275a15e3480d3a407673b8cf8c809d9",
-        "44923edc2275a15e3480d3a407673b8cf8c809d9")
+        "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#f0afa7681bddf439615d8c76d4808c63dde51acf",
+        "f0afa7681bddf439615d8c76d4808c63dde51acf")
 }
 
 foreach ($packageName in $expected.Keys) {

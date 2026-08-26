@@ -1408,11 +1408,19 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                     AetheriaRuntimeDaemonCommandKinds.SetMoveVector);
                 var intent = new AetheriaBrowserEveCommandIngress.BrowserEveCommandIntent
                 {
-                    Type = "eve.command",
                     Schema = EveSurfaceCommandRequest.SchemaId,
                     ProviderId = AetheriaRuntimeProviderIdentity.ProviderId,
                     SurfaceId = surfaceId,
-                    Command = command,
+                    Operation = new AetheriaBrowserEveCommandIngress.BrowserEveOperationIntent
+                    {
+                        OperationId = command,
+                        SchemaId = "gamecult.aetheria.command_payload.v1",
+                        IdempotencyKey = commandId,
+                        RouteHint = new AetheriaBrowserEveCommandIngress.BrowserEveRouteHint
+                        {
+                            SourceVersion = ingressFrame.FrameId
+                        }
+                    },
                     CommandBoundary = "receipt",
                     ReceiptSchema = EveCommandReceiptDocument.SchemaId,
                     Payload = new Dictionary<string, object?>
@@ -1430,7 +1438,7 @@ internal sealed class AetheriaDaemonYmirSmokeChecks
                 {
                     MessageId = commandId,
                     ServiceId = AetheriaBrowserEveCommandIngress.ServiceId,
-                    Operation = intent.Command,
+                    Operation = intent.Operation.OperationId,
                     PayloadSchema = EveSurfaceCommandRequest.SchemaId,
                     PayloadEncoding = "messagepack-base64",
                     Payload = Convert.ToBase64String(MessagePackSerializer.Serialize(

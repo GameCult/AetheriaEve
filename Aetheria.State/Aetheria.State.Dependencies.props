@@ -3,9 +3,12 @@
     <CultLibRoot Condition="'$(CultLibRoot)' == ''">$(MSBuildThisFileDirectory)..\..\CultLib</CultLibRoot>
     <CultLibRevision>334e60f1928b4212a29dd8b0d19b2c099fe6365e</CultLibRevision>
     <CultLibUnityTree>f771db72619bf668dcb94a8ad00ac9c2e73a1435</CultLibUnityTree>
+    <GitExe Condition="'$(GitExe)' == '' and Exists('$(ProgramW6432)\Git\cmd\git.exe')">$(ProgramW6432)\Git\cmd\git.exe</GitExe>
     <GitExe Condition="'$(GitExe)' == ''">git</GitExe>
     <EvePluginsRoot Condition="'$(EvePluginsRoot)' == ''">$(MSBuildThisFileDirectory)..\..\EvePlugins</EvePluginsRoot>
     <EveRoot Condition="'$(EveRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Eve</EveRoot>
+    <EveRevision>bfdaff2d68249491e73f514bf4fa664393a25f39</EveRevision>
+    <EveSurfaceTree>acde4ba4e4a3db68de10b4fe295300ba54eea252</EveSurfaceTree>
     <YmirRoot Condition="'$(YmirRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Ymir</YmirRoot>
   </PropertyGroup>
 </Project>
