@@ -1,6 +1,9 @@
 <Project>
   <PropertyGroup>
     <CultLibRoot Condition="'$(CultLibRoot)' == ''">$(MSBuildThisFileDirectory)..\..\CultLib</CultLibRoot>
+    <CultLibRevision>334e60f1928b4212a29dd8b0d19b2c099fe6365e</CultLibRevision>
+    <CultLibUnityTree>f771db72619bf668dcb94a8ad00ac9c2e73a1435</CultLibUnityTree>
+    <GitExe Condition="'$(GitExe)' == ''">git</GitExe>
     <EvePluginsRoot Condition="'$(EvePluginsRoot)' == ''">$(MSBuildThisFileDirectory)..\..\EvePlugins</EvePluginsRoot>
     <EveRoot Condition="'$(EveRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Eve</EveRoot>
     <YmirRoot Condition="'$(YmirRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Ymir</YmirRoot>

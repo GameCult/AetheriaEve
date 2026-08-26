@@ -130,11 +130,11 @@
       }
     },
     "org.gamecult.cultlib": {
-      "version": "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#b9cbd7561d96b01a770273891ea9144d98a538bc",
+      "version": "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#334e60f1928b4212a29dd8b0d19b2c099fe6365e",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "b9cbd7561d96b01a770273891ea9144d98a538bc"
+      "hash": "334e60f1928b4212a29dd8b0d19b2c099fe6365e"
     },
     "org.gamecult.cultmath": {
       "version": "https://github.com/GameCult/CultLib.git?path=/packages/cultmath/unity/org.gamecult.cultmath#cultmath-unity-v0.1.2",

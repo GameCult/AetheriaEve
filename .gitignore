@@ -145,6 +145,8 @@ Aetheria.State.Freeze/bin/
 Aetheria.State.Freeze/obj/
 Aetheria.State.WireInterop/bin/
 Aetheria.State.WireInterop/obj/
+tools/Aetheria.TransportProbe/bin/
+tools/Aetheria.TransportProbe/obj/
 Aetheria.State.Daemon/*.log
 Aetheria.State.Daemon.Smoke/*.log
 Aetheria.State.Daemon.Smoke/*.log.err

@@ -1,15 +1,50 @@
 <Project>
-  <Target Name="VerifyGameCultMeshReference" AfterTargets="ResolveAssemblyReferences"
+  <Target Name="VerifyCultLibRevision" BeforeTargets="ResolveProjectReferences"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="&quot;$(GitExe)&quot; -C &quot;$(CultLibRoot)&quot; rev-parse HEAD"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_ResolvedCultLibRevision" />
+    </Exec>
+    <Error Condition="'$(_ResolvedCultLibRevision)' != '$(CultLibRevision)'"
+           Text="CultLibRoot '$(CultLibRoot)' resolves revision '$(_ResolvedCultLibRevision)', but Aetheria admits only '$(CultLibRevision)'." />
+    <Exec Command="&quot;$(GitExe)&quot; -C &quot;$(CultLibRoot)&quot; rev-parse &quot;HEAD:unity/org.gamecult.cultlib&quot;"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_ResolvedCultLibUnityTree" />
+    </Exec>
+    <Error Condition="'$(_ResolvedCultLibUnityTree)' != '$(CultLibUnityTree)'"
+           Text="CultLib Unity package tree '$(_ResolvedCultLibUnityTree)' does not match admitted tree '$(CultLibUnityTree)'." />
+    <Exec Command="&quot;$(GitExe)&quot; -C &quot;$(CultLibRoot)&quot; status --porcelain --untracked-files=all"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_CultLibWorktreeChanges" />
+    </Exec>
+    <Error Condition="'$(_CultLibWorktreeChanges)' != ''"
+           Text="CultLibRoot '$(CultLibRoot)' contains source-affecting worktree changes: $(_CultLibWorktreeChanges)" />
+  </Target>
+
+  <Target Name="VerifyCultLibReferences" AfterTargets="ResolveAssemblyReferences"
           Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
-      <_GameCultMeshReference Include="@(ReferencePath)"
-                              Condition="'%(ReferencePath.Filename)%(ReferencePath.Extension)' == 'GameCult.Mesh.dll'" />
+      <_CultLibReference Include="@(ReferencePath)"
+                         Condition="$([System.String]::Copy('%(ReferencePath.Filename)').StartsWith('GameCult.Caching', System.StringComparison.Ordinal))
+                                 Or $([System.String]::Copy('%(ReferencePath.Filename)').StartsWith('GameCult.Logging', System.StringComparison.Ordinal))
+                                 Or $([System.String]::Copy('%(ReferencePath.Filename)').StartsWith('GameCult.Mesh', System.StringComparison.Ordinal))
+                                 Or $([System.String]::Copy('%(ReferencePath.Filename)').StartsWith('GameCult.Networking', System.StringComparison.Ordinal))
+                                 Or '%(ReferencePath.Filename)' == 'GameCult.Geometry'
+                                 Or '%(ReferencePath.Filename)' == 'CultMath'" />
+      <_GameCultMeshReference Include="@(_CultLibReference)"
+                              Condition="'%(Filename)%(Extension)' == 'GameCult.Mesh.dll'" />
     </ItemGroup>
+    <PropertyGroup>
+      <_CultLibRootPrefix>$([MSBuild]::EnsureTrailingSlash($([System.IO.Path]::GetFullPath('$(CultLibRoot)'))))</_CultLibRootPrefix>
+    </PropertyGroup>
 
     <Error Condition="@(_GameCultMeshReference->Count()) != 1"
            Text="Expected exactly one resolved GameCult.Mesh reference, found @(_GameCultMeshReference->Count()): @(_GameCultMeshReference, ', ')" />
-    <Error Condition="$([System.String]::Copy('%(_GameCultMeshReference.FullPath)').StartsWith($([System.IO.Path]::GetFullPath('$(CultLibRoot)\')), System.StringComparison.OrdinalIgnoreCase)) != 'true'"
-           Text="GameCult.Mesh resolved outside CultLibRoot '$(CultLibRoot)': %(_GameCultMeshReference.FullPath)" />
+    <Error Condition="$([System.String]::Copy('%(_CultLibReference.FullPath)').StartsWith('$(_CultLibRootPrefix)', System.StringComparison.OrdinalIgnoreCase)) != 'true'"
+           Text="CultLib-owned assembly resolved outside CultLibRoot '$(CultLibRoot)': %(_CultLibReference.FullPath)" />
 
     <GetFileHash Files="@(_GameCultMeshReference)" Algorithm="SHA256">
       <Output TaskParameter="Items" ItemName="_GameCultMeshReferenceHash" />

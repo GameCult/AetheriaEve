@@ -75,9 +75,11 @@ advertised session then selects the dedicated content and QUIC realtime planes;
 the editor bootstrap does not choose those planes or retain an RUDP fallback.
 
 The launcher displays and passes the exact source dependency roots used for the
-Debug daemon build. CultLib prefers the active
-`CultLib-codex-cultmesh-reliability` checkout, then `CultLib-release`, and
-finally the canonical `CultLib` sibling.
+Debug daemon build. CultLib must be a clean checkout of admitted commit
+`334e60f1928b4212a29dd8b0d19b2c099fe6365e`; the Unity editor uses the canonical
+`CultLib` sibling unless `AETHERIA_CULTLIB_ROOT` names another checkout. The
+build rejects a different revision, a dirty source tree, or assemblies resolved
+outside that root.
 The renderer-neutral Eve contract resolves from the canonical `Eve` sibling;
 the daemon does not reference EveUnity.
 Ymir still prefers the active `Ymir-aetheria-integration` sibling checkout and

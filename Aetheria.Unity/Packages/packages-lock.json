@@ -128,11 +128,11 @@
       }
     },
     "org.gamecult.cultlib": {
-      "version": "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#b9cbd7561d96b01a770273891ea9144d98a538bc",
+      "version": "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#334e60f1928b4212a29dd8b0d19b2c099fe6365e",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "b9cbd7561d96b01a770273891ea9144d98a538bc"
+      "hash": "334e60f1928b4212a29dd8b0d19b2c099fe6365e"
     },
     "org.gamecult.eve.plugin-fields": {
       "version": "https://github.com/GameCult/EvePlugins.git?path=/plugins/eve-plugin-fields/unity/org.gamecult.eve.plugin-fields#eve-plugin-fields-unity-v0.2.3",

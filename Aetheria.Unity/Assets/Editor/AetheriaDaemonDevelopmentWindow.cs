@@ -197,7 +197,7 @@ namespace Aetheria.Editor
         public static string Endpoint => $"cultnet+tcp://127.0.0.1:{Port}";
         public static string ProcessIdText => IsRunning ? _daemon.Id.ToString(CultureInfo.InvariantCulture) : "-";
         public static string StatePath => Path.Combine(ProjectRoot, "Aetheria.Unity", "Build", "aetheria-unity-dev.cc");
-        public static string CultLibRoot => ResolveSibling("CultLib-codex-cultmesh-reliability", "CultLib-release", "CultLib");
+        public static string CultLibRoot => ResolveDependencyRoot("AETHERIA_CULTLIB_ROOT", "CultLib");
         public static string YmirRoot => ResolveSibling("Ymir-aetheria-integration", "Ymir");
         public static string EveRoot => ResolveSibling("Eve");
         private static int Port => EditorPrefs.GetInt(PortPreference, 3076);
@@ -736,6 +736,14 @@ namespace Aetheria.Editor
                 if (Directory.Exists(candidate)) return candidate;
             }
             return Path.Combine(projectsRoot, names[0]);
+        }
+
+        private static string ResolveDependencyRoot(string environmentVariable, params string[] siblingNames)
+        {
+            var configured = Environment.GetEnvironmentVariable(environmentVariable);
+            return string.IsNullOrWhiteSpace(configured)
+                ? ResolveSibling(siblingNames)
+                : Path.GetFullPath(configured);
         }
 
         private static void TryDelete(string path)

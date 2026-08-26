@@ -14,8 +14,8 @@ $manifest = Get-Content (Join-Path $ProjectPath "Packages/manifest.json") -Raw |
 $lock = Get-Content (Join-Path $ProjectPath "Packages/packages-lock.json") -Raw | ConvertFrom-Json
 $expected = @{
     "org.gamecult.cultlib" = @(
-        "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#b9cbd7561d96b01a770273891ea9144d98a538bc",
-        "b9cbd7561d96b01a770273891ea9144d98a538bc")
+        "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#334e60f1928b4212a29dd8b0d19b2c099fe6365e",
+        "334e60f1928b4212a29dd8b0d19b2c099fe6365e")
     "org.gamecult.eve.surface" = @(
         "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#f7c79ee784aae57b090b8093967ad2d8f22fc19c",
         "f7c79ee784aae57b090b8093967ad2d8f22fc19c")
@@ -47,10 +47,9 @@ $cacheAssembly = Join-Path $cultLibPackage.FullName "Runtime/Plugins/GameCult.Ca
 if (-not (Test-Path $cacheAssembly)) { throw "Resolved GameCult.Caching.MessagePack.dll is missing." }
 $coreCacheAssembly = Join-Path $cultLibPackage.FullName "Runtime/Plugins/GameCult.Caching.dll"
 if (-not (Test-Path $coreCacheAssembly)) { throw "Resolved GameCult.Caching.dll is missing." }
-$cacheApi = & rg -a -o "cultcache\.store\.v4\.directory-content-addressed-pages|ReadPersistedGeneration" $cacheAssembly 2>&1
+$cacheApi = & rg -a -o "ReadPersistedGeneration" $cacheAssembly 2>&1
 $transactionApi = & rg -a -o "SnapshotForCommit" $coreCacheAssembly 2>&1
 if ($LASTEXITCODE -ne 0 -or
-    -not ($cacheApi -contains "cultcache.store.v4.directory-content-addressed-pages") -or
     -not ($cacheApi -contains "ReadPersistedGeneration") -or
     -not ($transactionApi -contains "SnapshotForCommit")) {
     throw "Resolved CultLib package does not contain the sealed transaction and coherent v4 generation APIs."

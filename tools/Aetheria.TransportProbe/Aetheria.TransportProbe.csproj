@@ -11,4 +11,5 @@
                       AdditionalProperties="CultLibRoot=$(CultLibRoot)" />
     <ProjectReference Include="$(CultLibRoot)\src\GameCult.Mesh.Quic\GameCult.Mesh.Quic.csproj" />
   </ItemGroup>
+  <Import Project="..\..\Aetheria.State\Aetheria.State.Dependencies.targets" />
 </Project>

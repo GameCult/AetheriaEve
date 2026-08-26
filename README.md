@@ -43,8 +43,12 @@ Requirements:
 
 - Unity `6000.4.2f1`;
 - .NET SDK 10;
-- sibling checkouts of `CultLib`, `Eve`, and `Ymir` under the same parent
-  directory for daemon development builds. Unity consumes released EveUnity
+- a clean CultLib checkout at admitted commit
+  `334e60f1928b4212a29dd8b0d19b2c099fe6365e`, plus sibling checkouts of `Eve`
+  and `Ymir`, for daemon development builds. Set `AETHERIA_CULTLIB_ROOT` when
+  the admitted CultLib checkout is not the canonical sibling. The full admission
+  contract is in [`docs/cultlib-dependency-authority.md`](docs/cultlib-dependency-authority.md).
+  Unity consumes released EveUnity
   lowering packages and does not make the daemon depend on the renderer repo.
 
 From the repository root:

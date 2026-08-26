@@ -37,14 +37,14 @@ if ($unexpected.Count -gt 0 -or $missing.Count -gt 0) {
 $manifest = Get-Content (Join-Path $project "Packages\manifest.json") -Raw | ConvertFrom-Json
 $lock = Get-Content (Join-Path $project "Packages\packages-lock.json") -Raw | ConvertFrom-Json
 $statePackage = Get-Content (Join-Path $root "Packages\org.gamecult.aetheria.state\package.json") -Raw | ConvertFrom-Json
-$cultLibRef = "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#b9cbd7561d96b01a770273891ea9144d98a538bc"
+$cultLibRef = "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#334e60f1928b4212a29dd8b0d19b2c099fe6365e"
 $surfaceRef = "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#f7c79ee784aae57b090b8093967ad2d8f22fc19c"
 if ($manifest.dependencies.'org.gamecult.aetheria.state' -ne 'file:../../Packages/org.gamecult.aetheria.state') {
   throw "Asset authoring must consume the repository-owned typed state package."
 }
 if ($manifest.dependencies.'org.gamecult.cultlib' -ne $cultLibRef -or
     $lock.dependencies.'org.gamecult.cultlib'.version -ne $cultLibRef -or
-    $lock.dependencies.'org.gamecult.cultlib'.hash -ne 'b9cbd7561d96b01a770273891ea9144d98a538bc') {
+    $lock.dependencies.'org.gamecult.cultlib'.hash -ne '334e60f1928b4212a29dd8b0d19b2c099fe6365e') {
   throw "Asset authoring must resolve the CultLib 1.0.56 coherent-generation API commit."
 }
 if ($manifest.dependencies.'org.gamecult.eve.surface' -ne $surfaceRef -or
