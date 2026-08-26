@@ -137,11 +137,11 @@
       "hash": "b9cbd7561d96b01a770273891ea9144d98a538bc"
     },
     "org.gamecult.cultmath": {
-      "version": "https://github.com/GameCult/CultMath.git?path=/unity/org.gamecult.cultmath#cultmath-unity-v0.1.2",
+      "version": "https://github.com/GameCult/CultLib.git?path=/packages/cultmath/unity/org.gamecult.cultmath#cultmath-unity-v0.1.2",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "fcdddda72f6aa33ae6eeff3bce6a2d3e26eb16f3"
+      "hash": "ea88cfcd05fee044c5acfd4004948b2cc79b7bb0"
     },
     "org.gamecult.eve.plugin-fields": {
       "version": "https://github.com/GameCult/EvePlugins.git?path=/plugins/eve-plugin-fields/unity/org.gamecult.eve.plugin-fields#eve-plugin-fields-unity-v0.2.3",

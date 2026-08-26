@@ -11,7 +11,7 @@
   <Project Path="../CultLib/src/GameCult.Mesh.Quic/GameCult.Mesh.Quic.csproj" />
   <Project Path="../CultLib/src/GameCult.Mesh/GameCult.Mesh.csproj" />
   <Project Path="../CultLib/src/GameCult.Networking/GameCult.Networking.csproj" />
-  <Project Path="../CultMath/src/CultMath/CultMath.csproj" />
+  <Project Path="../CultLib/packages/cultmath/src/CultMath/CultMath.csproj" />
   <Project Path="../EvePlugins/plugins/eve-plugin-fields/GameCult.Eve.PluginFields.csproj" />
   <Project Path="../Eve/packages/org.gamecult.eve.surface/GameCult.Eve.Surface.csproj" />
   <Project Path="../Ymir/src/Ymir.Box3D/Ymir.Box3D.csproj" />
