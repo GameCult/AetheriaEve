@@ -153,13 +153,13 @@
       "hash": "c5a4a75c1b727499b16c2dae1895f29e2a9f72f0"
     },
     "org.gamecult.eve.surface": {
-      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#bfdaff2d68249491e73f514bf4fa664393a25f39",
+      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#96839ad34c8d464ef622d8bbdd5d277e1ca9d825",
       "depth": 0,
       "source": "git",
       "dependencies": {
-        "org.gamecult.cultlib": "1.0.45"
+        "org.gamecult.cultlib": "1.0.56"
       },
-        "hash": "bfdaff2d68249491e73f514bf4fa664393a25f39"
+        "hash": "96839ad34c8d464ef622d8bbdd5d277e1ca9d825"
     },
     "com.unity.modules.assetbundle": {
       "version": "1.0.0",

@@ -7,8 +7,8 @@
     <GitExe Condition="'$(GitExe)' == ''">git</GitExe>
     <EvePluginsRoot Condition="'$(EvePluginsRoot)' == ''">$(MSBuildThisFileDirectory)..\..\EvePlugins</EvePluginsRoot>
     <EveRoot Condition="'$(EveRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Eve</EveRoot>
-    <EveRevision>bfdaff2d68249491e73f514bf4fa664393a25f39</EveRevision>
-    <EveSurfaceTree>acde4ba4e4a3db68de10b4fe295300ba54eea252</EveSurfaceTree>
+    <EveRevision>96839ad34c8d464ef622d8bbdd5d277e1ca9d825</EveRevision>
+    <EveSurfaceTree>783e75a25659bd8c43bc4624803ff8a6c58bca03</EveSurfaceTree>
     <YmirRoot Condition="'$(YmirRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Ymir</YmirRoot>
   </PropertyGroup>
 </Project>

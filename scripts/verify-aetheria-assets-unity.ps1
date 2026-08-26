@@ -38,7 +38,7 @@ $manifest = Get-Content (Join-Path $project "Packages\manifest.json") -Raw | Con
 $lock = Get-Content (Join-Path $project "Packages\packages-lock.json") -Raw | ConvertFrom-Json
 $statePackage = Get-Content (Join-Path $root "Packages\org.gamecult.aetheria.state\package.json") -Raw | ConvertFrom-Json
 $cultLibRef = "https://github.com/GameCult/CultLib.git?path=/unity/org.gamecult.cultlib#334e60f1928b4212a29dd8b0d19b2c099fe6365e"
-$surfaceRef = "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#bfdaff2d68249491e73f514bf4fa664393a25f39"
+$surfaceRef = "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#96839ad34c8d464ef622d8bbdd5d277e1ca9d825"
 if ($manifest.dependencies.'org.gamecult.aetheria.state' -ne 'file:../../Packages/org.gamecult.aetheria.state') {
   throw "Asset authoring must consume the repository-owned typed state package."
 }
@@ -49,7 +49,7 @@ if ($manifest.dependencies.'org.gamecult.cultlib' -ne $cultLibRef -or
 }
 if ($manifest.dependencies.'org.gamecult.eve.surface' -ne $surfaceRef -or
     $lock.dependencies.'org.gamecult.eve.surface'.version -ne $surfaceRef -or
-    $lock.dependencies.'org.gamecult.eve.surface'.hash -ne 'bfdaff2d68249491e73f514bf4fa664393a25f39') {
+    $lock.dependencies.'org.gamecult.eve.surface'.hash -ne '96839ad34c8d464ef622d8bbdd5d277e1ca9d825') {
   throw "Asset authoring must resolve the same Eve surface contract as the player client."
 }
 $requiredStateDependencies = @{

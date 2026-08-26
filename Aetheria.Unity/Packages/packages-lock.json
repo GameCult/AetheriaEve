@@ -144,16 +144,16 @@
       "hash": "c5a4a75c1b727499b16c2dae1895f29e2a9f72f0"
     },
     "org.gamecult.eve.surface": {
-      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#bfdaff2d68249491e73f514bf4fa664393a25f39",
+      "version": "https://github.com/GameCult/Eve.git?path=/packages/org.gamecult.eve.surface#96839ad34c8d464ef622d8bbdd5d277e1ca9d825",
       "depth": 0,
       "source": "git",
       "dependencies": {
-        "org.gamecult.cultlib": "1.0.45"
+        "org.gamecult.cultlib": "1.0.56"
       },
-      "hash": "bfdaff2d68249491e73f514bf4fa664393a25f39"
+      "hash": "96839ad34c8d464ef622d8bbdd5d277e1ca9d825"
     },
     "org.gamecult.eve.unity-scene": {
-      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#f0afa7681bddf439615d8c76d4808c63dde51acf",
+      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-scene#92f0dbbc9bf77c232f0c6cf733f48af64c8ed6b6",
       "depth": 0,
       "source": "git",
       "dependencies": {
@@ -165,16 +165,16 @@
         "com.unity.render-pipelines.universal": "17.4.0",
         "com.unity.modules.particlesystem": "1.0.0"
       },
-      "hash": "f0afa7681bddf439615d8c76d4808c63dde51acf"
+      "hash": "92f0dbbc9bf77c232f0c6cf733f48af64c8ed6b6"
     },
     "org.gamecult.eve.unity-uitoolkit": {
-      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#f0afa7681bddf439615d8c76d4808c63dde51acf",
+      "version": "https://github.com/GameCult/EveUnity.git?path=/packages/org.gamecult.eve.unity-uitoolkit#92f0dbbc9bf77c232f0c6cf733f48af64c8ed6b6",
       "depth": 0,
       "source": "git",
       "dependencies": {
-        "org.gamecult.eve.surface": "0.3.5"
+        "org.gamecult.eve.surface": "0.3.6"
       },
-      "hash": "f0afa7681bddf439615d8c76d4808c63dde51acf"
+      "hash": "92f0dbbc9bf77c232f0c6cf733f48af64c8ed6b6"
     },
     "com.unity.modules.assetbundle": {
       "version": "1.0.0",
