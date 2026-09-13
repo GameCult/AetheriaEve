@@ -75,7 +75,6 @@ These files define the deprecated reference surface. They should be treated as A
 | CultMesh node wrapper | `Aetheria.State/AetheriaStateNode.cs` | Current record reads/writes, observed command query behavior, flush semantics. |
 | Registry | `Aetheria.State/AetheriaDocumentRegistry.cs` | C# document set currently exposed through CultCache/CultNet. |
 | Replica sync | `Aetheria.State/AetheriaVerseReplica.cs` | Scoped snapshot/document fetch to preserve; remote committed-fact import is migration evidence, not target authority. |
-| Local publications | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeCultCacheDocumentStore.cs` | `.cc` compatibility files and their payload layout. |
 | Daemon documents | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeDaemonDocuments.cs` | Schema ids, command enum, frame, command, committed fact, viewport, health, provider, command boundary, surface docs. |
 | Snapshot documents | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeSnapshotDocuments.cs` | Run, zone, entity, body, equipment, cargo, loadout, stat grids. |
 | Authority documents | `Packages/org.gamecult.aetheria.state/Runtime/AetheriaRuntimeVerseAuthorityPolicy.cs` | Policy, rules, leases, modes, roles, deployment vocabulary, current authorization decisions. |
